@@ -232,7 +232,28 @@ for name, node_cls in module.NODE_CLASS_MAPPINGS.items():
 ```
 
 `/object_info` 以类型名为键，只有**一份**实现会被暴露。
-两个包同装 ⇒ 谁后加载谁赢，**无错误无警告** ⇒ 工作流执行的是另一份实现。
+两个包同装 ⇒ 只有一个生效，**无错误无警告** ⇒ 工作流执行的是另一份实现。
+
+#### 4.1.1 本机实测（2026-11-06，两包同时启用）
+
+```
+启动日志：ComfyUI-MiniMaxH3-Context-Loop  导入成功
+          ComfyUI-Mie-H3-Engine            导入成功
+          重复注册 / 覆盖告警：0 条
+/object_info 里 MiniMaxH3* 类型数 = 148（上游单独时也是 148；若叠加会是 296）
+```
+
+⇒ **确认为静默覆盖，不是叠加。**
+
+**但比本文原先写的更脆弱。** 日志里的 "Import times for custom nodes" 一节是
+`sorted(node_import_times)`，**按耗时排序**，不是导入顺序；
+真正的导入顺序是 `os.listdir(custom_nodes)` 的**文件系统目录序**（`nodes.py:2371`）。
+实测中 `ComfyUI-Mie-H3-Engine` **先于** `ComfyUI-MiniMaxH3-Context-Loop` 被导入，
+于是**上游赢了**——尽管我们的包名字看起来更"新"。
+
+⇒ **两个包同时启用时谁生效，取决于一个完全偶然的文件系统顺序因素，且没有任何提示。**
+这比"后加载者胜"更糟：**Phase 2 的改名不是可选项，是必须项**——
+在改名完成之前，本机必须只启用其中一个（实测做法：启动器 `plugins disable`）。
 
 ### 4.2 命名方案
 
@@ -859,22 +880,57 @@ def _chapter_manifest_digest(manifest):
 > **Phase 4 的 `services/llm.py` 拆分不修静默错渲染**——那是资产层重组，与 P0 无关。
 > **改名脚本可以在 fork 之后做，但第一次扫描就必须包含 `web/`（§4.5）。**
 
+### 进度（2026-11-06）
+
+| 阶段 | 状态 | 证据 |
+|---|---|---|
+| Phase 0 建 fork | ✅ **已完成** | 分支直接建立在 `43afeff` 之上（上游 954 个 commit 原样保留），我们的提交叠在上面；`upstream` 为永久第二 remote；`LICENSE` / `THIRD_PARTY_NOTICES.md` / `docs/FEATURE_TRACEABILITY.md` 逐字未改 |
+| Phase 0 / P0-a | ✅ **已完成** | 三处默认切 `strict`（widget / `export()` 签名 / `or` 兜底）+ tooltip 重写；本机 ComfyUI 实测 `/object_info` 的默认值已是 `strict` |
+| Phase 0 / 缓存契约修复 | ✅ **已完成** | 版本号 `0.7.3+mie.1` 触发上游 `_web_cache_bust_unit_test.py` 失败（`Invalid web cache token`）⇒ 放宽其正则接受 `+local`，**排序语义不变**（换回 `0.7.3` 同样通过） |
+| Phase 1 / 回归测试 | ✅ **已新增** | `tests/_mie_png_verification_strict_unit_test.py`：证明 cached 看不见"字节变、size/mtime 不变"、strict 能拦住、默认是 strict；**负对照已做**（改回 cached → 测试报红） |
+| 测试套件 | **192 passed / 56 failed** | 改动前基线 **189 / 58** ⇒ **零新增失败**；56 个与上游克隆同机失败数一致，全是既有失败（Windows 环境类 + Node 24 harness 类） |
+| 节点名冲突 | **已实测** | 两包同装：148 而非 296、**零告警** ⇒ 静默覆盖确认。**且胜者由 `os.listdir` 目录序决定**（实测上游赢了）⇒ **Phase 2 的改名是必须项**，见 §4.1.1 |
+| Phase 1 / P0-b | ⬜ 未做 | 等 §8.6.1 的三条选源规则定稿 |
+| Phase 1 / P0-c…P0-f | ⬜ 未做 | — |
+| Phase 2 改名 | ⬜ 未做 | **现在升级为必须项**（§4.1.1） |
+| Q-F′ | ⬜ **仍开放** | 只有用户能拍 |
+
 ### Phase 0 — 建 fork（0.5 天）
 
-- [ ] `git clone` 上游 → 新仓 `ComfyUI-Mie-H3-Engine`，base commit `43afeff`
-- [ ] 保留 `origin` 指向上游（D6 用 merge 不用 rebase）
-- [ ] `LICENSE`（GPL-3.0）+ `THIRD_PARTY_NOTICES.md` + `docs/FEATURE_TRACEABILITY.md` 全部保留
-- [ ] 新增 `MODIFICATIONS.md`：**逐条台账**（改了什么/为什么/影响哪些文件）
-- [ ] 保留作者署名，**不改上游版权声明**
-- [ ] `version` = **`0.7.3+mie.1`**（Q-I）
-- [ ] 生成 `tools/node_rename_map.json`（§4.4，自动生成）
+- [x] `git clone` 上游 → 新仓 `ComfyUI-Mie-H3-Engine`，base commit `43afeff`
+      —— **实做**：分支直接建立在 `43afeff` 之上（上游 954 个 commit 原样保留）
+- [x] 保留 `origin` 指向上游（D6 用 merge 不用 rebase）
+- [x] `LICENSE`（GPL-3.0）+ `THIRD_PARTY_NOTICES.md` + `docs/FEATURE_TRACEABILITY.md` 全部保留
+      —— **已用 `git diff upstream/main` 逐项验证为逐字未改**
+- [x] 新增 `MODIFICATIONS.md`：**逐条台账**（改了什么/为什么/影响哪些文件）
+- [x] 保留作者署名，**不改上游版权声明**（上游两位作者**追加**，不替换）
+- [x] `version` = **`0.7.3+mie.1`**（Q-I）—— ⚠️ **实做时发现它触发了一条上游契约，见下**
+- [ ] 生成 `tools/node_rename_map.json`（§4.4，自动生成）—— 属 Phase 2
 
-**判据**：`git log --oneline origin/main` 仍可解析；`LICENSE` 逐字未改。
+**判据**：`git log --oneline origin/main` 仍可解析；`LICENSE` 逐字未改。 ✅
+
+> ⚠️ **Phase 0 的附带发现：`version` 是一条上游契约，不是自由的字符串。**
+>
+> 上游把 `pyproject.toml` 的 `version` **同时当作浏览器 cache-bust token 的默认下限**，
+> `tests/_web_cache_bust_unit_test.py` 的正则 `^(\d+)\.(\d+)\.(\d+)$` **不接受 `+` 后缀**，
+> 于是 `0.7.3+mie.1` 让它直接失败（`AssertionError: Invalid web cache token '0.7.3+mie.1'`）。
+>
+> `0.7.3+mie.1` 在 PEP 440 / SemVer 里正是"上游版本 + 本地改动"的标准写法
+> （`0.7.3 < 0.7.3+mie.1 < 0.7.4`），**版本号本身是对的，是上游的正则太窄**。
+> 修法只放宽"能否解析"、**不动排序语义**：正则接受可选后缀，`version_key()` 取前三个数字组。
+> 回归验证：把版本号换回 `0.7.3` 也同样通过 ⇒ 排序保证未变。
+>
+> **教训：版本号格式是一个被测试守着的契约。** 动它必须连带动守它的测试，
+> 并把改动写进 `MODIFICATIONS.md`。
 
 ### Phase 1 — Windows 正确性修复（**P0**）（3–5 天，**下限不是上限**）
 
-- [ ] **P0-a（配置面，今天就能做，最高优先）**：关键路径 `checkpoint_verification` 设为 **`strict`**
+- [x] **P0-a（配置面，今天就能做，最高优先）**：关键路径 `checkpoint_verification` 设为 **`strict`**
       —— **本阶段的落地目标就这一条**，其余等 Q-F′ 与 §8.6.1 定稿
+      —— **实做**：widget 默认 / `export()` 签名默认 / `or` 兜底三处 + tooltip 重写；
+      本机 ComfyUI 实测 `/object_info` 的默认值已是 `strict`；
+      新增 `tests/_mie_png_verification_strict_unit_test.py` 把"cached 漏检 / strict 拦截 /
+      默认是 strict"钉成可执行事实（负对照已做）
 - [ ] **P0-b（恢复逻辑，真正的洞）**：三处"按 mtime 选源"各按自己的规则改
       （`chain_nodes.py:28453-28458` 遗留兜底 / `:22055` 封印清单 / `:4940` reference cache）
       ⇒ 规则见 **§8.6.1**（遗留多份 ⇒ 拒绝猜测；按 id 或文件内 `sealed_at`；
