@@ -4,3 +4,33 @@ __pycache__/
 
 # Local Context Loop test/runtime state
 h3_chains/
+
+# ---- Mie additions ----
+
+# Python
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Test & tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local scratch (QC frame extraction, temp output)
+_tmp_*/
+_tmp*/
+*.tmp
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
