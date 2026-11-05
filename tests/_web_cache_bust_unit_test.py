@@ -12,7 +12,7 @@ assert VERSION_MATCH, "pyproject.toml does not declare the project version"
 VERSION = VERSION_MATCH.group(1)
 IMPORT = re.compile(
     r'''["'](\./[^"']+\.mjs)(?:\?v=([^"']+))?["']''')
-SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z.-]+)?$")
 MINIMUM_CACHE_VERSION = {
     "h3_prompt_optimizer_core.mjs": "0.7.4",
     "h3_checkpoint_graph.mjs": "0.7.19",
@@ -61,7 +61,11 @@ MINIMUM_CACHE_VERSION = {
 def version_key(value):
     match = SEMVER.fullmatch(str(value or ""))
     assert match, "Invalid web cache token %r" % value
-    return tuple(int(part) for part in match.groups())
+    # Build metadata ("+local") carries no precedence in SemVer or PEP 440,
+    # so it is accepted and dropped: the ordering guarantee below is
+    # unchanged. A fork may declare "0.7.3+mie.1" to mean "upstream 0.7.3
+    # plus local changes" — 0.7.3 < 0.7.3+mie.1 < 0.7.4.
+    return tuple(int(part) for part in match.groups()[:3])
 
 
 def main():
