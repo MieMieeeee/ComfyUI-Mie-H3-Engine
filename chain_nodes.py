@@ -25165,12 +25165,21 @@ class MiniMaxH3ChainExportPNG:
                     "tooltip": "Parallel PNG writers. 0 selects up to 8 CPU "
                                "workers automatically; 1 forces serial saving."}),
                 "checkpoint_verification": (["cached", "strict"], {
-                    "default": "cached",
-                    "tooltip": "Cached verifies each immutable checkpoint with "
-                               "SHA-256 once, then trusts matching size and "
-                               "modification time on later exports. Strict "
-                               "re-hashes every checkpoint on every export. In VIDEO mode this verifies existing PNGs: "
-                               "cached checks size/mtime, strict re-hashes; the incoming VIDEO is always hashed."}),
+                    "default": "strict",
+                    "tooltip": "Strict (default) re-hashes every checkpoint on "
+                               "every export, so a checkpoint whose bytes changed "
+                               "without changing size or modification time is "
+                               "still rejected. Cached verifies each checkpoint "
+                               "with SHA-256 once, then trusts matching size "
+                               "and modification time on later exports — that "
+                               "trusts an 'immutable checkpoint' invariant that "
+                               "nothing enforces, so an external overwrite "
+                               "(restore, robocopy /COPYALL, mirror sync) can "
+                               "pass unnoticed. Choose Cached only when the "
+                               "export folder cannot be written by anything "
+                               "else. In VIDEO mode this verifies existing "
+                               "PNGs the same way; the incoming VIDEO is always "
+                               "hashed."}),
                 "reuse_existing": ("BOOLEAN", {
                     "default": True,
                     "tooltip": "For Chapter manifests, keep verified unchanged "
@@ -25220,7 +25229,7 @@ class MiniMaxH3ChainExportPNG:
 
     def export(self, manifest=None, video_vae=None, export_name="png_sequence",
                first_frame_number=1, png_compression=1, embed_workflow=True,
-               save_workers=0, checkpoint_verification="cached",
+               save_workers=0, checkpoint_verification="strict",
                audio_vae=None, reuse_existing=True, video=None, state=None,
                output_folder="", png_bit_depth="8"):
         from .png_video_export import bit_depth, export_video
@@ -25270,7 +25279,7 @@ class MiniMaxH3ChainExportPNG:
         compression = max(0, min(9, int(png_compression)))
         workers = _png_export_worker_count(save_workers)
         verification = str(
-            checkpoint_verification or "cached").strip().lower()
+            checkpoint_verification or "strict").strip().lower()
         if verification not in ("cached", "strict"):
             raise ValueError(
                 "H3 PNG export checkpoint_verification must be cached or strict.")
