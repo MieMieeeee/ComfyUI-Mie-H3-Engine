@@ -3,12 +3,18 @@
 > **上游**：`ethanfel/ComfyUI-MiniMaxH3-Context-Loop`（GPL-3.0，作者 `NikoDemon80` / `Ethanfel`）。
 > 上游最后一次推送是 **2026-10-14**；本分叉基于 **`43afeff`** 建立。
 >
+> **与上游的关系（2026-11-06 起）**：
+> `upstream` remote **只作溯源参考，永不合并**；**不向上游回流任何改动**。
+> 我们与上游不再有代码往来——上游的修复拿不到，也不打算拿。
+>
 > **分叉目标**（详见 [`PLAN.md`](PLAN.md)）：
 > 1. 保住 H3 长视频生成 / 上下文续接 / 音频连续 / checkpoint 血缘 / 装配 / 审核这套核心；
 > 2. 修好它在 **Windows** 上的缺陷（上游测试套件 245 个脚本里 56 个红）；
 > 3. 修 **`plan_json_input` 的二等公民设计**——外部 plan 接进来后，Plan Studio 与
 >    Scene Prompt Editor 仍只读 widget，界面显示的是上游默认样例；
-> 4. 与自有的剧本资产 / 资产库 / LLM 连接器共用共享核心包 `ComfyUI-Mie-Core`，
+> 4. 修**三处"按文件 mtime 选产物"**——还原 / robocopy /COPYALL 保留 mtime 时，
+>    旧文件会看起来最新，于是错的段被当成正式产物；
+> 5. 与自有的剧本资产 / 资产库 / LLM 连接器共用共享核心包 `ComfyUI-Mie-Core`，
 >    由独立的 FastAPI 短剧平台驱动。
 >
 > **节点类型名带 `|MieH3` 后缀**——与上游原名**不冲突**，两个包可同时安装。

@@ -123,7 +123,7 @@ GitHub API   pushed_at = 2026-10-14T11:08:20Z      (距今 22 天)
 | D3 | 分镜资产**对接 Scene Prompts 做预览**；Plan Studio 不参与修改 | §5 |
 | D4 | 节点类型名**一律加我们的后缀** | §4 |
 | D5 | 共享核心包 `ComfyUI-Mie-Core` | §3.4 |
-| D6 | 同步策略 = **`git merge upstream/main`**（不用 rebase） | §12 R1 |
+| **D6** | **不再从上游拉代码**（2026-11-06 裁定）：`upstream` remote **只作溯源参考，永不合并**。原策略“用 merge 不用 rebase”随之作废 | §12 R1 |
 | D7 | 产品层 **v1 包含站内剧本生成** | §6.2 |
 | D8 | 部署拓扑 **v1 同机** | §6.1 |
 | D9 | MieNodes 旧资产节点**弃用 + 冻结** | §14 Q-G |
@@ -144,6 +144,20 @@ GitHub API   pushed_at = 2026-10-14T11:08:20Z      (距今 22 天)
 | **D24** | **FastAPI：`uvicorn workers=1`**，生产关 `--reload`，端口 8199 | §6.1 |
 | **D25** | **第七坑：共享队列**——`/queue` 深度探测，检测到外来任务即暂停提交 | §11 |
 | **D26** | `asset_auto_describe.py` **留 MieNodes 作壳**，其 `library` import 重指 Core | §7.2 |
+
+### 2.1 与上游的关系（2026-11-06 裁定，一句话）
+
+> **上游 = 溯源参考，不是依赖。**
+> `upstream` remote **只用来对照与查证，永不合并**；base commit 固定为 `43afeff`。
+> **不向上游回流任何改动**（Q-F 关闭）。我们与上游从此**不再有代码往来**。
+
+由此确定的三件事：
+
+| # | 事项 | 结论 |
+|---|---|---|
+| 1 | 上游的修复 | **拿不到，也不打算拿**。上游的 Windows 缺陷、ComfyUI 兼容性补丁一律由我们自己写 |
+| 2 | `upstream` remote | **保留**，但角色降为**只读溯源**：base commit、对照 diff、"这段代码本来长什么样"的唯一依据。**不合并**。已把它的 **push 地址置为 `DISABLED`**（`git push upstream` 直接失败），杜绝误推 |
+| 3 | 风险转移 | 风险从"同步成本"转到**"ComfyUI 内核升级的兼容性要自己扛"**（`comfy.ldm.minimax.model` 等内部 API，见 R8）⇒ Phase 1 的 Windows 修复与"ComfyUI 版本兼容矩阵"检查**从可选变成必做** |
 
 ---
 
@@ -772,7 +786,7 @@ def identity_signal(path, st):
     ⇒ 它是**扫描过程中的竞态检测**，**不是内容身份机制**。
     **这条注释恰恰加强了我们的论据**：连上游自己都承认这个四元组抓不到
     "stat 不变但字节变了"——而那正是我们要防的场景。
-    （同形的价值只在**回流上游时冲突少**，不在"修法同构"。）
+    （与上游惯用法同形，价值在**读懂上游这段代码**，不在"修法同构"。）
   - `:380` 是**目录那一半**，不是文件四元组的弱化版 ⇒ **不必对齐成四元组**。
 
 #### 8.6.1 "较新的 mtime 变成正式文件"——真正的洞在这里（第三轮纠正，第四轮细化）
@@ -949,7 +963,8 @@ def _chapter_manifest_digest(manifest):
 
 - [x] `git clone` 上游 → 新仓 `ComfyUI-Mie-H3-Engine`，base commit `43afeff`
       —— **实做**：分支直接建立在 `43afeff` 之上（上游 954 个 commit 原样保留）
-- [x] 保留 `origin` 指向上游（D6 用 merge 不用 rebase）
+- [x] 保留 `upstream` remote 指向上游原仓，**角色是只读溯源参考**（D6：永不合并）；
+      并把它的 **push 地址置为 `DISABLED`**，杜绝误推
 - [x] `LICENSE`（GPL-3.0）+ `THIRD_PARTY_NOTICES.md` + `docs/FEATURE_TRACEABILITY.md` 全部保留
       —— **已用 `git diff upstream/main` 逐项验证为逐字未改**
 - [x] 新增 `MODIFICATIONS.md`：**逐条台账**（改了什么/为什么/影响哪些文件）
@@ -1163,7 +1178,7 @@ nodes/assets/storyboard.py:806  os.replace(tmp_path, json_path)
 
 | # | 风险 | 影响 | 缓解 |
 |---|---|---|---|
-| R1 | 上游复活，fork 落后 | 需同步 148k 树 | **D6：`git merge upstream/main`**，不用 rebase；原地修改外科手术化；`MODIFICATIONS.md` 逐条台账；季度同步 |
+| **R1** | **上游不再回灌**（2026-11-06 裁定：D6） | 上游的修复我们拿不到 | 接受：我们自担全部维护。<br>**但保留 `upstream` remote 作溯源参考**（base commit `43afeff`、随时可 diff 对照），**不再周期性合并**。<br>⇒ 风险从“同步成本”转移到**“ComfyUI 兼容性要自己扛”**（见 R8）——这让 Phase 1 的 Windows 修复与“ComfyUI 版本兼容矩阵”检查**更重要** |
 | R2 | 87 个类型批量改名漏改 | 节点注册不全，工作流红 | 改名表**自动生成** + CI 断言条目数相等 + 改名范围含 `tests/**` 与 baseline json |
 | R3 | Phase 1 的 P0 排查拖太久 | 阻塞后续 | P0 分五条；**P0-a 今天就能做**；P0 未完成不得进 Phase 3 |
 | R4 | plan 编译逻辑分叉 | 预览与实际渲染不一致 | **一份实现多处调用**（§3.3） |
@@ -1217,7 +1232,7 @@ nodes/assets/storyboard.py:806  os.replace(tmp_path, json_path)
 | Q-C | 后缀 vs 前缀 | **`\|MieH3`** |
 | Q-D | Scene Prompt Editor 只读 | **完全只读** + 新鲜度验收（§5.5） |
 | Q-E | 引擎包发不发 Comfy Registry | **不发**（D10） |
-| Q-F | Windows 修复要不要回流上游 | **尝试回流、零依赖**；不依赖它 |
+| **Q-F** | Windows 修复要不要回流上游 | **已裁定：不回流**（2026-11-06）。上游是原仓库 `ethanfel/ComfyUI-MiniMaxH3-Context-Loop`；作者不怎么维护，**我们无视它，只在自有环境实现**。⇒ 那些修复**只存在于我们的 fork**，不进上游 |
 | Q-G | MieNodes 旧资产节点 | **弃用 + 冻结**（D9） |
 | Q-G′ | 部署拓扑 | **v1 同机已定**（D8）；跨机是 v2 |
 | Q-H | critic 模型半放哪 | **已消解**：两半同住 Core（D11） |
