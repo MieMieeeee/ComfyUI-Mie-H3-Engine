@@ -119,7 +119,8 @@ GitHub API   pushed_at = 2026-10-14T11:08:20Z      (距今 22 天)
 | # | 决策 | 落点 |
 |---|---|---|
 | D1 | 引擎 = **独立包** `ComfyUI-Mie-H3-Engine` | §3.1 |
-| D2 | 产品层 = **独立 FastAPI 进程** | §6 |
+| D2 | 产品层 = **独立进程**（2026-11-06 实现为 Flask，见 §6.1） | §6 |
+| **D27** | **产品层 = Flask，复刻 ComfyUIWebToRunWorkflow 的主题；不引入 nodejs** | §6.1 |
 | D3 | 分镜资产**对接 Scene Prompts 做预览**；Plan Studio 不参与修改 | §5 |
 | D4 | 节点类型名**一律加我们的后缀** | §4 |
 | D5 | 共享核心包 **`ComfyUI-Mie-LLM` / `ComfyUI-Mie-Prompt` / `ComfyUI-Mie-Craft`** | §3.4 |
@@ -461,11 +462,17 @@ node.mieH3PlanProvider = () => ({
 
 ### 6.1 进程模型、导入机制与部署拓扑
 
-- 独立 FastAPI 进程（`uvicorn`），**不挂在 ComfyUI 的 PromptServer 上**（D2）。
-- **端口**：ComfyUI 继续占 **8188** 不动；FastAPI 挑空闲口 **8199**，绑 `0.0.0.0` 供局域网浏览器用。
+- 独立进程，**不挂在 ComfyUI 的 PromptServer 上**（D2）。
+  **2026-11-06 实现改为 Flask**（`F:\ComfyUI-Mie-Web`）：用户要求"复刻
+  `F:\ComfyUIWebToRunWorkflow` 的主题、不要引入 nodejs"，而那个项目就是
+  Flask + Jinja + vendored Alpine（无构建步骤）。主题的 `tokens.css` /
+  `themes.json` 因此可以**直接复用**，而不是另写一套。
+  ⇒ D2 的**进程边界、端口、单进程**三条不变，**只有 Web 框架从 FastAPI 换成了 Flask**。
+- **端口**：ComfyUI 继续占 **8188** 不动；产品层挑空闲口 **8199**，绑 `0.0.0.0` 供局域网浏览器用。
   **无冲突可言。**
-- **`uvicorn workers=1`**（D24）——多 worker 会破坏渲染队列串行化（坑 4 的前提）
+- **单进程**（D24）——多 worker 会破坏渲染队列串行化（坑 4 的前提）
   与内存态任务表；**生产模式关 `--reload`**（否则又是双进程陷阱）。
+  ⇒ Flask 侧对应 `use_reloader=False` + 线程化（`threaded=True`）。
   ⚠️ 但 **`workers=1` 只保证单进程，异步请求仍会交错** ⇒
   **产品层自己的队列要另加一把进程内锁**（R21/R22），不能依赖"单 worker 所以串行"的假设。
 - **导入机制**：产品层 venv `pip install -e <Core 目录>`，`import mie_llm / mie_prompt / mie_craft`。
@@ -490,6 +497,11 @@ node.mieH3PlanProvider = () => ({
   两次 HTTP 之间的空窗仍在（见 §11 坑 7）。
 
 ### 6.2 路由清单（首版）
+
+> **2026-11-06 已实现**（`F:\ComfyUI-Mie-Web`）：四个页面
+> `/llm` `/assets` `/scripts` `/video`，各自一套 `/api/*`。
+> 页面与路由的实现在那个仓，不在本文件；本清单继续作为**首版意图**的记录。
+
 
 | 方法 | 路径 | 作用 |
 |---|---|---|
