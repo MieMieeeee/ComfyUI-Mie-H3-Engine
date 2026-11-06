@@ -13,14 +13,14 @@ pack and the upstream pack be installed side by side.
 
 from __future__ import annotations
 
-from mie_core.script.builder import (  # noqa: F401
+from mie_craft.script.builder import (  # noqa: F401
     ASSET_ROSTER_TYPE,
     BOARD_KIND_DIALOGUE,
     MAX_CHARACTER_SLOTS,
     assemble_from_sockets,
     storyboard_cache_key,
 )
-from mie_core.assets import script_asset, library
+from mie_craft.assets import script_asset, library
 
 
 CATEGORY = "conditioning/minimax/context_loop"
@@ -78,7 +78,7 @@ class MieH3ScriptToPlan:
 
     @classmethod
     def INPUT_TYPES(cls):
-        from mie_core.script.builder import (
+        from mie_craft.script.builder import (
             _storyboard_required_inputs,
             _storyboard_optional_slots,
         )
