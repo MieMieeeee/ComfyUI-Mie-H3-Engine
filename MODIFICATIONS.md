@@ -13,6 +13,20 @@
 
 ## 原则
 
+0. **（2026-11-06 用户定调）本项目的核心是"尽可能吸纳上游已测过的代码"；
+   但凡是已经发现的问题，就选最优解，而不是最小补丁。**
+   这条原则的落法是：
+   - **上游的测试是契约，不是障碍。** 上游有测试覆盖的地方，**先读那个测试**——
+     它往往已经写清了上游想要的语义（例如 reference cache 的
+     *"ambiguous semantic recipes must not be chosen by mtime"*），
+     而实现却没做到。这时**让实现去满足上游的测试**，而不是改测试。
+   - **上游的守卫若是对的，原样保留。** 上游已有的歧义守卫、完整性校验、
+     journal 事务语义都经过实测，不因为"我们也要改这块"就重写。
+   - **只在真正有缺陷的地方改**，且改动要**能被测试钉住**
+     （每处改动配一条负对照：原实现必须报红）。
+   - **发现上游的前提是错的，当场纠正并写进文档**（例如"临时名里的 32 位 hex
+     是内容摘要"实为随机事务号；"reference cache 多候选必须拒绝"实为
+     上游的合法格式迁移场景）。
 1. **改动尽量是新增，不原地改。** 上游的 `chain_nodes.py` 单文件 31,538 行、
    占顶层生产代码 29.3%，原地改会让将来 `git merge upstream/main` 变贵。
    能用新模块解决的，不动老文件。
@@ -39,6 +53,10 @@
 | **0.9** | **Phase 0** | **`tests/_web_cache_bust_unit_test.py` 的版本正则放宽为接受 `+local` 构建元数据** | **实测发现的真缺陷**：上游把 `pyproject.toml` 的 `version` 同时当作**浏览器 cache-bust token 的默认下限**，其正则 `^(\d+)\.(\d+)\.(\d+)$` 不接受 `+mie.1`，于是 `0.7.3+mie.1` 让这个测试**直接失败**（`AssertionError: Invalid web cache token '0.7.3+mie.1'`）。而 `0.7.3+mie.1` 在 PEP 440 / SemVer 里正是"上游版本 + 本地改动"的标准写法（`0.7.3 < 0.7.3+mie.1 < 0.7.4`）。**改法只放宽"能否解析"，不动排序语义**：正则接受可选后缀，`version_key()` 取前三个数字组。回归验证：把版本号换回 `0.7.3` 也同样通过 ⇒ 排序保证未变 | `tests/_web_cache_bust_unit_test.py` | ✅ 已做 |
 | **1.1** | **Phase 1** | **P0-a：关键路径的 `checkpoint_verification` 默认由 `cached` 改为 `strict`**（widget 默认值、`export()` 签名默认、`or "cached"` 兜底三处），tooltip 重写为说明"cached 信任一个从未被强制的不变量"以及何时才该选 cached | 上游 tooltip 明说 cached *"trusts matching size and modification time"*——它把 `(size, mtime_ns)` 组合当成路径的内容身份。**本条是当天可做的生产修复**，不等 Q-F′，不动三处恢复逻辑 | `chain_nodes.py`（3 处） | ✅ 已做 |
 | **1.0** | **Phase 1** | **新增 `tests/_mie_png_verification_strict_unit_test.py`** | 把 P0-a 的价值**钉成可执行的事实**而不是声明：① 证明 cached 模式**看不见**"字节变了但 size/mtime 未变"（原地覆写 + 保留 mtime，返回 `cached SHA-256`）；② 证明 strict 模式**能拦住**它（重算哈希 → `ValueError`）；③ 断言节点的 widget 默认就是 `strict`。**负对照已做**：把默认值改回 `cached` → 测试报 `AssertionError: cached` ⇒ 不是空测试 | `tests/_mie_png_verification_strict_unit_test.py` | ✅ 已做 |
+| **1.2** | **Phase 1** | **P0-b ①：遗留 checkpoint 指针恢复兜底不再按 mtime 挑** —— 多份 `clip_NNNN.json.restore.<id>.tmp` 时**拒绝猜测**：报错并**保留全部文件**（不提升、不删除）；单份时行为完全不变 | 上游按 mtime 最大的那份提升为正式指针。**实测纠正**：临时名里那 32 位 hex 是 `uuid.uuid4().hex`（随机事务号，`chain_nodes.py:28650`），**不是内容摘要** ⇒ 盘上没有任何信号能指出哪一份才是对的。上游的 journal 路径本来就拒绝猜测（损坏即删临时文件）；遗留路径改成同样的拒绝语义，但**不删文件**（上游注释承诺"no media is deleted here"） | `chain_nodes.py` `_recover_checkpoint_pointer_transactions` | ✅ 已做 |
+| **1.3** | **Phase 1** | **P0-b ②：封印 Chapter 清单改为按内容里的 `sealed_at` 排序** —— 选谁不再看文件的 mtime；`sealed_at` 是**写在文档内部**的时间戳且**被排除在清单摘要之外**（每次保存重写），所以 robocopy /COPYALL 会连它一起拷走，**不受文件系统 mtime 影响**。没有 `sealed_at` 的旧文档才回落到 mtime | 清单的文件名就是它的 `chapter_manifest_id`（内容摘要），选中后还会校验 `摘要 == id == 文件名`；但**选哪一份**此前是按 mtime ⇒ 一次保留 mtime 的还原/镜像就能让"当前封印"指到旧的快照上。**不改清单正文**（加 `_mie_seq` 之类会改变摘要和文件名，等于另造一份快照） | `chain_nodes.py` `_load_chapter_manifest` | ✅ 已做 |
+| **1.4** | **Phase 1** | **P0-b ③：reference cache 描述符必须与自己的文件名一致** —— 缓存文件名带 `signature[:24]`，描述符内容里的 `signature` 必须与它相符，不符则**跳过该候选** | 缓存文件名本来就声明了"这份描述符属于哪个契约"。上游只校验字段存在，不校验内容与文件名一致 ⇒ 一次原地覆写（把 A 的内容换成 B 变体的内容）会让描述符自相矛盾而无人察觉。**上游那条已测的歧义守卫（不同 semantic-anchor 设置必须拒绝）原样保留**——它是对的，且上游自己的测试 `tests/_reference_cache_fingerprint_unit_test.py` 就在守它 | `chain_nodes.py` `_reference_cache_candidates` | ✅ 已做 |
+| **1.5** | **Phase 1** | **新增 `tests/_mie_mtime_selection_unit_test.py`** | 把上面三条钉成可执行事实。**逐项负对照已做**：用上游原实现跑，三条**全部报红**（"an ambiguous legacy pointer must not be promoted" / "the snapshot with the newer sealed_at must win" / "a descriptor that does not match its file name must be rejected"）；用我们的实现跑，三条**全部通过** | `tests/_mie_mtime_selection_unit_test.py` | ✅ 已做 |
 | **1.2** | **Phase 1** | **P0-b：三处"按 mtime 选源"改按各自规则选源** | 外部覆写（robocopy /COPYALL 保留 mtime）能把旧文件推成正式产物 | `chain_nodes.py` `:28453-28458` / `:22055` / `:4940` | ⬜ 未做（规则见 PLAN §8.6.1） |
 | **1.3** | **Phase 1** | **P0-c：`<64MB` 一律直接哈希** | 把 P0 暴露面缩到只剩大文件 | `chain_nodes.py` `:24681` 附近 | ⬜ 未做 |
 | **1.4** | **Phase 1** | **P0-e：`GetVolumeInformationW` 识别 FAT/exFAT ⇒ 无身份信号 ⇒ 强制 strict** | exFAT 的 file index 来自目录项位置、原地覆写不变，且**非 0**——只看 `ino == 0` 会误放行 | 新模块（优先，不原地改） | ⬜ 未做 |
@@ -65,11 +83,40 @@
 | 阶段 | 结果 |
 |---|---|
 | 改动前基线（本仓，未改上游代码） | **189 passed / 58 failed** |
-| 改动后（含 0.9 + 1.1 + 1.0） | **192 passed / 56 failed** |
-| 差异 | **零新增失败**；修好 2 个（cache-bust 契约 + 新增的回归测试）；基线里多出的 2 个是环境/并行导致的偶发（单独跑都过） |
+| P0-a + 缓存契约修复 + 回归测试 | **192 passed / 56 failed** |
+| **P0-b（三处选源规则）落地后** | **193 passed / 56 failed** |
+| 差异 | **零新增失败**；修好 3 个（cache-bust 契约 + 两个新增回归测试）；基线里多出的 2 个是环境/并行导致的偶发（单独跑都过） |
 
 56 个失败与上游克隆在同一台机器上的失败数一致，**全部是既有失败**，
 按计划 §8.6 的四类排查属于 Windows 环境类（symlink 权限、NTFS mtime 粒度）与 Node 24 harness 类。
+
+> **注意**：`_selflift_upscale_preview_unit_test.py` 与 `_selflift_hunt_unit_test.py`
+> 在并行负载下**偶发**失败（asyncio 计时），单独跑 3/3 通过。
+> 判定"新增失败"时要先单独复跑，不要直接归因给改动。
+
+### 解释器这件事（Phase 1 的一条真发现）
+
+**套件用哪个 python 跑，结果差很多**：
+
+| 解释器 | 结果 |
+|---|---|
+| 系统 python 3.12.10 + `PYTHONPATH=<repo>` | **192 / 56**（本文所有基线都是这个） |
+| ComfyUI 自带 python 3.13.12（隔离模式） | **80 / 168** |
+
+两个原因：
+
+1. **ComfyUI 自带的 python 是隔离模式**（`python313._pth` 固定了 sys.path：
+   不加脚本目录、**忽略 `PYTHONPATH`**）⇒ 上游测试互相 import 的 fixture
+   （`source_audio_fixtures` 等）全部找不到；
+2. 系统 python 缺 `comfy_aimdo`（它装在 ComfyUI 的 3.13 site-packages 里，
+   主体是纯 Python + ctypes 加载 DLL）⇒ 30 处失败行提到它。
+
+⇒ **"56 个失败"这个数字是环境产物，不是代码真相。** 想让套件真正全绿，
+得先解决"用哪个解释器 + 怎么让 ComfyUI 核心模块可导入"，
+这是 Phase 1 的**环境子任务**，与 P0 的代码修复是两条线。
+本机已验证的可行组合：**ComfyUI 自带 python + 一个把 `tests/` 插进 `sys.path` 的引导脚本**
+（`/tmp/run_test.py` 形态）⇒ `_reference_cache_fingerprint_unit_test.py` 在该组合下**通过**，
+而它在系统 python 下因为 `comfy_aimdo` 失败。
 
 ### 节点名冲突（计划 §3.1 的实证）
 

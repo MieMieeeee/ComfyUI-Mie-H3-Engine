@@ -12,6 +12,20 @@
 
 ## 0. TL;DR
 
+> ### 治本原则（2026-11-06 定调）
+>
+> **本项目的核心是尽可能吸纳上游已测过的代码；凡是已经发现的问题，
+> 就选最优解，而不是最小补丁。**
+>
+> 落法：
+> - **上游的测试是契约，不是障碍**——上游有测试覆盖的地方先读那个测试，
+>   它往往已经写清了上游想要的语义（例如 reference cache 的
+>   *"ambiguous semantic recipes must not be chosen by mtime"*），
+>   而实现却没做到；此时**让实现去满足上游的测试**。
+> - **上游的守卫若是对的，原样保留**；只在真正有缺陷的地方改。
+> - **每处改动配一条负对照**：原实现必须报红，否则不是真修。
+> - **发现上游的前提是错的，当场纠正并写进文档**。
+
 上游的 H3 长视频生成插件**已停更 22 天**。我们要：
 
 1. **fork** 它成 `ComfyUI-Mie-H3-Engine`（保住 148k 行难啃的生成核心，并修好它在 Windows 上的缺陷）；
@@ -788,13 +802,16 @@ journal 损坏时走 `else` 分支**直接删掉临时文件、不做猜测**。
 上游自己的注释写明：*"Builds **predating the journal** can leave one renamed pointer behind…"*
 ⇒ **mtime 只用于 journal 出现之前的遗留兜底。**
 
-- 文件名里的 32 位 hex 是**该临时文件自己的摘要**；
-  多份各自都合法，**没有"父级期望哈希"可供对上号**；
+- ⚠️ **实施时纠正**：文件名里那 32 位 hex **不是内容摘要**，而是
+  `uuid.uuid4().hex`（**随机事务号**，`chain_nodes.py:28650`）。
+  ⇒ 盘上**没有任何信号**能指出哪一份才是对的，
+  **"按内容选源"在这一处不可得**，只能拒绝猜测；
 - 没有 journal 又有多份临时文件时 ⇒ **按 journal 损坏的同一条路拒绝自动恢复**。
 
-**修法**：遗留兜底里，若同一 canonical 指针对应**多份**临时文件 ⇒
-**拒绝猜测（不按 mtime 挑）**，照抄 journal 损坏时的拒绝语义；
-**恰好一份** ⇒ 用它。
+**修法（已落地）**：遗留兜底里，若同一 canonical 指针对应**多份**临时文件 ⇒
+**拒绝猜测（不按 mtime 挑）**，报错并**保留全部文件**
+（不提升、不删除——上游注释承诺"no media is deleted here"）；
+**恰好一份** ⇒ 用它（行为不变）。
 **不要加 `_mie_seq`**——那会碰到现成的身份摘要。
 
 ---
@@ -833,7 +850,22 @@ def _chapter_manifest_digest(manifest):
 —— **调用方没有文件哈希**，函数做的是**语义查找**；
 候选已按契约（fingerprint/scene/prompt/尺寸）过滤过。
 
-**修法**：**剩一份就用；剩多份就拒绝猜测**。
+> ⚠️ **实施时纠正**：上游**已经**有歧义守卫
+> （不同 `reference_fingerprint` ⇒ 抛
+> *"different semantic-anchor settings"*），而且**上游自己的测试**
+> `tests/_reference_cache_fingerprint_unit_test.py` 就在守它
+> （断言语是 *"ambiguous semantic recipes must not be chosen by mtime"*）。
+> 该测试在本机因 `comfy_aimdo` 缺失跑不到那一步，但用 ComfyUI 自带 python 跑**通过**。
+> ⇒ **上游这条守卫是对的，必须原样保留**；
+> 也不该把"不同 signature 就拒绝"套上去——上游测试明确要求
+> *"An exact fingerprint match remains preferred, including legacy V1 caches"*，
+> 同一 fingerprint 下多个对象（格式迁移）是**合法状态**，
+> 上游的"最后写入者胜"在那个场景里是有意义的。
+
+**修法（已落地）**：**上游守卫原样保留**；只补一条**内容完整性校验**——
+缓存文件名带 `signature[:24]`，描述符内容里的 `signature` 必须与它相符，
+不符则**跳过该候选**。这样"把 A 的内容换成 B 变体的内容"这种原地覆写
+会让描述符自相矛盾而被识破，而 mtime 不再有机会决定谁被选中。
 `expected_sha256` 对上号，**只适用于调用方事先记下了目标哈希的路径**
 （例如 PNG 导出守卫 `:24681`）——**那三处不适用**。
 
@@ -849,6 +881,24 @@ def _chapter_manifest_digest(manifest):
 恢复是 write-once 的例外，而**例外本身就是这个洞**；
 **write-once 只约束走我们写入口的进程，挡不住外部覆写**（robocopy、镜像同步）。
 ⇒ D20 必须写成：**write-once + 恢复路径显式豁免 + 恢复时按上述三条规则选源**。
+
+#### 8.6.2 实测：56 个失败里有环境成分，"全绿"要先解决解释器
+
+套件**用哪个 python 跑**，结果差很多：
+
+| 解释器 | 结果 |
+|---|---|
+| 系统 python 3.12.10 + `PYTHONPATH=<repo>` | **192 / 56**（本文所有基线都是这个） |
+| ComfyUI 自带 python 3.13.12（隔离模式） | **80 / 168** |
+
+- ComfyUI 自带的 python 是**隔离模式**（`python313._pth` 固定 sys.path：
+  不加脚本目录、**忽略 `PYTHONPATH`**）⇒ 上游测试互相 import 的 fixture 全找不到；
+- 系统 python 缺 `comfy_aimdo`（装在 ComfyUI 的 3.13 site-packages，主体纯 Python）⇒ 30 处失败行提到它。
+
+⇒ **"56 个失败"是环境产物，不是代码真相。**
+已验证可行的组合：**ComfyUI 自带 python + 一个把 `tests/` 插进 `sys.path` 的引导脚本**
+⇒ `_reference_cache_fingerprint_unit_test.py` 在该组合下**通过**。
+这是 Phase 1 的**环境子任务**，与 P0 的代码修复是两条线。
 
 ### 8.7 修法四：把"不可变"从未强制的不变量变成事实（D20）+ size 分层（D21）
 
@@ -888,10 +938,10 @@ def _chapter_manifest_digest(manifest):
 | Phase 0 / P0-a | ✅ **已完成** | 三处默认切 `strict`（widget / `export()` 签名 / `or` 兜底）+ tooltip 重写；本机 ComfyUI 实测 `/object_info` 的默认值已是 `strict` |
 | Phase 0 / 缓存契约修复 | ✅ **已完成** | 版本号 `0.7.3+mie.1` 触发上游 `_web_cache_bust_unit_test.py` 失败（`Invalid web cache token`）⇒ 放宽其正则接受 `+local`，**排序语义不变**（换回 `0.7.3` 同样通过） |
 | Phase 1 / 回归测试 | ✅ **已新增** | `tests/_mie_png_verification_strict_unit_test.py`：证明 cached 看不见"字节变、size/mtime 不变"、strict 能拦住、默认是 strict；**负对照已做**（改回 cached → 测试报红） |
-| 测试套件 | **192 passed / 56 failed** | 改动前基线 **189 / 58** ⇒ **零新增失败**；56 个与上游克隆同机失败数一致，全是既有失败（Windows 环境类 + Node 24 harness 类） |
+| 测试套件 | **193 passed / 56 failed** | 改动前基线 **189 / 58** ⇒ **零新增失败**；56 个与上游克隆同机失败数一致，全是既有失败（Windows 环境类 + Node 24 harness 类）。**注意 56 这个数字有环境成分，见 §8.6.2** |
 | 节点名冲突 | **已实测** | 两包同装：148 而非 296、**零告警** ⇒ 静默覆盖确认。**且胜者由 `os.listdir` 目录序决定**（实测上游赢了）⇒ **Phase 2 的改名是必须项**，见 §4.1.1 |
-| Phase 1 / P0-b | ⬜ 未做 | 等 §8.6.1 的三条选源规则定稿 |
-| Phase 1 / P0-c…P0-f | ⬜ 未做 | — |
+| Phase 1 / P0-b | ✅ **已做**（三处各按自己的规则改） | ① 遗留恢复：多份 ⇒ **拒绝猜测并保留全部文件**（单份行为不变）；② 封印清单：改按**内容里的 `sealed_at`** 排序；③ reference cache：**描述符的 signature 必须与文件名一致**，上游已测的歧义守卫**原样保留**。<br>**逐项负对照**：上游原实现三条**全红**，我们的实现三条**全绿**（`tests/_mie_mtime_selection_unit_test.py`） |
+| Phase 1 / P0-c…P0-f | ⬜ 未做 | P0-c（size 分层）/ P0-d（39 处四类排查）/ P0-e（文件系统识别）/ P0-f（write-once） |
 | Phase 2 改名 | ⬜ 未做 | **现在升级为必须项**（§4.1.1） |
 | Q-F′ | ⬜ **仍开放** | 只有用户能拍 |
 
