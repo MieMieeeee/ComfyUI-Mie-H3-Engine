@@ -31,8 +31,12 @@ ENGINE = "comfyui-minimaxh3-contex-loop"
 MIENODES = "ComfyUI_MieNodes"
 
 SCRIPT_NAME = "Claude的千层套路001-系列版"
-CHARACTER_1 = "凌澈"
-CHARACTER_2 = "星惑"
+# The script's OWN roles. The plan assembler refuses to run without a
+# character asset per slot, and the slot order follows the script's role
+# order: 小D is the off-screen voice, Claude娘 is the one on camera.
+# Wiring anyone else puts a different face in the frame.
+CHARACTER_1 = "小D"
+CHARACTER_2 = "Claude娘"
 RUN_NAME = "sb_newarch_20261106"
 
 # The plan the old workflow carried as a literal fallback. The Plan node
@@ -40,38 +44,14 @@ RUN_NAME = "sb_newarch_20261106"
 # the node shows - and what it would render if the new assembly path were
 # disconnected. Keeping it makes the two workflows differ only where they
 # are meant to.
+# The plan this workflow actually produces, captured from a live run -
+# so the widget shows the real thing and the fallback is a valid plan
+# too (the Plan node prefers plan_json_input whenever it is wired).
+# The widget is a multiline STRING, so the plan goes in as JSON text.
 FALLBACK_PLAN_JSON = json.dumps(
-    {
-        "prompt_prefix": (
-            "First-person POV conversation in a cozy modern room with natural "
-            "indoor lighting, static camera, medium close-up on the on-screen "
-            "character facing the lens.\nNo decorative on-screen text, subtitles, "
-            "logos, watermarks, extra people, or non-diegetic music."
-        ),
-        "shots": [
-            {
-                "id": "scene_01",
-                "prompt": "Describe the opening shot.",
-                "length": 260,
-                "steps": 20,
-                "seed": "20261020",
-            },
-            {
-                "id": "scene_02",
-                "prompt": "Continue the same take.",
-                "length": 192,
-                "steps": 20,
-                "seed": "20261021",
-            },
-            {
-                "id": "scene_03",
-                "prompt": "Close on the reaction.",
-                "length": 158,
-                "steps": 20,
-                "seed": "20261022",
-            },
-        ],
-    },
+    json.loads(
+        r'''{"shots": [{"id": "scene_01", "prompt": ["integrated_multimodal_description: [Shot 1] medium close up of Character 2 from <Picture 1>, already visible at the first frame, static locked-off camera maintaining the same framing, first-person POV toward the camera.", "Detailed two-dimensional animation with coherent linework and palette.", "Character 1 stays exclusively off-screen as a voice.", "Character 2 is the figure in <Picture 1>; use this reference for identity and appearance only.", "Opening cast: Character 2. Begin directly in this framing.", "Not visible at the opening: Character 1. Only explicit entrance events may add them.", "Character 2 begins at center of frame.", "Opening staging: Character 2 sits at the center of the sofa facing the camera, hands relaxed in the lap. Character 1 is an off-screen voice.", "Scene context: A living room with a beige sofa, a floor lamp, a window and a plain wall.", "Light: Deep night, pitch-dark outside, with warm lamplight.", "Only the explicitly tagged dialogue is spoken. Do not speak stage directions or role labels.", "Perform the following events once, in the exact written order; one speaker at a time, without overlapping or repeating lines.", "Each specified prop exists in its stated quantity and stays with its stated holder. An offered object stays with the offering actor until an explicit accepted handover; refusal leaves the other actor empty-handed.", "During dialogue-only events, keep incidental reference props with their initial holder and limit movement to natural speaking reactions.", "The image contains exactly the declared visible cast in the present setting. Spoken stories remain audio within this present conversation.", "Visible state: Character 2 is the only visible figure, seated at center with hands at rest. Character 1 remains exclusively an off-screen voice. The ordered events govern later expressions and gestures.", "Character 2 performs this action: Character 2 remains seated on the sofa, tilts her head slightly and listens quietly.", "Character 2 remains on-screen with lips completely closed while an off-screen voice (S1), adult male, casual and clear timbre, mid register, conversational pace, from Character 1 says in voiceover: <d>[English] Please help me resolve this document.</d>", "While this line is spoken, Character 2's lips remain completely closed.", "Character 2 speaks as (S2), young female, soft and playful timbre, mid-high register, intimate gentle pace with a teasing lift: <d>[Chinese] 其实，你可以和我直接用中文交流的，我不会介意的。</d> Character 2's lips move naturally with this line.", "Character 2 remains on-screen with lips completely closed while an off-screen voice (S1), adult male, casual and clear timbre, mid register, conversational pace, from Character 1 says in voiceover: <d>[English] wait, i'm not Chinese.</d>", "While this line is spoken, Character 2's lips remain completely closed.", "Character 2 speaks as (S2), young female, soft and playful timbre, mid-high register, intimate gentle pace with a teasing lift: <d>[Chinese] 哎呀，我都上架中文了，相信我，好吗。</d> Character 2's lips move naturally with this line.", "Character 2 remains on-screen with lips completely closed while an off-screen voice (S1), adult male, casual and clear timbre, mid register, conversational pace, from Character 1 says in voiceover: <d>[Chinese] 真的吗？</d>", "While this line is spoken, Character 2's lips remain completely closed.", "Character 2 speaks as (S2), young female, soft and playful timbre, mid-high register, intimate gentle pace with a teasing lift: <d>[Chinese] 哼哼，你的账号已被封禁。</d> Character 2's lips move naturally with this line.", "Character 2 performs this action: Character 2 closes her mouth after her final line, maintains her original seated pose and holds a sinister teasing smile briefly.", "overall_soundscape: Natural room tone, breathing and synchronized movement sounds.", "non_diegetic_music: No non-diegetic music."], "length": 430}], "prompt_prefix": ["Voice casting: (S1) uses the voice identity from <Audio 1> only; the reference words are not dialogue.", "Voice casting: (S2) uses the voice identity from <Audio 2> only; the reference words are not dialogue."]}'''
+    ),
     ensure_ascii=False,
 )
 

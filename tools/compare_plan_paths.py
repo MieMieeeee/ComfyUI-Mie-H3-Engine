@@ -23,7 +23,7 @@ import uuid
 
 BASE = "http://127.0.0.1:8188"
 SCRIPT = "Claude的千层套路001-系列版"
-CHARACTERS = ["凌澈", "星惑"]
+CHARACTERS = ["小D", "Claude娘"]
 
 
 def post(path, payload):
