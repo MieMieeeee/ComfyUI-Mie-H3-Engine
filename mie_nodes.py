@@ -18,7 +18,6 @@ from mie_craft.script.builder import (  # noqa: F401
     BOARD_KIND_DIALOGUE,
     MAX_CHARACTER_SLOTS,
     assemble_from_sockets,
-    storyboard_cache_key,
 )
 from mie_craft.assets import script_asset, library
 
@@ -59,7 +58,14 @@ class MieH3LoadScriptAsset:
 
     @classmethod
     def IS_CHANGED(cls, library_dir, name):
-        return storyboard_cache_key(library_dir, name)
+        # The FILE's content, not the widget values: editing the script
+        # busts the cache and nothing else does. The builder's
+        # storyboard_cache_key hashes a storyboard DICT; the two-argument
+        # one in script_asset hashes the file on disk, and that is the one
+        # this node wants. Calling the wrong one raised a TypeError, which
+        # ComfyUI turned into "always changed" plus a warning on every
+        # single queue.
+        return script_asset.storyboard_cache_key(library_dir, name)
 
     def load(self, library_dir="", name=""):
         cleaned, path = script_asset.load_storyboard(library_dir, name)
