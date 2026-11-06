@@ -11,5 +11,5 @@
 #     the three authoring packages ship as one train with one version.
 #
 #   torchaudio - the audio paths need it. ComfyUI does not ship it.
-comfyui-mie-craft>=0.1.3
+comfyui-mie-craft>=0.1.4
 torchaudio
