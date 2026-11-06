@@ -15,7 +15,10 @@ name: Publish to Comfy Registry
 #   2. confirm pyproject.toml's PublisherId (it is "mie") and that the
 #      node type names carry the |MieH3 suffix, so the published package
 #      cannot collide with the upstream one;
-#   3. run this workflow by hand.
+#   3. the three authoring packages this one depends on
+#      (comfyui-mie-llm, comfyui-mie-prompt, comfyui-mie-craft) are on
+#      PyPI, so the installed pack can import them;
+#   4. run this workflow by hand.
 
 on:
   workflow_dispatch:
