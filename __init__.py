@@ -96,6 +96,12 @@ from .audio_refine import (
     NODE_DISPLAY_NAME_MAPPINGS as _AUDIO_REFINE_NAMES,
 )
 
+from .mie_nodes import (
+    MieH3LoadAssetRoster,
+    MieH3LoadScriptAsset,
+    MieH3ScriptToPlan,
+)
+
 NODE_CLASS_MAPPINGS = dict(_CONTEXT_NODE_CLASS_MAPPINGS)
 NODE_CLASS_MAPPINGS.update(CHAIN_NODE_CLASS_MAPPINGS)
 NODE_CLASS_MAPPINGS.update(UPSCALE_NODE_CLASS_MAPPINGS)
@@ -133,6 +139,20 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     name: _fork_display_name(value)
     for name, value in NODE_DISPLAY_NAME_MAPPINGS.items()
 }
+
+# The Mie-side nodes: thin ComfyUI shells over ComfyUI-Mie-Core, so the
+# engine and the MieNodes pack share one implementation and one asset
+# roster socket type.
+NODE_CLASS_MAPPINGS.update({
+    "MieH3LoadScriptAsset": MieH3LoadScriptAsset,
+    "MieH3ScriptToPlan": MieH3ScriptToPlan,
+    "MieH3LoadAssetRoster": MieH3LoadAssetRoster,
+})
+NODE_DISPLAY_NAME_MAPPINGS.update({
+    "MieH3LoadScriptAsset": "Mie H3 Load Script Asset",
+    "MieH3ScriptToPlan": "Mie H3 Script to Plan",
+    "MieH3LoadAssetRoster": "Mie H3 Load Asset Roster",
+})
 
 WEB_DIRECTORY = "./web"
 
