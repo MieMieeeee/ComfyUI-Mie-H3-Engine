@@ -155,6 +155,40 @@
 
 ---
 
+## CI 与发布（2026-11-06）
+
+本仓未来 **public**，CI 可以上云。但**闸门不能是"零失败"**——上游套件在任何平台上
+都不干净（Windows 丢 56 个脚本，Linux 丢另一批），要求零失败的闸门从第一次跑起就是红的。
+
+⇒ 落地是**基线闸门**：
+
+| 文件 | 作用 |
+|---|---|
+| `tools/ci_gate.py` | 跑套件 → 取失败集 → **串行复跑**剔除时序敏感的 flaky → 与 `tools/known_failures/<platform>.txt` 比对 → **只有新失败才红** |
+| `tools/known_failures/windows-latest.txt` | 本机实测的 56 个既有失败（193/56） |
+| `.github/workflows/ci.yml` | `ubuntu-latest` + `windows-latest` 双平台 |
+
+**我们的两条回归测试是硬门槛**（`_mie_png_verification_strict_unit_test.py`、
+`_mie_mtime_selection_unit_test.py`）——无论基线怎么说都必须通过。
+
+**明确不在 CI 里的**：Windows 卷类型（FAT/exFAT）、映射盘、符号链接权限、
+"原地覆写且保留 size/mtime"的探针、`MIE_LIVE_E2E=1` 真机渲染矩阵
+——它们必须在**本机与局域网的真实盘**上跑。
+
+### 修掉的一个隐患：上游带来的 Registry 发布工作流
+
+上游的 `.github/workflows/publish_action.yml` 在 **push 到 main 且改动 `pyproject.toml`** 时
+**自动**触发 Comfy Registry 发布。我们 Phase 0 正好改了 `pyproject.toml`
+⇒ **第一次 push 就会触发它**。已改成**只保留手动触发**，并在文件顶部写明
+何时、怎样才该真的发布（Q-E 仍暂缓）。
+
+### 公开前的卫生扫描（已做，2026-11-06）
+
+仓库内**无**密钥/令牌、**无**内网地址或 UNC 路径、**无**个人路径、**无**未跟踪残留；
+大于 2MB 的文件只有上游自带的示例工作流素材（本就公开）。
+
+---
+
 ## 与上游的接口约定（我们依赖、但不拥有的部分）
 
 | 上游的东西 | 我们怎么用 | 我们的义务 |

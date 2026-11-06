@@ -957,7 +957,7 @@ def _chapter_manifest_digest(manifest):
 | Phase 1 / P0-b | ✅ **已做**（三处各按自己的规则改） | ① 遗留恢复：多份 ⇒ **拒绝猜测并保留全部文件**（单份行为不变）；② 封印清单：改按**内容里的 `sealed_at`** 排序；③ reference cache：**描述符的 signature 必须与文件名一致**，上游已测的歧义守卫**原样保留**。<br>**逐项负对照**：上游原实现三条**全红**，我们的实现三条**全绿**（`tests/_mie_mtime_selection_unit_test.py`） |
 | Phase 1 / P0-c…P0-f | ⬜ 未做 | P0-c（size 分层）/ P0-d（39 处四类排查）/ P0-e（文件系统识别）/ P0-f（write-once） |
 | Phase 2 改名 | ⬜ 未做 | **现在升级为必须项**（§4.1.1） |
-| Q-F′ | ⬜ **仍开放** | 只有用户能拍 |
+| Q-F′ | ✅ **已裁定** | 本仓未来 **public** ⇒ CI 上云。落地：§10.3 的基线闸门（`ubuntu-latest` + `windows-latest`）。**发布到 Comfy Registry 仍暂缓**（Q-E） |
 
 ### Phase 0 — 建 fork（0.5 天）
 
@@ -991,7 +991,7 @@ def _chapter_manifest_digest(manifest):
 ### Phase 1 — Windows 正确性修复（**P0**）（3–5 天，**下限不是上限**）
 
 - [x] **P0-a（配置面，今天就能做，最高优先）**：关键路径 `checkpoint_verification` 设为 **`strict`**
-      —— **本阶段的落地目标就这一条**，其余等 Q-F′ 与 §8.6.1 定稿
+      —— **本阶段的落地目标就这一条**，其余按 §8.6.1 的规则推进
       —— **实做**：widget 默认 / `export()` 签名默认 / `or` 兜底三处 + tooltip 重写；
       本机 ComfyUI 实测 `/object_info` 的默认值已是 `strict`；
       新增 `tests/_mie_png_verification_strict_unit_test.py` 把"cached 漏检 / strict 拦截 /
@@ -1014,7 +1014,7 @@ def _chapter_manifest_digest(manifest):
 - [ ] Windows 无符号链接/硬链接权限（WinError 1314）→ 代码侧降级而非崩
 - [ ] 修 Node 24 的 `vm.runInContext` ESM 兼容（10 个 `.mjs`）
 - [ ] 修剩余真 Windows 缺陷
-- [ ] CI 处置见 Q-F′
+- [x] CI 处置：**基线闸门**已落地（`tools/ci_gate.py` + `.github/workflows/ci.yml`）——Q-F′ 已裁定，§10.3
 
 **判据**：`SUMMARY: N passed; 0 failed`（Windows）；
 **外加**：构造"内容变、size 与 mtime 不变"的用例，断言缓存**不**命中。
@@ -1153,6 +1153,46 @@ nodes/assets/storyboard.py:806  os.replace(tmp_path, json_path)
 
 ---
 
+### 10.3 CI：基线闸门（Q-F′ 已裁定，2026-11-06）
+
+本仓未来 **public**，CI 可以上云。但**闸门不能是"零失败"**——
+上游套件在任何平台上都不干净：Windows 丢 56 个脚本（符号链接权限、NTFS 时间戳粒度、
+Node 24 harness），Linux 丢另一批。一个要求零失败的闸门**从第一次跑起就是红的，
+然后就再也没人看它**。
+
+⇒ 落地是**基线闸门**（`tools/ci_gate.py`）：
+
+| 规则 | 说明 |
+|---|---|
+| 基线文件 | `tools/known_failures/<platform>.txt`，按平台分别记录 |
+| **新失败 ⇒ 红** | 不在基线里的失败才让构建失败 |
+| 修好了 ⇒ 不红 | 基线条目开始通过时报告为"已修复"，可从基线里删掉；基线只会缩小，不会挡住 |
+| **串行复跑** | 并行跑完后再把失败项**逐个串行复跑**，把时序敏感的 flaky 排除在基线外 |
+| **我们的回归测试是硬门槛** | `_mie_png_verification_strict_unit_test.py` 与 `_mie_mtime_selection_unit_test.py` **无论基线怎么说都必须通过**，否则直接红 |
+| 首次运行 | 没有基线时**写出基线并放行**（不假装绿），提示提交该文件 |
+
+工作流：`.github/workflows/ci.yml`（`ubuntu-latest` + `windows-latest`）。
+测试需要 ComfyUI 检出（`comfy/options.py`）与 torch/numpy/av/safetensors/pillow —— 轻量。
+
+**明确不在 CI 里的（必须在本机与局域网的真实盘上跑）：**
+
+- Windows 卷类型（FAT / exFAT）——托管 runner 只有一块盘；
+- 映射盘（`GetDriveTypeW == DRIVE_REMOTE`）——角色资产在 LAN 的 UNC 共享上；
+- 符号链接权限（WinError 1314）——开发者模式默认关；
+- **原地覆写且保留 size/mtime**——证明缓存守卫失效模式的那个探针，需要真实文件系统；
+- `MIE_LIVE_E2E=1`——对着 H3 模型与 60GB 卡的**真机渲染矩阵**，不是"几分钟巡检"。
+
+**顺带处理的一个隐患**：上游带来的 `.github/workflows/publish_action.yml` 在
+"push 到 main 且改动 `pyproject.toml`"时**自动**触发 Comfy Registry 发布。
+我们 Phase 0 正好改了 `pyproject.toml` ⇒ 第一次 push 就会触发它。
+已改成**只保留手动触发**（见 §10.3 与该文件顶部说明），等 Q-E 真正拍板再开。
+
+**公开前的卫生扫描（2026-11-06，已做）**：仓库内**无**密钥/令牌、
+**无**内网地址或 UNC 路径、**无**个人路径、**无**未跟踪残留；
+大于 2MB 的文件只有上游自带的示例工作流素材（本就公开）。
+
+---
+
 ## 11. 渲染链路七坑（Phase 5 的设计输入）
 
 全部是本项目真机踩过的：
@@ -1226,7 +1266,7 @@ nodes/assets/storyboard.py:806  os.replace(tmp_path, json_path)
 
 | # | 问题 | 状态 / 倾向 |
 |---|---|---|
-| **Q-F′** | **CI 与"不再推送"冲突**：GitHub Actions 要把仓推上 GitHub。私有仓例外？还是本地定时跑？ | **需裁定，唯一的开放项**。第四轮补充了三条硬约束：① **GitHub 托管 runner 是虚拟盘** ⇒ Windows 卷类型 / 映射盘 / 符号链接权限 / 原地覆写**测不到**，这几组探针**必须在本机和局域网的真实盘上跑**；② **Git hook 顶不上**——`pre-push` / `post-commit` 可被 `--no-verify` 跳过，且 **hook 不随 clone 走**；③ **`MIE_LIVE_E2E=1` 是真机渲染矩阵**，与跨仓内容一致性断言**不是一个量级**，不能算进"几分钟巡检"。**纯逻辑单测**（给定文件系统类型、哈希核对、恢复时拒绝猜测）**不依赖那块盘**。⇒ 两支：**① 允许私有仓** ⇒ 只把 `ComfyUI-Mie-Core` 上 Actions（引擎包留局域网跑 `tools/check_release.py`）；**② 任何代码都不上云** ⇒ **没有 Actions 这一档**，CI 全在本地跑。**建议本身没有代你选完——这一条只有你能拍** |
+| **Q-F′** | **CI 与"不再推送"冲突** | **已裁定（2026-11-06）：本仓未来为 public，CI 可以上云。** 落地见 §10.3：`ubuntu-latest` + `windows-latest` 双平台跑 `tools/ci_gate.py`，**基线闸门**而非"零失败"闸门；发布到 Comfy Registry 仍**暂缓**（Q-E），上游那个自动触发的发布工作流已改成手动 |
 | Q-A′ | 共享核心形态 | **(a) 独立 pip 包** + D12 的两条机械约束 |
 | Q-B | 存量工作流迁移 | **A**（纯改名 + 迁移脚本） |
 | Q-C | 后缀 vs 前缀 | **`\|MieH3`** |

@@ -1,0 +1,65 @@
+name: CI
+
+# The suite does not pass cleanly on any platform (Windows loses scripts to
+# symlink privileges, NTFS timestamp granularity and a Node 24 harness
+# change; Linux loses a different set). The gate is therefore a BASELINE
+# gate - see tools/ci_gate.py. A new failure turns the build red; a known
+# failure that starts passing is reported as fixed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: unit (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check out ComfyUI (the tests import its runtime)
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git \
+            "$RUNNER_TEMP/ComfyUI"
+          echo "COMFYUI_PATH=$RUNNER_TEMP/ComfyUI" >> "$GITHUB_ENV"
+
+      - name: Install the Python dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install numpy av safetensors pillow
+
+      - name: Run the suite through the baseline gate
+        shell: bash
+        run: |
+          python tools/ci_gate.py --comfy-root "$COMFYUI_PATH" --jobs 4 --timeout 240
+
+  # NOT IN CI - these need the real machines:
+  #   * Windows volume types (FAT / exFAT): a hosted runner has one disk.
+  #   * Mapped drives (GetDriveTypeW == DRIVE_REMOTE): the character assets
+  #     live on a UNC share on the LAN box.
+  #   * Symlink privileges (WinError 1314): Developer Mode is off by default.
+  #   * In-place overwrite keeping size and mtime: the probe that proves the
+  #     cache guard's failure mode, and it needs a real filesystem.
+  #   * MIE_LIVE_E2E=1: a real-render matrix against the H3 models on the
+  #     60GB card - minutes per scene, not a few-minute check.
+  # Those run on the local and LAN machines; see PLAN.md section 8.6.2.

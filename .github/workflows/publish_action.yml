@@ -1,12 +1,24 @@
 name: Publish to Comfy Registry
 
+# Upstream shipped this workflow with an automatic trigger: a push to main
+# that touches pyproject.toml. This fork changed pyproject.toml during
+# Phase 0, so that trigger would have fired on our first push.
+#
+# The fork does not publish to the Comfy Registry yet - the plan keeps that
+# decision open (PLAN.md, Q-E): we would rather run the pack on the local
+# and LAN machines first and publish when the rename (Phase 2) and the
+# Windows fixes have settled. So the automatic trigger is removed and the
+# workflow is manual only.
+#
+# When we do decide to publish:
+#   1. add REGISTRY_ACCESS_TOKEN to this repository's secrets;
+#   2. confirm pyproject.toml's PublisherId (it is "mie") and that the
+#      node type names carry the |MieH3 suffix, so the published package
+#      cannot collide with the upstream one;
+#   3. run this workflow by hand.
+
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - pyproject.toml
 
 permissions:
   contents: read
