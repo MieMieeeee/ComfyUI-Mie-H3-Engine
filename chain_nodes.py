@@ -4889,6 +4889,20 @@ def _load_reference_cache_descriptor(value: Any) -> dict[str, Any]:
     return metadata
 
 
+def _reference_cache_signature_prefix(filename: str) -> str:
+    """Return the signature prefix a reference-cache file name carries.
+
+    Cache objects are written as ``scene_<scene>.<signature[:24]>.json``
+    (with an optional ``.converted`` marker), so the file name states which
+    contract the descriptor inside it claims to be.
+    """
+    stem = filename[:-5] if filename.endswith(".json") else filename
+    if stem.endswith(".converted"):
+        stem = stem[:-len(".converted")]
+    parts = stem.split(".")
+    return parts[-1] if len(parts) >= 2 else ""
+
+
 def _reference_cache_candidates(
         fingerprint: str, scene: int, scene_count: int, prompt: str,
         width: int, height: int, length: int,
@@ -4917,10 +4931,19 @@ def _reference_cache_candidates(
                     or int(metadata.get("height", -1)) != int(height)
                     or int(metadata.get("length", -1)) != int(length)):
                 continue
+            signature = str(metadata.get("signature") or "")
+            if (not signature
+                    or signature[:24] != _reference_cache_signature_prefix(
+                        filename)):
+                # The descriptor's own signature must agree with the
+                # signature in its file name. A restore or a mirror that
+                # swaps a descriptor's bytes for another variant's leaves the
+                # name and the content disagreeing; this is what catches it.
+                continue
             if semantic_contract is not None:
-                presentation = metadata.get("presentation_contract")
-                if (not isinstance(presentation, dict)
-                        or any(presentation.get(key) != value
+                presentation_contract = metadata.get("presentation_contract")
+                if (not isinstance(presentation_contract, dict)
+                        or any(presentation_contract.get(key) != value
                                for key, value in semantic_contract.items())):
                     continue
             metadata.setdefault("metadata", _relative_output_path(path))
@@ -4938,7 +4961,8 @@ def _find_reference_cache(
     args = (scene, scene_count, prompt, width, height, length)
     candidates = _reference_cache_candidates(fingerprint, *args)
     if candidates:
-        return _resolve_converted_reference_cache(max(candidates, key=lambda item: item[0])[1])
+        return _resolve_converted_reference_cache(
+            max(candidates, key=lambda item: item[0])[1])
 
     # Project Assets / Plan may retain the base Tagged registry fingerprint,
     # while Tagged Ref2VA wraps it with its semantic presentation settings.
@@ -4961,7 +4985,8 @@ def _find_reference_cache(
             "different semantic-anchor settings, but this checkpoint has "
             "no exact cache link. Connect explicit Tagged references to "
             "select the intended pass-2 conditioning." % int(scene))
-    return _resolve_converted_reference_cache(max(candidates, key=lambda item: item[0])[1])
+    return _resolve_converted_reference_cache(
+        max(candidates, key=lambda item: item[0])[1])
 
 
 def _reference_payload_from_cache(
@@ -22026,7 +22051,7 @@ def _load_chapter_manifest(
         raise ValueError("Chapter manifest id must be blank or 32 hexadecimal digits.")
     chapters_root = os.path.realpath(os.path.join(
         _run_dir({"run_name": normalized}), "chapters"))
-    candidates: list[tuple[int, str]] = []
+    candidates: list[tuple[int, str, str, int, str]] = []
     if os.path.isdir(chapters_root):
         prefix = "%02d_" % number
         for directory_name in os.listdir(chapters_root):
@@ -22047,13 +22072,32 @@ def _load_chapter_manifest(
                 if (os.path.commonpath([manifest_root, path]) != manifest_root
                         or not os.path.isfile(path)):
                     continue
-                candidates.append((os.stat(path).st_mtime_ns, path))
+                document = _read_json(path)
+                sealed_at = (str(document.get("sealed_at") or "")
+                             if isinstance(document, dict) else "")
+                candidates.append((1 if sealed_at else 0, sealed_at,
+                                   match.group(1),
+                                   os.stat(path).st_mtime_ns, path))
     if not candidates:
         suffix = " snapshot %s" % requested if requested else ""
         raise FileNotFoundError(
             "No sealed Chapter %d%s exists for Run %s." %
             (number, suffix, normalized))
-    _mtime, path = max(candidates, key=lambda item: (item[0], item[1]))
+
+    def _selection_key(candidate: tuple[int, str, str, int, str]):
+        # A sealed manifest records its own sealing time INSIDE the document,
+        # and that field is excluded from the manifest digest (it is rewritten
+        # on every save), so it survives a restore or a mirror that preserves
+        # file metadata - unlike the file's modification time. Order by the
+        # content timestamp; fall back to the file mtime only for documents
+        # that predate the field, and use the content-derived snapshot id as
+        # the tie-break either way.
+        has_sealed, sealed_at, snapshot_id, mtime, _path = candidate
+        if has_sealed:
+            return (1, sealed_at, snapshot_id)
+        return (0, "", "%040d" % mtime)
+
+    _has, _sealed, _id, _mtime, path = max(candidates, key=_selection_key)
     manifest = _read_json(path)
     file_snapshot_id = os.path.splitext(os.path.basename(path))[0]
     if (not isinstance(manifest, dict)
@@ -28460,12 +28504,25 @@ def _recover_checkpoint_pointer_transactions(run_name: Any) -> int:
             canonical = os.path.join(checkpoint_dir, canonical_name)
             if os.path.exists(canonical):
                 continue
-            newest = max(
-                temporary_names,
-                key=lambda item: os.path.getmtime(os.path.join(
-                    checkpoint_dir, item)),
-            )
-            os.replace(os.path.join(checkpoint_dir, newest), canonical)
+            if len(temporary_names) > 1:
+                # Several interrupted legacy transactions left a renamed
+                # pointer behind. The temporary name carries a random
+                # transaction id (uuid4), not a content digest, so nothing on
+                # disk says which one was meant to become the canonical
+                # pointer. Picking the newest by modification time can
+                # promote a stale pointer - and a mirror or a restore can
+                # make an old file look the newest. Refuse the same way a
+                # damaged journal refuses: keep every file and leave the
+                # choice to an operator.
+                _LOG.error(
+                    "H3 found %d interrupted legacy checkpoint pointers for %s "
+                    "and cannot choose between them; keeping all of them for "
+                    "manual recovery: %s",
+                    len(temporary_names), canonical_name,
+                    ", ".join(sorted(temporary_names)))
+                continue
+            os.replace(os.path.join(
+                checkpoint_dir, temporary_names[0]), canonical)
             recovered += 1
             _LOG.warning(
                 "H3 restored interrupted legacy checkpoint pointer %s.",
