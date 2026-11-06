@@ -48,7 +48,7 @@ spec.loader.exec_module(chain)
 
 
 def main():
-    tree = chain.CHAIN_NODE_CLASS_MAPPINGS["MiniMaxH3ProjectAssetTree"]
+    tree = chain.CHAIN_NODE_CLASS_MAPPINGS["MiniMaxH3ProjectAssetTree|MieH3"]
     assert tree is chain.MiniMaxH3ProjectAssetTree
     assert tree.INPUT_TYPES() == chain.MiniMaxH3ProjectAssetManager.INPUT_TYPES()
     # Branch scoping may wrap inherited methods separately depending on class
@@ -57,10 +57,10 @@ def main():
     assert tree.build._h3_branch_scoped
     assert chain.MiniMaxH3ProjectAssetManager.build._h3_branch_scoped
     assert tree.RETURN_TYPES == chain.MiniMaxH3ProjectAssetManager.RETURN_TYPES
-    assert chain.CHAIN_NODE_DISPLAY_NAME_MAPPINGS["MiniMaxH3ProjectAssetTree"] == (
+    assert chain.CHAIN_NODE_DISPLAY_NAME_MAPPINGS["MiniMaxH3ProjectAssetTree|MieH3"] == (
         "MiniMax H3 Project Asset Carousel (Tree)")
     assert chain.CHAIN_NODE_CLASS_MAPPINGS[
-        "MiniMaxH3ProjectAssetManager"] is chain.MiniMaxH3ProjectAssetManager
+        "MiniMaxH3ProjectAssetManager|MieH3"] is chain.MiniMaxH3ProjectAssetManager
     assert "asset_0" not in chain.MiniMaxH3ProjectAssetManager.INPUT_TYPES().get(
         "optional", {})
     assert "run_name" in chain.MiniMaxH3ProjectAssetManager.INPUT_TYPES()["required"]
@@ -77,7 +77,7 @@ def main():
         chain.MiniMaxH3ProjectAssetManager.INPUT_TYPES()["optional"])
     assert "ownership_json" in (
         chain.MiniMaxH3ProjectAssetManager.INPUT_TYPES()["optional"])
-    for node_type in ("MiniMaxH3ProjectAssetManager", "MiniMaxH3ProjectAssetTree"):
+    for node_type in ("MiniMaxH3ProjectAssetManager|MieH3", "MiniMaxH3ProjectAssetTree|MieH3"):
         workflow = {"nodes": [{"type": node_type,
                               "widgets_values": ["project", "", "", "", "", "transient-proof"]}]}
         chain._strip_workflow_ownership(workflow)

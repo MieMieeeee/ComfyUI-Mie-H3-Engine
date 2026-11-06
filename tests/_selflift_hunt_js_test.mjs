@@ -79,7 +79,7 @@ class Node {
             : Math.max(widget.options.getMinHeight?.() ?? 50, this.size[1]-320);
     }
 }
-extension.beforeRegisterNodeDef(Node,{name:"MiniMaxH3SelfLiftSeedHunt"});
+extension.beforeRegisterNodeDef(Node,{name:"MiniMaxH3SelfLiftSeedHunt|MieH3"});
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 const tick=async()=>{for(const fn of timers.values())fn();await settle();};
 const node=new Node(1);node.onNodeCreated();await settle();

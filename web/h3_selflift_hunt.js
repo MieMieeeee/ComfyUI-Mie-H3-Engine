@@ -544,7 +544,7 @@ api.addEventListener("h3-selflift-hunt", event => {
 
 app.registerExtension({ name: "MiniMaxH3.SelfLiftSeedHunt",
     beforeRegisterNodeDef(nodeType, data) {
-        if (data.name !== "MiniMaxH3SelfLiftSeedHunt") return;
+        if (data.name !== "MiniMaxH3SelfLiftSeedHunt|MieH3") return;
         const created = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () { const result = created?.apply(this, arguments); mount(this); return result; };
         const executed = nodeType.prototype.onExecuted;

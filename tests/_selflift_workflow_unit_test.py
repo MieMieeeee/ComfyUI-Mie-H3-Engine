@@ -20,22 +20,22 @@ def origin(target, name):
     return by_id[source]["type"], by_id[source]["outputs"][slot]["name"]
 
 
-project = "MiniMaxH3SelfLiftProject"
-sampler = "MiniMaxH3SelfLiftSeedHunt"
-context = "MiniMaxH3ChainContext"
-current = "MiniMaxH3ChainCurrent"
+project = "MiniMaxH3SelfLiftProject|MieH3"
+sampler = "MiniMaxH3SelfLiftSeedHunt|MieH3"
+context = "MiniMaxH3ChainContext|MieH3"
+current = "MiniMaxH3ChainCurrent|MieH3"
 assert nodes[project]["widgets_values"] == [False, "none", 5, False, 0.5, 0.0, 0.5, 1.0]
 assert nodes["KSamplerSelect"]["widgets_values"] == ["euler"]
-assert origin(project, "plan") == ("MiniMaxH3ChainPlanStudio", "plan")
-assert origin("MiniMaxH3ChainLoopStart", "plan") == (project, "plan")
+assert origin(project, "plan") == ("MiniMaxH3ChainPlanStudio|MieH3", "plan")
+assert origin("MiniMaxH3ChainLoopStart|MieH3", "plan") == (project, "plan")
 assert origin(sampler, "state") == (current, "state")
 assert origin(sampler, "seed") == (current, "noise_seed")
 assert origin(sampler, "model") == (context, "model")
 assert origin(sampler, "latent") == (context, "latent")
 assert origin(context, "drift_sigmas") == ("BasicScheduler", "SIGMAS")
 assert origin(context, "audio_vae") == ("VAELoader", "VAE")
-assert origin("MiniMaxH3SigmaShift", "model") == ("MiniMaxH3ChainLoRAScheduler", "model")
-for target in ("MiniMaxH3ChainSegmentSave", "MiniMaxH3ChainLoopEnd"):
+assert origin("MiniMaxH3SigmaShift", "model") == ("MiniMaxH3ChainLoRAScheduler|MieH3", "model")
+for target in ("MiniMaxH3ChainSegmentSave|MieH3", "MiniMaxH3ChainLoopEnd|MieH3"):
     assert origin(target, "sampled_latent") == (sampler, "output")
 assert "BasicGuider" not in nodes and "SamplerCustomAdvanced" not in nodes
 for i, a in enumerate(workflow["nodes"]):
@@ -43,9 +43,9 @@ for i, a in enumerate(workflow["nodes"]):
     for b in workflow["nodes"][i+1:]:
         bx, by = b["pos"]; bw, bh = b["size"]
         assert not (ax < bx+bw and bx < ax+aw and ay-30 < by+bh and by-30 < ay+ah), (a["type"], b["type"])
-assert "MiniMaxH3ChainSelfLiftSampler" not in nodes
-assert "MiniMaxH3ChainSelfLiftSampler" in load_schemas(), "Keep the original sampler available"
-for target in ("MiniMaxH3LoopTrim", "MiniMaxH3ChainSegmentSave", "MiniMaxH3ChainReview", "MiniMaxH3ChainLoopEnd"):
+assert "MiniMaxH3ChainSelfLiftSampler|MieH3" not in nodes
+assert "MiniMaxH3ChainSelfLiftSampler|MieH3" in load_schemas(), "Keep the original sampler available"
+for target in ("MiniMaxH3LoopTrim|MieH3", "MiniMaxH3ChainSegmentSave|MieH3", "MiniMaxH3ChainReview|MieH3", "MiniMaxH3ChainLoopEnd|MieH3"):
     assert origin(target, "state") == (sampler, "selected_state")
 assert nodes[sampler]["widgets_values"] == [0, "fixed", 1, 4, "hunt_1", "taeh3.safetensors", False, True, "resume"]
 assert next(s for s in nodes[sampler]["inputs"] if s["name"] == "highres_tiling")["link"] is None

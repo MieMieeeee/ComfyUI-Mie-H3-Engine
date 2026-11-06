@@ -2,7 +2,7 @@
   "nodes": [
     {
       "key": "n1",
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "settings": {
         "selection_json": ""
       },
@@ -10,7 +10,7 @@
     },
     {
       "key": "n2",
-      "type": "MiniMaxH3ChainUpscaleAdapter",
+      "type": "MiniMaxH3ChainUpscaleAdapter|MieH3",
       "settings": {
         "profile": "h3_lbh_3d",
         "backend": "h3_latent",
@@ -30,7 +30,7 @@
     },
     {
       "key": "n3",
-      "type": "MiniMaxH3ChainUpscaleCurrent",
+      "type": "MiniMaxH3ChainUpscaleCurrent|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -96,7 +96,7 @@
     },
     {
       "key": "n9",
-      "type": "MiniMaxH3UpscaleReferencePromptOverride",
+      "type": "MiniMaxH3UpscaleReferencePromptOverride|MieH3",
       "settings": {
         "prompt_override": "",
         "disabled_tags": ""
@@ -105,7 +105,7 @@
     },
     {
       "key": "n10",
-      "type": "MiniMaxH3ChainUpscaleReferenceConditioning",
+      "type": "MiniMaxH3ChainUpscaleReferenceConditioning|MieH3",
       "settings": {
         "missing_cache": "text_only",
         "motion_ref_mode": "exclude_video_keep_audio",
@@ -189,7 +189,7 @@
     },
     {
       "key": "n14",
-      "type": "H3ConditioningSyncFromLatents",
+      "type": "H3ConditioningSyncFromLatents|MieH3",
       "settings": {
         "method": "bilinear",
         "motion_ref_mode": "conditioning_policy"
@@ -211,7 +211,7 @@
     },
     {
       "key": "n15",
-      "type": "MiniMaxH3ChainPass2Prepare",
+      "type": "MiniMaxH3ChainPass2Prepare|MieH3",
       "settings": {},
       "inputs": {
         "upscaled_video": [
@@ -313,7 +313,7 @@
     },
     {
       "key": "n21",
-      "type": "MiniMaxH3ChainUpscaleSegmentSave",
+      "type": "MiniMaxH3ChainUpscaleSegmentSave|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -332,7 +332,7 @@
     },
     {
       "key": "n22",
-      "type": "MiniMaxH3ChainUpscaleLoopEnd",
+      "type": "MiniMaxH3ChainUpscaleLoopEnd|MieH3",
       "settings": {},
       "inputs": {
         "flow": [
@@ -359,7 +359,7 @@
     },
     {
       "key": "n23",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "h3_upscaled_%date:yyyy-MM-dd%",

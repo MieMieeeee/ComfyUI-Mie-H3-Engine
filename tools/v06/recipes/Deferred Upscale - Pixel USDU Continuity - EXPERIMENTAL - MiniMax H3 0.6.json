@@ -3,7 +3,7 @@
   "nodes": [
     {
       "key": "manager",
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "settings": {
         "selection_json": ""
       },
@@ -24,7 +24,7 @@
     },
     {
       "key": "adapter",
-      "type": "MiniMaxH3ChainUpscaleAdapter",
+      "type": "MiniMaxH3ChainUpscaleAdapter|MieH3",
       "settings": {
         "profile": "h3_pixel_continuity_v1",
         "backend": "pixel",
@@ -141,7 +141,7 @@
     },
     {
       "key": "override",
-      "type": "MiniMaxH3UpscaleReferencePromptOverride",
+      "type": "MiniMaxH3UpscaleReferencePromptOverride|MieH3",
       "settings": {
         "prompt_override": "",
         "disabled_tags": ""
@@ -378,7 +378,7 @@
     },
     {
       "key": "assemble",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "h3_pixel_continuity_%date:yyyy-MM-dd%",

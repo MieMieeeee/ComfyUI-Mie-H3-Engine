@@ -52,7 +52,7 @@ def main():
         20, 0, 18,
     ]
     old_restore = _workflow_inputs({
-        "nodes": [{"type": "MiniMaxH3ChainPlan",
+        "nodes": [{"type": "MiniMaxH3ChainPlan|MieH3",
                    "widgets_values": old_widgets}],
     }, "old_run")
     assert old_restore["segment_crf"] == 18
@@ -61,14 +61,14 @@ def main():
 
     tapered_widgets = old_widgets + [0, "tapered_guide"]
     tapered_restore = _workflow_inputs({
-        "nodes": [{"type": "MiniMaxH3ChainPlan",
+        "nodes": [{"type": "MiniMaxH3ChainPlan|MieH3",
                    "widgets_values": tapered_widgets}],
     }, "old_run")
     assert tapered_restore["continuation_mode"] == "tapered_guide"
 
     drift_widgets = old_widgets + [0, "drift_control_av"]
     drift_restore = _workflow_inputs({
-        "nodes": [{"type": "MiniMaxH3ChainPlan",
+        "nodes": [{"type": "MiniMaxH3ChainPlan|MieH3",
                    "widgets_values": drift_widgets}],
     }, "old_run")
     assert drift_restore["continuation_mode"] == "drift_control_av"
@@ -79,7 +79,7 @@ def main():
         "18446744073709551615", 17, 5,
     ]
     modern_restore = _workflow_inputs({
-        "nodes": [{"type": "MiniMaxH3ChainPlanModern",
+        "nodes": [{"type": "MiniMaxH3ChainPlanModern|MieH3",
                    "widgets_values": modern_widgets}],
     }, "modern_run")
     assert json.loads(modern_restore.pop("plan_json")) == {
@@ -149,7 +149,7 @@ def main():
             "continuation_mode": "masked_av",
         }
         write(exact / "api_prompt.json", {
-            "12": {"class_type": "MiniMaxH3ChainPlan", "inputs": exact_inputs},
+            "12": {"class_type": "MiniMaxH3ChainPlan|MieH3", "inputs": exact_inputs},
         })
         write(exact / "checkpoints" / "clip_0001.json", {"segment": {}})
 
@@ -183,7 +183,7 @@ def main():
             "editor_plan": {"shots": [{"id": "stale", "prompt": "stale"}]},
         })
         write(snapshot_run / "api_prompt.json", {
-            "1": {"class_type": "MiniMaxH3ChainPlan", "inputs": {
+            "1": {"class_type": "MiniMaxH3ChainPlan|MieH3", "inputs": {
                 "run_name": "variant_snapshot", "width": 111,
             }},
         })
@@ -200,7 +200,7 @@ def main():
             "compatibility": {"width": 960, "height": 544},
         })
         write(snapshot / "api_prompt.json", {
-            "1": {"class_type": "MiniMaxH3ChainPlan", "inputs": {
+            "1": {"class_type": "MiniMaxH3ChainPlan|MieH3", "inputs": {
                 "plan_json": json.dumps(snapshot_editor),
                 "run_name": "variant_snapshot", "width": 1280,
             }},
@@ -292,7 +292,7 @@ def main():
         linked["generation_fingerprint"] = [99, 0]
         linked["base_seed"] = 18446744073709551615
         write(exact / "api_prompt.json", {
-            "12": {"class_type": "MiniMaxH3ChainPlan", "inputs": linked},
+            "12": {"class_type": "MiniMaxH3ChainPlan|MieH3", "inputs": linked},
         })
         linked_restore = manager.load_run("variant_exact")["plan_inputs"]
         assert linked_restore["generation_fingerprint"] == ""

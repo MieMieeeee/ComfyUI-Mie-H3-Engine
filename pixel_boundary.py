@@ -13,6 +13,7 @@ import shutil
 import tempfile
 import uuid
 
+from .fork_identity import add_suffix
 from .pixel_continuity import _checked_frames, _video_io, continuity_window
 
 LEFT_ANCHOR, RIGHT_ANCHOR = 22, 17
@@ -354,3 +355,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3PixelBoundaryCapture": "MiniMax H3 Pixel Continuity • Keep Boundary Sources",
     "MiniMaxH3PixelBoundaryExport": "MiniMax H3 Pixel Continuity • Experimental Boundary Export",
 }
+NODE_DISPLAY_NAME_MAPPINGS = {add_suffix(name): value for name, value in NODE_DISPLAY_NAME_MAPPINGS.items()}

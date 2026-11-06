@@ -93,8 +93,8 @@ def main():
     package, chain = load_package()
 
     segment_prompt = {
-        "26": {"class_type": "MiniMaxH3ChainSegmentSave", "inputs": {}},
-        "27": {"class_type": "MiniMaxH3ChainReview", "inputs": {
+        "26": {"class_type": "MiniMaxH3ChainSegmentSave|MieH3", "inputs": {}},
+        "27": {"class_type": "MiniMaxH3ChainReview|MieH3", "inputs": {
             "segment": ["26", 0],
         }},
     }
@@ -103,7 +103,7 @@ def main():
     segment_prompt["27"]["inputs"]["segment"] = ["26", 1]
     assert not chain._has_downstream_review_gate(
         FakeDynamicPrompt(segment_prompt), "26")
-    segment_prompt["27"]["class_type"] = "MiniMaxH3ChainLoopEnd"
+    segment_prompt["27"]["class_type"] = "MiniMaxH3ChainLoopEnd|MieH3"
     segment_prompt["27"]["inputs"]["segment"] = ["26", 0]
     assert not chain._has_downstream_review_gate(
         FakeDynamicPrompt(segment_prompt), "26")
@@ -187,7 +187,7 @@ def main():
         token = "review-route-smoke"
         future = asyncio.get_running_loop().create_future()
         review_plan = package.NODE_CLASS_MAPPINGS[
-            "MiniMaxH3ChainPlan"]().build(
+            "MiniMaxH3ChainPlan|MieH3"]().build(
                 json.dumps({
                     "prompt_prefix": "Shared only.",
                     "shots": [{
@@ -236,28 +236,28 @@ def main():
     asyncio.run(review_route_check())
     print("review: async decision route preserves exact uint64 seeds")
     required = {
-        "MiniMaxH3ChainPlan", "MiniMaxH3ChainScenePromptEditor",
-        "MiniMaxH3ChainRunManager",
-        "MiniMaxH3ChainFirstSceneImage",
-        "MiniMaxH3ReferenceVideoPrepare",
-        "MiniMaxH3TaggedSceneOptions",
-        "MiniMaxH3CurrentTaggedScenePack",
-        "MiniMaxH3CurrentTaggedReferenceScene",
-        "MiniMaxH3SceneDataExtract",
-        "MiniMaxH3ChainExternalVideo",
-        "MiniMaxH3ChainLoopStart",
-        "MiniMaxH3ChainCurrent", "MiniMaxH3ChainContext",
-        "MiniMaxH3DriftControlModelPatch",
-        "MiniMaxH3ChainSegmentSave", "MiniMaxH3ChainLoopEnd",
-        "MiniMaxH3ChainManifestLoad", "MiniMaxH3ChainExportPNG",
-        "MiniMaxH3ChainLatentVideoAdapter",
-        "MiniMaxH3ChainAssemble",
-        "MiniMaxH3LoopTrim",
-        "MiniMaxH3ContexLoopSeamProbe",
-        "MiniMaxH3ContexTrimSourceAV",
-        "MiniMaxH3ContexMaskedTarget",
-        "MiniMaxH3ContexMaskGridPreview",
-        "MiniMaxH3ContexMasterAudioMaskedAV",
+        "MiniMaxH3ChainPlan|MieH3", "MiniMaxH3ChainScenePromptEditor|MieH3",
+        "MiniMaxH3ChainRunManager|MieH3",
+        "MiniMaxH3ChainFirstSceneImage|MieH3",
+        "MiniMaxH3ReferenceVideoPrepare|MieH3",
+        "MiniMaxH3TaggedSceneOptions|MieH3",
+        "MiniMaxH3CurrentTaggedScenePack|MieH3",
+        "MiniMaxH3CurrentTaggedReferenceScene|MieH3",
+        "MiniMaxH3SceneDataExtract|MieH3",
+        "MiniMaxH3ChainExternalVideo|MieH3",
+        "MiniMaxH3ChainLoopStart|MieH3",
+        "MiniMaxH3ChainCurrent|MieH3", "MiniMaxH3ChainContext|MieH3",
+        "MiniMaxH3DriftControlModelPatch|MieH3",
+        "MiniMaxH3ChainSegmentSave|MieH3", "MiniMaxH3ChainLoopEnd|MieH3",
+        "MiniMaxH3ChainManifestLoad|MieH3", "MiniMaxH3ChainExportPNG|MieH3",
+        "MiniMaxH3ChainLatentVideoAdapter|MieH3",
+        "MiniMaxH3ChainAssemble|MieH3",
+        "MiniMaxH3LoopTrim|MieH3",
+        "MiniMaxH3ContexLoopSeamProbe|MieH3",
+        "MiniMaxH3ContexTrimSourceAV|MieH3",
+        "MiniMaxH3ContexMaskedTarget|MieH3",
+        "MiniMaxH3ContexMaskGridPreview|MieH3",
+        "MiniMaxH3ContexMasterAudioMaskedAV|MieH3",
     }
     assert required <= set(package.NODE_CLASS_MAPPINGS)
     upstream_ids = {
@@ -323,15 +323,15 @@ def main():
         "<Subject 2> enters from camera right."
     )
     prompt_editor = package.NODE_CLASS_MAPPINGS[
-        "MiniMaxH3ChainScenePromptEditor"]()
+        "MiniMaxH3ChainScenePromptEditor|MieH3"]()
     assert prompt_editor.passthrough(readable_prompts)[0] is readable_prompts
-    run_manager = package.NODE_CLASS_MAPPINGS["MiniMaxH3ChainRunManager"]()
+    run_manager = package.NODE_CLASS_MAPPINGS["MiniMaxH3ChainRunManager|MieH3"]()
     run_manager_result = run_manager.passthrough(
         readable_prompts, True, True, False, "[]")
     assert run_manager_result == (readable_prompts, None)
     opening_image = object()
     first_scene_gate = package.NODE_CLASS_MAPPINGS[
-        "MiniMaxH3ChainFirstSceneImage"]()
+        "MiniMaxH3ChainFirstSceneImage|MieH3"]()
     assert first_scene_gate.select({"index": 1}, opening_image)[:2] == (
         opening_image, True)
     assert first_scene_gate.select({"index": 2}, opening_image)[:2] == (
@@ -554,7 +554,7 @@ def main():
     # frame length, the decoded stream can land 1/3 step above or below the
     # exact 24 fps picture duration. Match Tail must frame-lock both cases by
     # tiny time-conformance rather than inserting a silence tail.
-    trim_node = package.NODE_CLASS_MAPPINGS["MiniMaxH3LoopTrim"]()
+    trim_node = package.NODE_CLASS_MAPPINGS["MiniMaxH3LoopTrim|MieH3"]()
     short_images = torch.zeros((260, 1, 1, 3), dtype=torch.float32)
     short_samples = 346400  # 433 audio steps; exact 260f target is 346667
     short_audio = {
@@ -785,14 +785,14 @@ def main():
     try:
         prompt = {
             "1": {"class_type": "H3ChainSmokePlan", "inputs": {}},
-            "2": {"class_type": "MiniMaxH3ChainLoopStart", "inputs": {
+            "2": {"class_type": "MiniMaxH3ChainLoopStart|MieH3", "inputs": {
                 "plan": ["1", 0], "start_clip": 1,
                 "scene_range": "1:2",
             }},
             "3": {"class_type": "H3ChainSmokeBody", "inputs": {
                 "state": ["2", 1],
             }},
-            "4": {"class_type": "MiniMaxH3ChainLoopEnd", "inputs": {
+            "4": {"class_type": "MiniMaxH3ChainLoopEnd|MieH3", "inputs": {
                 "flow": ["2", 0], "state": ["2", 1],
                 "images": ["3", 0], "sampled_latent": ["3", 1],
                 "segment": ["3", 2],
@@ -1138,7 +1138,7 @@ def main():
             images1 = torch.zeros((5, 32, 32, 3), dtype=torch.float32)
             queued_prompt = {
                 "1700": {
-                    "class_type": "MiniMaxH3ChainPlan",
+                    "class_type": "MiniMaxH3ChainPlan|MieH3",
                     "inputs": {
                         "plan_json": '{"shots":["stale"]}',
                         "run_name": "smoke",
@@ -1148,7 +1148,7 @@ def main():
             queued_workflow = {
                 "nodes": [{
                     "id": 1700,
-                    "type": "MiniMaxH3ChainPlan",
+                    "type": "MiniMaxH3ChainPlan|MieH3",
                     "widgets_values": [
                         '{"shots":["stale"]}', "smoke", "fingerprint",
                     ],
@@ -1239,9 +1239,9 @@ def main():
             assert embedded_tags["comment"] == "first"
             assert embedded_tags["h3_prompt"] == "first"
             assert json.loads(embedded_tags["workflow"])["nodes"][0][
-                "type"] == "MiniMaxH3ChainPlan"
+                "type"] == "MiniMaxH3ChainPlan|MieH3"
             assert json.loads(embedded_tags["prompt"])["1700"][
-                "class_type"] == "MiniMaxH3ChainPlan"
+                "class_type"] == "MiniMaxH3ChainPlan|MieH3"
             assert json.loads(embedded_tags["h3_plan"])["shots"][0][
                 "prompt"] == "first"
             print("recovery metadata: MP4, prompt sidecar, plan, API prompt, "
@@ -1533,17 +1533,17 @@ def main():
             print("top-level requeue: real ComfyUI return parser emits completion UI")
 
             fake_prompt = {
-                "1": {"class_type": "MiniMaxH3ChainLoopStart", "inputs": {
+                "1": {"class_type": "MiniMaxH3ChainLoopStart|MieH3", "inputs": {
                     "plan": plan, "start_clip": 1,
                     "source_timeline": chain._make_source_timeline(source_audio=source),
                 }},
-                "2": {"class_type": "MiniMaxH3ChainCurrent", "inputs": {
+                "2": {"class_type": "MiniMaxH3ChainCurrent|MieH3", "inputs": {
                     "state": ["1", 1],
                 }},
-                "3": {"class_type": "MiniMaxH3ChainSegmentSave", "inputs": {
+                "3": {"class_type": "MiniMaxH3ChainSegmentSave|MieH3", "inputs": {
                     "state": ["2", 0],
                 }},
-                "4": {"class_type": "MiniMaxH3ChainLoopEnd", "inputs": {
+                "4": {"class_type": "MiniMaxH3ChainLoopEnd|MieH3", "inputs": {
                     "flow": ["1", 0], "state": ["2", 0],
                     "images": ["3", 0], "sampled_latent": ["3", 0],
                     "segment": ["3", 0],
@@ -1565,7 +1565,7 @@ def main():
             assert isinstance(expanded, dict) and expanded.get("expand")
             assert cleanup_boundaries == [("fresh_scene", 1)]
             cloned_starts = [node for node in expanded["expand"].values()
-                             if node["class_type"] == "MiniMaxH3ChainLoopStart"]
+                             if node["class_type"] == "MiniMaxH3ChainLoopStart|MieH3"]
             assert len(cloned_starts) == 1
             assert cloned_starts[0]["inputs"]["initial_state"]["index"] == 2
             assert all(isinstance(link, list) for link in expanded["result"])
@@ -1582,7 +1582,7 @@ def main():
                 dynprompt=FakeDynamicPrompt(fake_prompt), unique_id="4")
             retried_starts = [
                 node for node in retried["expand"].values()
-                if node["class_type"] == "MiniMaxH3ChainLoopStart"
+                if node["class_type"] == "MiniMaxH3ChainLoopStart|MieH3"
             ]
             retry_state = retried_starts[0]["inputs"]["initial_state"]
             assert retry_state["index"] == 1
@@ -1720,7 +1720,7 @@ def main():
             assert png_export["clips"][1]["trim_frames"] == 1
             with PILImage.open(png_files[0]) as first_png:
                 assert json.loads(first_png.text["workflow"])["nodes"][0][
-                    "type"] == "MiniMaxH3ChainPlan"
+                    "type"] == "MiniMaxH3ChainPlan|MieH3"
                 assert json.loads(first_png.text["h3_manifest"])[
                     "clip_count"] == 2
                 assert json.loads(first_png.text["h3_scene"])[
@@ -1753,7 +1753,7 @@ def main():
                 "-of", "json", str(source_path),
             ], text=True, encoding="utf-8", errors="replace"))["format"]["tags"]
             assert json.loads(source_tags["workflow"])["nodes"][0][
-                "type"] == "MiniMaxH3ChainPlan"
+                "type"] == "MiniMaxH3ChainPlan|MieH3"
             assert json.loads(source_tags["h3_manifest"])["clip_count"] == 2
             duration = float(subprocess.check_output([
                 "ffprobe", "-v", "error", "-show_entries", "format=duration",

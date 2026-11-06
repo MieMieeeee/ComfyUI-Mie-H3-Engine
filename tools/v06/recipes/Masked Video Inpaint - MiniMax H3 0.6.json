@@ -76,7 +76,7 @@
     },
     {
       "key": "n10",
-      "type": "MiniMaxH3ChainLoopStart",
+      "type": "MiniMaxH3ChainLoopStart|MieH3",
       "settings": {
         "start_clip": 1,
         "scene_range": "",
@@ -92,7 +92,7 @@
     },
     {
       "key": "n13",
-      "type": "MiniMaxH3ChainCurrent",
+      "type": "MiniMaxH3ChainCurrent|MieH3",
       "settings": {
         "align_audio_reference": false
       },
@@ -106,7 +106,7 @@
     },
     {
       "key": "n14",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "cc0_soldier_crabs_loop_inpaint_recovered_%date:yyyy-MM-dd%",
@@ -182,7 +182,7 @@
     },
     {
       "key": "n18",
-      "type": "MiniMaxH3ChainContext",
+      "type": "MiniMaxH3ChainContext|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -320,7 +320,7 @@
     },
     {
       "key": "n27",
-      "type": "MiniMaxH3LoopTrim",
+      "type": "MiniMaxH3LoopTrim|MieH3",
       "settings": {
         "trim_frames": 0,
         "fps": 24,
@@ -349,7 +349,7 @@
     },
     {
       "key": "n28",
-      "type": "MiniMaxH3ChainSegmentSave",
+      "type": "MiniMaxH3ChainSegmentSave|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -377,7 +377,7 @@
     },
     {
       "key": "n29",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "cc0_soldier_crabs_loop_inpaint_%date:yyyy-MM-dd%",
@@ -414,7 +414,7 @@
     },
     {
       "key": "n31",
-      "type": "MiniMaxH3ChainRichScenePromptEditor",
+      "type": "MiniMaxH3ChainRichScenePromptEditor|MieH3",
       "settings": {},
       "inputs": {
         "plan": [
@@ -425,7 +425,7 @@
     },
     {
       "key": "n32",
-      "type": "MiniMaxH3ChainPlanModern",
+      "type": "MiniMaxH3ChainPlanModern|MieH3",
       "settings": {
         "plan_json": "{\n  \"defaults\": {\n    \"length\": 175,\n    \"steps\": 20\n  },\n  \"shots\": [\n    {\n      \"id\": \"source_inpaint_a\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] Edit the supplied wildlife source video in place. Preserve the original camera trajectory, cloudy coastal lighting, sand, water, distant shoreline, depth of field, motion timing, and every pixel outside the white mask. Inside the masked lower-central beach region only, replace the moving soldier crabs with small polished red metal crab sculptures that occupy the corresponding positions and follow the original animals' grounded lateral motion. Maintain correct perspective, contact shadows, sand interaction, occlusion, scale, and motion blur at the mask boundary. Do not alter the duration, frame rate, camera, background, or unmasked crabs.\\n\\noverall_soundscape:\\nPreserve the source audio exactly, including coastal wind, distant surf, water movement, and all location ambience. Generate no replacement sound.\\n\\nnon_diegetic_music:\\nN/A\",\n      \"length\": 175,\n      \"steps\": 20,\n      \"seed\": \"24051521\"\n    },\n    {\n      \"id\": \"source_inpaint_b\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] Edit the supplied wildlife source video in place. Preserve the original camera trajectory, cloudy coastal lighting, sand, water, distant shoreline, depth of field, motion timing, and every pixel outside the white mask. Inside the masked lower-central beach region only, replace the moving soldier crabs with small polished red metal crab sculptures that occupy the corresponding positions and follow the original animals' grounded lateral motion. Maintain correct perspective, contact shadows, sand interaction, occlusion, scale, and motion blur at the mask boundary. Do not alter the duration, frame rate, camera, background, or unmasked crabs.\\n\\noverall_soundscape:\\nPreserve the source audio exactly, including coastal wind, distant surf, water movement, and all location ambience. Generate no replacement sound.\\n\\nnon_diegetic_music:\\nN/A\",\n      \"length\": 175,\n      \"steps\": 20,\n      \"seed\": \"24051522\"\n    }\n  ]\n}",
         "run_name": "masked_video_inpaint_minimax_h3_0_6_json",
@@ -454,7 +454,7 @@
     },
     {
       "key": "n33",
-      "type": "MiniMaxH3ChainPlanStudio",
+      "type": "MiniMaxH3ChainPlanStudio|MieH3",
       "settings": {
         "start_clip": 1,
         "scene_range": "",
@@ -497,7 +497,7 @@
     },
     {
       "key": "n34",
-      "type": "MiniMaxH3ChainManifestLoad",
+      "type": "MiniMaxH3ChainManifestLoad|MieH3",
       "settings": {},
       "inputs": {
         "plan": [
@@ -519,7 +519,7 @@
     },
     {
       "key": "n36",
-      "type": "MiniMaxH3ChainLoopEnd",
+      "type": "MiniMaxH3ChainLoopEnd|MieH3",
       "settings": {
         "between_scene_cleanup": "off",
         "execution_mode": "recursive"
@@ -550,7 +550,7 @@
     },
     {
       "key": "n37",
-      "type": "MiniMaxH3ChainReview",
+      "type": "MiniMaxH3ChainReview|MieH3",
       "settings": {
         "enabled": true,
         "play_notification_sound": false,
@@ -608,7 +608,7 @@
     },
     {
       "key": "n40",
-      "type": "MiniMaxH3ContexLoopSourceAVTarget",
+      "type": "MiniMaxH3ContexLoopSourceAVTarget|MieH3",
       "settings": {
         "source_fps": 24,
         "crop": "center"
@@ -647,7 +647,7 @@
     },
     {
       "key": "n41",
-      "type": "MiniMaxH3ContexMaskedTarget",
+      "type": "MiniMaxH3ContexMaskedTarget|MieH3",
       "settings": {
         "mask_meaning": "white = generate",
         "audio_mode": "preserve source audio",
@@ -677,7 +677,7 @@
     },
     {
       "key": "n43",
-      "type": "MiniMaxH3ContexMaskGridPreview",
+      "type": "MiniMaxH3ContexMaskGridPreview|MieH3",
       "settings": {
         "cell_selection": "runtime exact (latent max)",
         "cell_adjust": 0,
@@ -725,7 +725,7 @@
     },
     {
       "key": "n46",
-      "type": "MiniMaxH3ContexLoopMaskSlice",
+      "type": "MiniMaxH3ContexLoopMaskSlice|MieH3",
       "settings": {
         "source_fps": 24
       },
@@ -743,7 +743,7 @@
     },
     {
       "key": "n47",
-      "type": "MiniMaxH3GenerationProfile",
+      "type": "MiniMaxH3GenerationProfile|MieH3",
       "settings": {
         "scene_continuity": "Hard picture + protected audio",
         "audio_profile": "Generate audio"
@@ -753,7 +753,7 @@
     },
     {
       "key": "n48",
-      "type": "MiniMaxH3ProjectAssetManager",
+      "type": "MiniMaxH3ProjectAssetManager|MieH3",
       "settings": {
         "run_name": "masked_video_inpaint_minimax_h3_0_6_json",
         "catalog_json": "",
@@ -767,7 +767,7 @@
     },
     {
       "key": "n49",
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "settings": {
         "selection_json": ""
       },

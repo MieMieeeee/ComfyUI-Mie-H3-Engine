@@ -89,7 +89,7 @@ def main():
     chain = sys.modules[spec.name + ".chain_nodes"]
     upscale = sys.modules[spec.name + ".upscale_nodes"]
     lms = sys.modules[spec.name + ".lms_upscale"]
-    cls = package.NODE_CLASS_MAPPINGS["MiniMaxH3ChainLMSGuide"]
+    cls = package.NODE_CLASS_MAPPINGS["MiniMaxH3ChainLMSGuide|MieH3"]
     assert cls.EXPERIMENTAL and len(cls.RETURN_TYPES) == len(cls.OUTPUT_TOOLTIPS)
     node = cls()
     for raw in (5, 22, 39, 124, 362):

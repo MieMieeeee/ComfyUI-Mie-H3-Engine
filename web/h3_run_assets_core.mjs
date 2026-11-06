@@ -5,8 +5,8 @@ export const ASSET_ROLES = Object.freeze([
     ["audio_reference", "Audio reference"],
     ["source_track", "Source track"],
 ]);
-export const SEMANTIC_ANCHOR_BUNDLE_NODE = "MiniMaxH3SemanticAnchorBundle";
-export const SEMANTIC_PICTURE_ANCHOR_NODE = "MiniMaxH3SemanticPictureAnchor";
+export const SEMANTIC_ANCHOR_BUNDLE_NODE = "MiniMaxH3SemanticAnchorBundle|MieH3";
+export const SEMANTIC_PICTURE_ANCHOR_NODE = "MiniMaxH3SemanticPictureAnchor|MieH3";
 
 const MEDIA_WIDGET_NAMES = ["image", "audio", "file", "video", "path", "filename"];
 const MEDIA_EXTENSION = /\.(?:png|jpe?g|webp|gif|bmp|tiff?|wav|mp3|flac|ogg|m4a|aac|mp4|mov|mkv|webm|avi)(?:\s+\[(?:input|output|temp)\])?$/i;

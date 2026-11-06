@@ -70,7 +70,7 @@ import {
 // distributed under the MIT License. See THIRD_PARTY_NOTICES.md.
 
 const EXTENSION = "minimax_h3_context_loop.chain_plan_editor";
-const NODE_NAME = "MiniMaxH3ChainPlan";
+const NODE_NAME = "MiniMaxH3ChainPlan|MieH3";
 const NODE_NAMES = new Set([NODE_NAME, MODERN_NODE_NAME]);
 const MIN_WIDTH = 700;
 const EDITOR_HEIGHT = 650;

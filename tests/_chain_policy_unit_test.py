@@ -146,17 +146,17 @@ assert plan_inputs["optional"]["chain_policy"][0] == chain.CHAIN_POLICY_TYPE
 assert "audio_policy" not in plan_inputs["optional"]
 assert "transition_policy" not in plan_inputs["optional"]
 assert chain.CHAIN_NODE_CLASS_MAPPINGS[
-    "MiniMaxH3LipSyncOptions"] is chain.MiniMaxH3LipSyncOptions
+    "MiniMaxH3LipSyncOptions|MieH3"] is chain.MiniMaxH3LipSyncOptions
 assert chain.CHAIN_NODE_CLASS_MAPPINGS[
-    "MiniMaxH3GenerationProfile"] is chain.MiniMaxH3GenerationProfile
+    "MiniMaxH3GenerationProfile|MieH3"] is chain.MiniMaxH3GenerationProfile
 assert chain.CHAIN_NODE_CLASS_MAPPINGS[
-    "MiniMaxH3AdvancedPolicy"] is chain.MiniMaxH3AdvancedPolicy
+    "MiniMaxH3AdvancedPolicy|MieH3"] is chain.MiniMaxH3AdvancedPolicy
 assert chain.CHAIN_NODE_DISPLAY_NAME_MAPPINGS[
-    "MiniMaxH3LipSyncOptions"] == "MiniMax H3 Lip-Sync Options"
+    "MiniMaxH3LipSyncOptions|MieH3"] == "MiniMax H3 Lip-Sync Options"
 assert chain.CHAIN_NODE_DISPLAY_NAME_MAPPINGS[
-    "MiniMaxH3GenerationProfile"] == "MiniMax H3 Generation Profile"
+    "MiniMaxH3GenerationProfile|MieH3"] == "MiniMax H3 Generation Profile"
 assert chain.CHAIN_NODE_DISPLAY_NAME_MAPPINGS[
-    "MiniMaxH3AdvancedPolicy"] == "MiniMax H3 Advanced Policy Override"
+    "MiniMaxH3AdvancedPolicy|MieH3"] == "MiniMax H3 Advanced Policy Override"
 
 lora_plan = chain._normalize_plan(
     json.dumps({"shots": [
@@ -261,9 +261,9 @@ except ValueError as exc:
 else:
     raise AssertionError("unconnected selected LoRA route was accepted")
 assert chain.CHAIN_NODE_CLASS_MAPPINGS[
-    "MiniMaxH3ChainLoRAScheduler"] is chain.MiniMaxH3ChainLoRAScheduler
+    "MiniMaxH3ChainLoRAScheduler|MieH3"] is chain.MiniMaxH3ChainLoRAScheduler
 assert chain.CHAIN_NODE_DISPLAY_NAME_MAPPINGS[
-    "MiniMaxH3ChainLoRAScheduler"] == "MiniMax H3 Scene LoRA Scheduler"
+    "MiniMaxH3ChainLoRAScheduler|MieH3"] == "MiniMax H3 Scene LoRA Scheduler"
 
 # Deferred processing selects the pinned source lane, without reading files
 # or loading a MODEL. Scene indexes need not start at 1 (chapter/range input).

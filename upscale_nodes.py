@@ -18,8 +18,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from .fork_identity import add_suffix, type_aliases
 from . import chain_nodes as chain
 from .lms_upscale import MiniMaxH3ChainLMSGuide
+from .fork_identity import add_suffix
+
 
 try:
     from comfy.nested_tensor import NestedTensor as _ComfyNestedTensor
@@ -2962,7 +2965,8 @@ class MiniMaxH3ChainUpscaleLoopEnd:
             parent_id = value[0]
             display_id = dynprompt.get_display_node_id(parent_id)
             display_node = dynprompt.get_node(display_id)
-            if display_node["class_type"] != "MiniMaxH3ChainUpscaleLoopEnd":
+            if display_node["class_type"] not in type_aliases(
+                        "MiniMaxH3ChainUpscaleLoopEnd"):
                 parent_ids.append(display_id)
             if parent_id not in upstream:
                 upstream[parent_id] = []
@@ -3013,7 +3017,8 @@ class MiniMaxH3ChainUpscaleLoopEnd:
         self._explore_output_nodes(dynprompt, upstream, parent_ids)
         open_node = str(flow[0])
         start_info = dynprompt.get_node(open_node)
-        if start_info["class_type"] != "MiniMaxH3ChainUpscaleAdapter":
+        if start_info["class_type"] not in type_aliases(
+                        "MiniMaxH3ChainUpscaleAdapter"):
             raise ValueError("Upscale Loop End flow must connect directly to Upscale Adapter.")
         contained = {unique_id: True, open_node: True}
         self._collect_contained(open_node, upstream, contained)
@@ -3108,11 +3113,13 @@ class MiniMaxH3ChainUpscaleLoopEnd:
                 state, images, segment, upscaled_latent), dynprompt, unique_id)
         graph = chain.GraphBuilder()
         inputs = dynprompt.get_node(str(unique_id))["inputs"]
-        prepare = graph.node("MiniMaxH3ChainUpscaleHandoff", "Handoff")
+        prepare = graph.node(
+        add_suffix("MiniMaxH3ChainUpscaleHandoff"), "Handoff")
         for name in ("state", "images", "segment", "upscaled_latent"):
             if name in inputs:
                 prepare.set_input(name, inputs[name])
-        advance = graph.node("MiniMaxH3ChainUpscaleAdvance", "Advance",
+        advance = graph.node(
+        add_suffix("MiniMaxH3ChainUpscaleAdvance"), "Advance",
                              next_state=prepare.out(0),
                              loop_id=str(unique_id))
         return {"result": tuple(advance.out(i) for i in range(len(self.RETURN_TYPES))),
@@ -3390,6 +3397,7 @@ UPSCALE_NODE_CLASS_MAPPINGS = {
     "MiniMaxH3ChainUpscaleAdvance": MiniMaxH3ChainUpscaleAdvance,
     "MiniMaxH3ChainUpscaleManifestLoad": MiniMaxH3ChainUpscaleManifestLoad,
 }
+UPSCALE_NODE_CLASS_MAPPINGS = {add_suffix(name): value for name, value in UPSCALE_NODE_CLASS_MAPPINGS.items()}
 
 chain.scope_nodes(UPSCALE_NODE_CLASS_MAPPINGS)
 
@@ -3416,3 +3424,4 @@ UPSCALE_NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3ChainUpscaleLoopEnd": "MiniMax H3 Upscale Loop End",
     "MiniMaxH3ChainUpscaleManifestLoad": "MiniMax H3 Upscale Manifest Load",
 }
+UPSCALE_NODE_DISPLAY_NAME_MAPPINGS = {add_suffix(name): value for name, value in UPSCALE_NODE_DISPLAY_NAME_MAPPINGS.items()}

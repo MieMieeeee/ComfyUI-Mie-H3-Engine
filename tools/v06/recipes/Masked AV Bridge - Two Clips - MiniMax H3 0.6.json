@@ -93,7 +93,7 @@
     },
     {
       "key": "n9",
-      "type": "MiniMaxH3ContexMaskedAVBridge",
+      "type": "MiniMaxH3ContexMaskedAVBridge|MieH3",
       "settings": {
         "start_fps": 24,
         "end_fps": 24,
@@ -375,7 +375,7 @@
     },
     {
       "key": "prepared_source",
-      "type": "MiniMaxH3ReferenceVideoPrepare",
+      "type": "MiniMaxH3ReferenceVideoPrepare|MieH3",
       "settings": {
         "length": 311,
         "source_fps": 24

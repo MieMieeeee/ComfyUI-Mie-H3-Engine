@@ -84,7 +84,7 @@ const semanticImageB = loader(
     961, "LoadImage", "IMAGE", "image", "beat-b.png");
 const semanticA = {
     id: 970,
-    type: "MiniMaxH3SemanticPictureAnchor",
+    type: "MiniMaxH3SemanticPictureAnchor|MieH3",
     title: "Semantic A",
     inputs: [{name: "image", link: 13}, {name: "previous", link: null}],
     outputs: [{type: "H3_SEMANTIC_ANCHOR_DRAFT"}],
@@ -92,7 +92,7 @@ const semanticA = {
 };
 const semanticB = {
     id: 971,
-    type: "MiniMaxH3SemanticPictureAnchor",
+    type: "MiniMaxH3SemanticPictureAnchor|MieH3",
     title: "Semantic B",
     inputs: [{name: "image", link: 14}, {name: "previous", link: 15}],
     outputs: [{type: "H3_SEMANTIC_ANCHOR_DRAFT"}],
@@ -100,7 +100,7 @@ const semanticB = {
 };
 const semanticBundle = {
     id: 972,
-    type: "MiniMaxH3SemanticAnchorBundle",
+    type: "MiniMaxH3SemanticAnchorBundle|MieH3",
     title: "Semantic Bundle",
     inputs: [{name: "anchors", link: 16}],
     outputs: [{type: "H3_TAGGED_REFERENCES"}],

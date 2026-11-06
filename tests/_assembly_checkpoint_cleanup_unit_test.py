@@ -288,7 +288,7 @@ class AssembleTests(Fixture, unittest.TestCase):
         checked = 0
         for path in sorted((ROOT / "example_workflows").rglob("*.json")):
             for node in json.loads(path.read_text())["nodes"]:
-                if node["type"] != "MiniMaxH3ChainAssemble":
+                if node["type"] != "MiniMaxH3ChainAssemble|MieH3":
                     continue
                 values = node["widgets_values"]
                 self.assertEqual(len(values), len(fields), path.name)
@@ -300,7 +300,7 @@ class AssembleTests(Fixture, unittest.TestCase):
         self.assertGreater(checked, 0)
         for path in sorted((ROOT / "tools/v06/recipes").rglob("*.json")):
             for node in json.loads(path.read_text())["nodes"]:
-                if node["type"] == "MiniMaxH3ChainAssemble":
+                if node["type"] == "MiniMaxH3ChainAssemble|MieH3":
                     self.assertIs(node["settings"][name], False, path.name)
 
     def test_real_export_and_copy_completed_before_cleanup(self):

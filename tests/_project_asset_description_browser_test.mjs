@@ -126,7 +126,7 @@ async function browserChecks() {
         await import("/web/h3_project_asset_manager.js");
         class Node {
             constructor(run = "synthetic") {
-                this.type = this.comfyClass = "MiniMaxH3ProjectAssetManager"; this.id = graph._nodes.length + 1;
+                this.type = this.comfyClass = "MiniMaxH3ProjectAssetManager|MieH3"; this.id = graph._nodes.length + 1;
                 this.graph = graph; this.inputs = []; this.outputs = []; this.size = [1100, 700];
                 this.properties = {};
                 this.widgets = [{name:"run_name", value:run},
@@ -140,7 +140,7 @@ async function browserChecks() {
                 return this.dom = {element:root};
             }
         }
-        await window.extension.beforeRegisterNodeDef(Node, {name:"MiniMaxH3ProjectAssetManager"});
+        await window.extension.beforeRegisterNodeDef(Node, {name:"MiniMaxH3ProjectAssetManager|MieH3"});
         node = new Node(); node.onNodeCreated();
         await until(() => node.root?.querySelector(".h3pa-card"), "Carousel mounts");
         node.root.querySelector(".h3pa-card").click();

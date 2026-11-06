@@ -19,7 +19,7 @@ runtime.comfy.model_management.throw_exception_if_processing_interrupted = lambd
 
 class TilingTests(unittest.TestCase):
     def test_schema_opt_in_and_registration(self):
-        cls = nodes.NODE_CLASS_MAPPINGS["MiniMaxH3SelfLiftTiling"]
+        cls = nodes.NODE_CLASS_MAPPINGS["MiniMaxH3SelfLiftTiling|MieH3"]
         self.assertIs(cls, controls.MiniMaxH3SelfLiftTiling)
         self.assertEqual(cls().configure(), ({"enabled": False},))
         self.assertEqual(cls().configure(True, 2, 2), (ON,))

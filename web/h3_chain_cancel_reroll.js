@@ -11,17 +11,17 @@ import {refreshRestoredPlanEditors} from "./h3_plan_restore_core.mjs?v=0.7.22";
 // The compact scene expands Current Shot internally. ComfyUI routes that
 // internal node's active-scene event to the compact node's display id.
 const CURRENT_TYPES = new Set([
-    "MiniMaxH3ChainCurrent",
-    "MiniMaxH3CurrentTaggedReferenceScene",
+    "MiniMaxH3ChainCurrent|MieH3",
+    "MiniMaxH3CurrentTaggedReferenceScene|MieH3",
 ]);
-const PLAN_TYPE = "MiniMaxH3ChainPlan";
-const PLAN_TYPES = new Set([PLAN_TYPE, "MiniMaxH3ChainPlanModern"]);
-const START_TYPE = "MiniMaxH3ChainLoopStart";
+const PLAN_TYPE = "MiniMaxH3ChainPlan|MieH3";
+const PLAN_TYPES = new Set([PLAN_TYPE, "MiniMaxH3ChainPlanModern|MieH3"]);
+const START_TYPE = "MiniMaxH3ChainLoopStart|MieH3";
 const SETTING_ID = "MiniMaxH3ContexLoop.cancelRerollControl";
 const GENERATION_FINISHED_TYPES = new Set([
-    "MiniMaxH3ChainSegmentSave",
-    "MiniMaxH3ChainReview",
-    "MiniMaxH3ChainLoopEnd",
+    "MiniMaxH3ChainSegmentSave|MieH3",
+    "MiniMaxH3ChainReview|MieH3",
+    "MiniMaxH3ChainLoopEnd|MieH3",
 ]);
 
 let root = null;

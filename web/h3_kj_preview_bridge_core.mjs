@@ -1,4 +1,4 @@
-export const H3_LOOP_END_TYPE = "MiniMaxH3ChainLoopEnd";
+export const H3_LOOP_END_TYPE = "MiniMaxH3ChainLoopEnd|MieH3";
 export const KJ_PREVIEW_TYPE = "ModelPreviewOverrideKJ";
 
 export function recursiveRootId(executionId) {

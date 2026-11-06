@@ -1,5 +1,5 @@
-export const LEGACY_PLAN_NODE = "MiniMaxH3ChainPlan";
-export const MODERN_PLAN_NODE = "MiniMaxH3ChainPlanModern";
+export const LEGACY_PLAN_NODE = "MiniMaxH3ChainPlan|MieH3";
+export const MODERN_PLAN_NODE = "MiniMaxH3ChainPlanModern|MieH3";
 export const MODERN_PLAN_WIDGET_NAMES = Object.freeze([
     "plan_json", "run_name", "generation_fingerprint", "width", "height",
     "encode_mode", "crop", "default_duration_seconds", "default_steps",

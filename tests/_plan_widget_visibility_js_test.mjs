@@ -81,7 +81,7 @@ assert.equal(converted.hidden, false);
 assert.equal(converted.type, "converted-widget");
 assert.equal(converted.computeSize, convertedSize);
 
-const legacy = {type:"MiniMaxH3ChainPlan", widgets:[makeWidget("width", 960)],
+const legacy = {type:"MiniMaxH3ChainPlan|MieH3", widgets:[makeWidget("width", 960)],
     inputs:[{name:"width", widget:{name:"width"}, link:null}]};
 context.collapseModernBackingWidgets(legacy);
 assert.deepEqual(canvasWidgets(legacy), legacy.widgets, "Legacy Plan keeps its native settings");

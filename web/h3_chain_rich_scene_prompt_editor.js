@@ -95,9 +95,9 @@ function publishCompanionPrompt(...args) {
 // by nkxx188/ComfyUI-MiniMaxH3-Easy (MIT). Graph discovery, scene scheduling,
 // revision storage, and Codex/Hermes bridge integration are implemented here.
 
-const NODE_NAME = "MiniMaxH3ChainRichScenePromptEditor";
-const PLAN_NAME = "MiniMaxH3ChainPlan";
-const PLAN_NAMES = new Set([PLAN_NAME, "MiniMaxH3ChainPlanModern"]);
+const NODE_NAME = "MiniMaxH3ChainRichScenePromptEditor|MieH3";
+const PLAN_NAME = "MiniMaxH3ChainPlan|MieH3";
+const PLAN_NAMES = new Set([PLAN_NAME, "MiniMaxH3ChainPlanModern|MieH3"]);
 const ACTIVE_PROPERTY = "h3_rich_prompt_active_scene";
 const FONT_PROPERTY = "h3_rich_prompt_font_size";
 const GUIDE_PROPERTY = "h3_rich_prompt_guide";

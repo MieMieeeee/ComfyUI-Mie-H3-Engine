@@ -46,14 +46,14 @@ import {submitWithPromptIdentity, submissionFailure, createContinuationTracker, 
 const SETTING_ID = "MiniMaxH3ContextLoop.topLevelRequeue";
 const DELAY_SETTING_ID =
     "MiniMaxH3ContextLoop.topLevelRequeueCleanupDelay";
-const START_TYPE = "MiniMaxH3ChainLoopStart";
-const END_TYPE = "MiniMaxH3ChainLoopEnd";
+const START_TYPE = "MiniMaxH3ChainLoopStart|MieH3";
+const END_TYPE = "MiniMaxH3ChainLoopEnd|MieH3";
 const CURRENT_TYPES = new Set([
-    "MiniMaxH3ChainCurrent",
-    "MiniMaxH3CurrentTaggedReferenceScene",
+    "MiniMaxH3ChainCurrent|MieH3",
+    "MiniMaxH3CurrentTaggedReferenceScene|MieH3",
 ]);
-const PLAN_TYPES = new Set(["MiniMaxH3ChainPlan", "MiniMaxH3ChainPlanModern"]);
-const PROJECT_ASSET_MANAGER_TYPE = "MiniMaxH3ProjectAssetManager";
+const PLAN_TYPES = new Set(["MiniMaxH3ChainPlan|MieH3", "MiniMaxH3ChainPlanModern|MieH3"]);
+const PROJECT_ASSET_MANAGER_TYPE = "MiniMaxH3ProjectAssetManager|MieH3";
 const QUEUE_POLL_INTERVAL_MS = 500;
 const QUEUE_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_OBSERVED_PROMPTS = 100;

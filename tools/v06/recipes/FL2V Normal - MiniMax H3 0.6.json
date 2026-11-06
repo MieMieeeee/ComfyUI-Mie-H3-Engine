@@ -59,7 +59,7 @@
     },
     {
       "key": "n11",
-      "type": "MiniMaxH3ChainCurrent",
+      "type": "MiniMaxH3ChainCurrent|MieH3",
       "settings": {
         "align_audio_reference": false
       },
@@ -73,7 +73,7 @@
     },
     {
       "key": "n12",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "t2v_normal_recovered_%date:yyyy-MM-dd%",
@@ -157,7 +157,7 @@
     },
     {
       "key": "n16",
-      "type": "MiniMaxH3ChainContext",
+      "type": "MiniMaxH3ChainContext|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -291,7 +291,7 @@
     },
     {
       "key": "n25",
-      "type": "MiniMaxH3LoopTrim",
+      "type": "MiniMaxH3LoopTrim|MieH3",
       "settings": {
         "trim_frames": 0,
         "fps": 24,
@@ -320,7 +320,7 @@
     },
     {
       "key": "n26",
-      "type": "MiniMaxH3ChainSegmentSave",
+      "type": "MiniMaxH3ChainSegmentSave|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -348,7 +348,7 @@
     },
     {
       "key": "n27",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "t2v_normal_%date:yyyy-MM-dd%",
@@ -385,7 +385,7 @@
     },
     {
       "key": "n29",
-      "type": "MiniMaxH3ChainLoopEnd",
+      "type": "MiniMaxH3ChainLoopEnd|MieH3",
       "settings": {
         "between_scene_cleanup": "off",
         "execution_mode": "recursive"
@@ -425,7 +425,7 @@
     },
     {
       "key": "n31",
-      "type": "MiniMaxH3ChainPlanModern",
+      "type": "MiniMaxH3ChainPlanModern|MieH3",
       "settings": {
         "plan_json": "{\n  \"defaults\": {\n    \"steps\": 20\n  },\n  \"shots\": [\n    {\n      \"id\": \"arrival_to_delivery\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] <Picture 1> aligns with 0.00 seconds and <Picture 2> aligns with the final target frame. Begin from the exact adult courier, mustard waterproof jacket, teal trousers, charcoal helmet, olive messenger bag, silver bicycle, parcel, glass entrance, wet paving, lighting, lens, and landscape composition in <Picture 1>. In one continuous shot he walks the bicycle through the doorway, turns toward the potting table, and places the parcel down. Progressively match the courier's final pose, bicycle position, parcel placement, warm greenhouse bulbs, plant geometry, reflections, and framing in <Picture 2>. Reach <Picture 2> only on the final frame; do not freeze early, cut, or introduce another person.\\n\\noverall_soundscape:\\nRain on glass, tire roll, freewheel ticks, footsteps, door hinge, jacket rustle, and the parcel touching wood follow the visible action continuously.\\n\\nnon_diegetic_music:\\nNo non-diegetic music.\",\n      \"length\": 362,\n      \"steps\": 20,\n      \"seed\": \"6101\"\n    },\n    {\n      \"id\": \"delivery_to_arrival\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] Continue from the incoming greenhouse delivery context. The carried overlap already contains the completed parcel placement; begin new action only after it. The courier checks his bicycle, turns it smoothly toward the open door, and walks back onto the wet paving. Preserve his exact identity and wardrobe, the bicycle, greenhouse layout, parcel remaining on the table, camera height, and screen direction. During the final seconds, progressively align the doorway, exterior reflections, courier stance, bicycle position, and composition with <Picture 1>, reaching that picture only on the final frame without a cut or early hold.\\n\\noverall_soundscape:\\nContinue greenhouse room tone and rain, then add the bicycle freewheel, footsteps, door hinge, and brighter exterior rain as he exits.\\n\\nnon_diegetic_music:\\nNo non-diegetic music.\",\n      \"length\": 362,\n      \"steps\": 20,\n      \"seed\": \"6102\"\n    }\n  ]\n}",
         "run_name": "fl2v_normal_minimax_h3_0_6_json",
@@ -450,7 +450,7 @@
     },
     {
       "key": "n32",
-      "type": "MiniMaxH3ChainManifestLoad",
+      "type": "MiniMaxH3ChainManifestLoad|MieH3",
       "settings": {},
       "inputs": {
         "plan": [
@@ -481,7 +481,7 @@
     },
     {
       "key": "n35",
-      "type": "MiniMaxH3ChainLoopStart",
+      "type": "MiniMaxH3ChainLoopStart|MieH3",
       "settings": {
         "start_clip": 1,
         "scene_range": "",
@@ -497,7 +497,7 @@
     },
     {
       "key": "n36",
-      "type": "MiniMaxH3ChainFrameIndexSwitch",
+      "type": "MiniMaxH3ChainFrameIndexSwitch|MieH3",
       "settings": {
         "clip_index": 1
       },
@@ -519,7 +519,7 @@
     },
     {
       "key": "n37",
-      "type": "MiniMaxH3ChainFirstSceneImage",
+      "type": "MiniMaxH3ChainFirstSceneImage|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -539,7 +539,7 @@
     },
     {
       "key": "n38",
-      "type": "MiniMaxH3ChainReview",
+      "type": "MiniMaxH3ChainReview|MieH3",
       "settings": {
         "enabled": true,
         "play_notification_sound": false,
@@ -586,7 +586,7 @@
     },
     {
       "key": "n41",
-      "type": "MiniMaxH3ChainScenePromptEditor",
+      "type": "MiniMaxH3ChainScenePromptEditor|MieH3",
       "settings": {},
       "inputs": {
         "plan": [
@@ -598,7 +598,7 @@
     },
     {
       "key": "n42",
-      "type": "MiniMaxH3ChainPreflight",
+      "type": "MiniMaxH3ChainPreflight|MieH3",
       "settings": {
         "start_clip": 1,
         "scene_range": "",
@@ -614,7 +614,7 @@
     },
     {
       "key": "n43",
-      "type": "MiniMaxH3GenerationProfile",
+      "type": "MiniMaxH3GenerationProfile|MieH3",
       "settings": {
         "scene_continuity": "Visual continuity",
         "audio_profile": "Generate audio"

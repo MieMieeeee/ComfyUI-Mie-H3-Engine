@@ -214,20 +214,20 @@ def check_partial_assembly(chain, upscale, partial, storage_layout):
 def main():
     package, chain, upscale = load_package()
     required = {
-        "MiniMaxH3ChainUpscaleAdapter",
-        "MiniMaxH3ChainUpscaleCurrent",
-        "MiniMaxH3ChainDeropeGuard",
-        "MiniMaxH3ChainDeropeBudget",
-        "MiniMaxH3ChainDeropeFreezeMask",
-        "MiniMaxH3ChainDeropeContinuity",
-        "MiniMaxH3ChainRecoveredAV",
-        "MiniMaxH3UpscaleReferencePromptOverride",
-        "MiniMaxH3ChainUpscaleReferenceConditioning",
-        "H3ConditioningSyncFromLatents",
-        "MiniMaxH3ChainPass2Prepare",
-        "MiniMaxH3ChainUpscaleSegmentSave",
-        "MiniMaxH3ChainUpscaleLoopEnd",
-        "MiniMaxH3ChainUpscaleManifestLoad",
+        "MiniMaxH3ChainUpscaleAdapter|MieH3",
+        "MiniMaxH3ChainUpscaleCurrent|MieH3",
+        "MiniMaxH3ChainDeropeGuard|MieH3",
+        "MiniMaxH3ChainDeropeBudget|MieH3",
+        "MiniMaxH3ChainDeropeFreezeMask|MieH3",
+        "MiniMaxH3ChainDeropeContinuity|MieH3",
+        "MiniMaxH3ChainRecoveredAV|MieH3",
+        "MiniMaxH3UpscaleReferencePromptOverride|MieH3",
+        "MiniMaxH3ChainUpscaleReferenceConditioning|MieH3",
+        "H3ConditioningSyncFromLatents|MieH3",
+        "MiniMaxH3ChainPass2Prepare|MieH3",
+        "MiniMaxH3ChainUpscaleSegmentSave|MieH3",
+        "MiniMaxH3ChainUpscaleLoopEnd|MieH3",
+        "MiniMaxH3ChainUpscaleManifestLoad|MieH3",
     }
     assert required <= set(package.NODE_CLASS_MAPPINGS)
     assert upscale.UPSCALE_MANIFEST_TYPE == chain.MANIFEST_TYPE
@@ -236,10 +236,10 @@ def main():
     assert "MiniMaxH3ChainUpscaleMerge" not in package.NODE_CLASS_MAPPINGS
     expected_derope_union = "H3_CHAIN_UPSCALE_STATE,H3_CHAIN_STATE"
     for node_name in (
-            "MiniMaxH3ChainDeropeGuard",
-            "MiniMaxH3ChainDeropeFreezeMask",
-            "MiniMaxH3ChainDeropeContinuity",
-            "MiniMaxH3ChainRecoveredAV"):
+            "MiniMaxH3ChainDeropeGuard|MieH3",
+            "MiniMaxH3ChainDeropeFreezeMask|MieH3",
+            "MiniMaxH3ChainDeropeContinuity|MieH3",
+            "MiniMaxH3ChainRecoveredAV|MieH3"):
         assert str(package.NODE_CLASS_MAPPINGS[node_name].INPUT_TYPES()[
             "required"]["state"][0]) == expected_derope_union
     for name in required:
@@ -252,7 +252,7 @@ def main():
                     name, input_name)
         assert len(node.OUTPUT_TOOLTIPS) == len(node.RETURN_TYPES), name
     manager_schema = package.NODE_CLASS_MAPPINGS[
-        "MiniMaxH3ChainCheckpointManager"].INPUT_TYPES()
+        "MiniMaxH3ChainCheckpointManager|MieH3"].INPUT_TYPES()
     assert "selection_json" in manager_schema["required"]
     assert set(manager_schema["optional"]) == {"plan"}
     assert "plan" not in upscale.MiniMaxH3ChainUpscaleAdapter.INPUT_TYPES()[

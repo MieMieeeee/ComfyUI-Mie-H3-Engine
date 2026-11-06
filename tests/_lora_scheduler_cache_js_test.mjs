@@ -31,7 +31,7 @@ const staleCache = new Map([
 
 function scheduler(id, connected) {
     return {
-        id, type:"MiniMaxH3ChainLoRAScheduler", properties:{},
+        id, type:"MiniMaxH3ChainLoRAScheduler|MieH3", properties:{},
         inputs:[
             {name:"state", type:"H3_CHAIN_STATE", link:100},
             {name:"base_model", type:"MODEL", link:101},

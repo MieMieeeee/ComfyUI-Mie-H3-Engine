@@ -28,7 +28,7 @@ for name in ("MiniMaxH3MotionContextSaveLatent", "MiniMaxH3MotionContextLoadLate
 assert hasattr(nodes, "MiniMaxH3MotionContext")
 
 original = chain.MiniMaxH3ChainPlan
-assert chain.CHAIN_NODE_CLASS_MAPPINGS["MiniMaxH3ChainPlan"] is original
+assert chain.CHAIN_NODE_CLASS_MAPPINGS["MiniMaxH3ChainPlan|MieH3"] is original
 assert issubclass(chain.MiniMaxH3ChainPlanModern, original)
 assert set(original.INPUT_TYPES()["required"]) == {
     "plan_json", "run_name", "generation_fingerprint", "width", "height",
@@ -38,9 +38,9 @@ assert set(original.INPUT_TYPES()["required"]) == {
 }
 assert "chain_policy" in original.INPUT_TYPES()["optional"]
 assert "before" in original.INPUT_TYPES()["required"]["anchor_mode"][0]
-for name in ("MiniMaxH3ChainPlanStudio", "MiniMaxH3ChainPreflight",
-             "MiniMaxH3ChainLoopStart"):
-    cls = getattr(chain, name)
+for name in ("MiniMaxH3ChainPlanStudio|MieH3", "MiniMaxH3ChainPreflight|MieH3",
+             "MiniMaxH3ChainLoopStart|MieH3"):
+    cls = getattr(chain, name.split('|', 1)[0])
     fields = cls.INPUT_TYPES()
     assert "reference_schedule" not in fields.get("optional", {})
     assert "tagged_references" in fields.get("optional", {})
@@ -51,26 +51,26 @@ assert "references" in tagged["required"]
 assert "prompt" in tagged["required"]
 assert "cache_for_upscale" in tagged["optional"]
 assert tagged["required"]["width"][1]["default"] == 960
-for name in ("MiniMaxH3ProjectAssetManager", "MiniMaxH3ProjectAssetTree"):
-    cls = getattr(chain, name)
+for name in ("MiniMaxH3ProjectAssetManager|MieH3", "MiniMaxH3ProjectAssetTree|MieH3"):
+    cls = getattr(chain, name.split('|', 1)[0])
     assert "tagged_scene_options" not in inspect.signature(cls.build).parameters
     assert "catalog_json" in cls.INPUT_TYPES()["required"]
 
-context = schemas["MiniMaxH3ChainContext"]["input"]["optional"]
+context = schemas["MiniMaxH3ChainContext|MieH3"]["input"]["optional"]
 assert not {"boundary_anchors", "future_end_anchor", "visual_cond_noise_aug"} & set(context)
 assert {"audio_vae", "model", "drift_sigmas", "lip_sync_voice"} <= set(context)
-assert "retain_overlap_frames" not in schemas["MiniMaxH3LoopTrim"]["input"]["optional"]
+assert "retain_overlap_frames" not in schemas["MiniMaxH3LoopTrim|MieH3"]["input"]["optional"]
 assert nodes.MiniMaxH3LoopTrim.RETURN_NAMES == (
     "images", "audio", "images_with_overlap", "overlap_frames")
-assert schemas["MiniMaxH3ContexMaskedTarget"]["input"]["optional"]["mask_conversion"][0] == [
+assert schemas["MiniMaxH3ContexMaskedTarget|MieH3"]["input"]["optional"]["mask_conversion"][0] == [
     "H3 exact (causal/token max)"]
-assert "source_audio" in schemas["MiniMaxH3SourceTimeline"]["input"]["optional"]
+assert "source_audio" in schemas["MiniMaxH3SourceTimeline|MieH3"]["input"]["optional"]
 for name in (
-        "MiniMaxH3ChainPlanStudio", "MiniMaxH3ChainPreflight",
-        "MiniMaxH3ChainLoopStart", "MiniMaxH3ChainCurrent",
-        "MiniMaxH3ChainReview", "MiniMaxH3ChainManifestLoad",
-        "MiniMaxH3ChainLatentVideoAdapter", "MiniMaxH3ChainAssemble"):
-    cls = getattr(chain, name)
+        "MiniMaxH3ChainPlanStudio|MieH3", "MiniMaxH3ChainPreflight|MieH3",
+        "MiniMaxH3ChainLoopStart|MieH3", "MiniMaxH3ChainCurrent|MieH3",
+        "MiniMaxH3ChainReview|MieH3", "MiniMaxH3ChainManifestLoad|MieH3",
+        "MiniMaxH3ChainLatentVideoAdapter|MieH3", "MiniMaxH3ChainAssemble|MieH3"):
+    cls = getattr(chain, name.split('|', 1)[0])
     assert "source_audio" not in schemas[name]["input"].get("optional", {})
     assert "source_audio" not in inspect.signature(getattr(cls, cls.FUNCTION)).parameters
 for name in ("_plan_with_source_audio", "_validate_source_audio_hash",

@@ -1,6 +1,6 @@
 import {inputSource} from "./h3_reference_preview_core.mjs?v=0.7.27";
 
-export const LORA_SCHEDULER_NODE = "MiniMaxH3ChainLoRAScheduler";
+export const LORA_SCHEDULER_NODE = "MiniMaxH3ChainLoRAScheduler|MieH3";
 export const LORA_ROUTE_LETTERS = Object.freeze([
     ..."abcdefghijklmnopqrstuvwxyz",
 ]);

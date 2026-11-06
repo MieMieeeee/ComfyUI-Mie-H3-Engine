@@ -11,7 +11,7 @@ import {
     nextLoRARoute,
 } from "../web/h3_lora_scheduler_core.mjs";
 
-const plan = {id: 1, type: "MiniMaxH3ChainPlan", inputs: []};
+const plan = {id: 1, type: "MiniMaxH3ChainPlan|MieH3", inputs: []};
 const current = {
     id: 2,
     type: "MiniMaxH3ChainCurrentShot",
@@ -19,7 +19,7 @@ const current = {
 };
 const scheduler = {
     id: 3,
-    type: "MiniMaxH3ChainLoRAScheduler",
+    type: "MiniMaxH3ChainLoRAScheduler|MieH3",
     inputs: [
         {name: "state", link: 12},
         {name: "base_model", link: 13},
@@ -28,7 +28,7 @@ const scheduler = {
         {name: "lora_d", link: 15},
     ],
 };
-const unrelatedPlan = {id: 4, type: "MiniMaxH3ChainPlan", inputs: []};
+const unrelatedPlan = {id: 4, type: "MiniMaxH3ChainPlan|MieH3", inputs: []};
 const nodes = [plan, current, scheduler, unrelatedPlan];
 const graph = {
     _nodes: nodes,

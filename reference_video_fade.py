@@ -25,6 +25,8 @@ import math
 from typing import Any, Iterable
 
 import torch
+from .fork_identity import add_suffix
+
 
 
 _LOG = logging.getLogger("minimax_h3_context_loop.reference_video_fade")
@@ -443,8 +445,10 @@ NODE_CLASS_MAPPINGS = {
     "MiniMaxH3ReferenceVideoFadeModelPatch": (
         MiniMaxH3ReferenceVideoFadeModelPatch),
 }
+NODE_CLASS_MAPPINGS = {add_suffix(name): value for name, value in NODE_CLASS_MAPPINGS.items()}
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3ReferenceVideoFadeModelPatch": (
         "MiniMax H3 Reference Video Fade (Experimental)"),
 }
+NODE_DISPLAY_NAME_MAPPINGS = {add_suffix(name): value for name, value in NODE_DISPLAY_NAME_MAPPINGS.items()}

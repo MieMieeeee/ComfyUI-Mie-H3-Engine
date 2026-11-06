@@ -119,7 +119,7 @@ class HuntTests(unittest.IsolatedAsyncioTestCase):
     async def test_regenerate_keeps_old_attempt_and_resume_reuses_new_finished_result(self):
         def prompt(mode):
             return {"model": {"class_type": "UNETLoader", "inputs": {"unet_name": "test"}},
-                    "hunt": {"class_type": "MiniMaxH3SelfLiftSeedHunt",
+                    "hunt": {"class_type": "MiniMaxH3SelfLiftSeedHunt|MieH3",
                              "inputs": {"model": ["model", 0], "run_mode": mode}}}
         await self.run_node(1, review_enabled=False, prompt=prompt("resume"), unique_id="hunt")
         old = self.store.list()[0]
@@ -391,13 +391,13 @@ class HuntTests(unittest.IsolatedAsyncioTestCase):
         prompt = {
             "1": {"class_type": "Loader", "inputs": {"model": "h3"},
                   "is_changed": [float("nan")]},
-            "2141": {"class_type": "MiniMaxH3SelfLiftSeedHunt", "inputs": {"model": ["1", 0]},
+            "2141": {"class_type": "MiniMaxH3SelfLiftSeedHunt|MieH3", "inputs": {"model": ["1", 0]},
                      "_meta": {"title": "My seed hunt"},
                      "is_changed": [hunt.MiniMaxH3SelfLiftSeedHunt.IS_CHANGED()]},
             "other:0": {"class_type": "OtherNode", "inputs": {"is_changed": "a real input"},
                         "is_changed": float("nan")},
         }
-        workflow = {"nodes": [{"id": 2141, "type": "MiniMaxH3SelfLiftSeedHunt",
+        workflow = {"nodes": [{"id": 2141, "type": "MiniMaxH3SelfLiftSeedHunt|MieH3",
                                "pos": [200, 300], "widgets_values": [18446744073709551615]}],
                     "links": [], "extra": {"note": "Keep the editable canvas"}}
         expected_prompt = {key: {k: v for k, v in node.items() if k != "is_changed"}

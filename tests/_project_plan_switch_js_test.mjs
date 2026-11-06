@@ -11,9 +11,9 @@ const planText = prompt => JSON.stringify({shared_prompt:["shared " + prompt],
 function fixture({studio = false} = {}) {
     const graph = {_nodes:[], links:new Map([[1, {origin_id:1, target_id:2, origin_slot:0}]]),
         getNodeById(id) { return this._nodes.find(node => node.id === id); },setDirtyCanvas(){}};
-    const manager = {id:1, graph, type:"MiniMaxH3ProjectAssetManager", properties:{}, inputs:[],
+    const manager = {id:1, graph, type:"MiniMaxH3ProjectAssetManager|MieH3", properties:{}, inputs:[],
         outputs:[{name:"project_assets", links:[1]}],widgets:[{name:"run_name",value:"alpha"}]};
-    const plan = {id:2, graph, type:"MiniMaxH3ChainPlanModern", properties:{},
+    const plan = {id:2, graph, type:"MiniMaxH3ChainPlanModern|MieH3", properties:{},
         inputs:[{name:"project_assets",link:1}], widgets:Object.entries({run_name:"alpha",width:960,
             height:544,plan_json:planText("alpha"),base_seed:"18446744073709551615"})
             .map(([name,value])=>({name,value}))};

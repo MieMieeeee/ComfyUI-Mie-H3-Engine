@@ -68,7 +68,7 @@
     },
     {
       "key": "n10",
-      "type": "MiniMaxH3ChainLoopStart",
+      "type": "MiniMaxH3ChainLoopStart|MieH3",
       "settings": {
         "start_clip": 1,
         "scene_range": "",
@@ -84,7 +84,7 @@
     },
     {
       "key": "n13",
-      "type": "MiniMaxH3ChainCurrent",
+      "type": "MiniMaxH3ChainCurrent|MieH3",
       "settings": {
         "align_audio_reference": false
       },
@@ -98,7 +98,7 @@
     },
     {
       "key": "n14",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "t2v_studio_recovered_%date:yyyy-MM-dd%",
@@ -178,7 +178,7 @@
     },
     {
       "key": "n18",
-      "type": "MiniMaxH3ChainContext",
+      "type": "MiniMaxH3ChainContext|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -312,7 +312,7 @@
     },
     {
       "key": "n27",
-      "type": "MiniMaxH3LoopTrim",
+      "type": "MiniMaxH3LoopTrim|MieH3",
       "settings": {
         "trim_frames": 0,
         "fps": 24,
@@ -341,7 +341,7 @@
     },
     {
       "key": "n28",
-      "type": "MiniMaxH3ChainSegmentSave",
+      "type": "MiniMaxH3ChainSegmentSave|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -369,7 +369,7 @@
     },
     {
       "key": "n29",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "t2v_studio_%date:yyyy-MM-dd%",
@@ -406,7 +406,7 @@
     },
     {
       "key": "n31",
-      "type": "MiniMaxH3ChainRichScenePromptEditor",
+      "type": "MiniMaxH3ChainRichScenePromptEditor|MieH3",
       "settings": {},
       "inputs": {
         "plan": [
@@ -417,7 +417,7 @@
     },
     {
       "key": "n32",
-      "type": "MiniMaxH3ChainPlanModern",
+      "type": "MiniMaxH3ChainPlanModern|MieH3",
       "settings": {
         "plan_json": "{\n  \"defaults\": {\n    \"steps\": 20\n  },\n  \"shots\": [\n    {\n      \"id\": \"greenhouse_arrival\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] At 0.00 seconds, <Picture 1> is fully referenced as the opening frame. Animate the exact adult bicycle courier, mustard-yellow waterproof jacket, dark teal trousers, charcoal helmet, olive messenger bag, silver bicycle, kraft parcel, glass greenhouse entrance, wet paving, overcast daylight, and photographic rendering shown in <Picture 1>. In one stable landscape shot, he walks the bicycle through the open doorway, checks the parcel, then turns his shoulders toward the workbench inside. Keep exactly one courier and one bicycle; preserve face, wardrobe, proportions, bicycle geometry, parcel size, lighting direction, and camera height. End while he is crossing the threshold so the motion can continue.\\n\\noverall_soundscape:\\nLight rain beyond the glass, wet tire noise, a quiet freewheel tick, rubber soles, the metal door hinge, jacket rustle, and soft greenhouse room tone.\\n\\nnon_diegetic_music:\\nNo non-diegetic music.\",\n      \"length\": 362,\n      \"steps\": 20,\n      \"seed\": \"6101\"\n    },\n    {\n      \"id\": \"greenhouse_delivery\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] Continue directly from the incoming H3 Motion Context inside the same greenhouse. The carried opening overlap already contains the courier crossing the threshold; begin new action only after it. Preserve the same face, mustard jacket, teal trousers, helmet, olive bag, bicycle, parcel, glass architecture, plant layout, wet floor reflections, camera height, and direction of travel. He rolls the bicycle beside the wooden potting table, stops it with his left hand, and places the parcel on the dry corner of the table with his right hand. He briefly smiles at the completed delivery. No cut, no duplicate person or bicycle, and no motion reset.\\n\\noverall_soundscape:\\nContinue the rain-muted greenhouse ambience, freewheel tick, tire roll, footsteps, clothing movement, and a soft cardboard contact on wood without an acoustic restart.\\n\\nnon_diegetic_music:\\nNo non-diegetic music.\",\n      \"length\": 362,\n      \"steps\": 20,\n      \"seed\": \"6102\"\n    }\n  ]\n}",
         "run_name": "i2v_studio_minimax_h3_0_6_json",
@@ -446,7 +446,7 @@
     },
     {
       "key": "n33",
-      "type": "MiniMaxH3ChainPlanStudio",
+      "type": "MiniMaxH3ChainPlanStudio|MieH3",
       "settings": {
         "start_clip": 1,
         "scene_range": "",
@@ -489,7 +489,7 @@
     },
     {
       "key": "n34",
-      "type": "MiniMaxH3ChainManifestLoad",
+      "type": "MiniMaxH3ChainManifestLoad|MieH3",
       "settings": {},
       "inputs": {
         "plan": [
@@ -511,7 +511,7 @@
     },
     {
       "key": "n36",
-      "type": "MiniMaxH3ChainLoopEnd",
+      "type": "MiniMaxH3ChainLoopEnd|MieH3",
       "settings": {
         "between_scene_cleanup": "off",
         "execution_mode": "recursive"
@@ -542,7 +542,7 @@
     },
     {
       "key": "n37",
-      "type": "MiniMaxH3ChainReview",
+      "type": "MiniMaxH3ChainReview|MieH3",
       "settings": {
         "enabled": true,
         "play_notification_sound": false,
@@ -589,7 +589,7 @@
     },
     {
       "key": "n40",
-      "type": "MiniMaxH3ChainFirstSceneImage",
+      "type": "MiniMaxH3ChainFirstSceneImage|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -605,7 +605,7 @@
     },
     {
       "key": "n41",
-      "type": "MiniMaxH3GenerationProfile",
+      "type": "MiniMaxH3GenerationProfile|MieH3",
       "settings": {
         "scene_continuity": "Visual continuity",
         "audio_profile": "Generate audio"
@@ -615,7 +615,7 @@
     },
     {
       "key": "n42",
-      "type": "MiniMaxH3ProjectAssetManager",
+      "type": "MiniMaxH3ProjectAssetManager|MieH3",
       "settings": {
         "run_name": "i2v_studio_minimax_h3_0_6_json",
         "catalog_json": "",
@@ -629,7 +629,7 @@
     },
     {
       "key": "n43",
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "settings": {
         "selection_json": ""
       },

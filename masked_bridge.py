@@ -17,6 +17,7 @@ import logging
 
 import torch
 
+from .fork_identity import add_suffix
 from .masking_support import require_h3_mask_support
 from .nodes import AUDIO_HZ, FPS, _pixel_frames, _resize
 
@@ -423,8 +424,10 @@ class MiniMaxH3ContexMaskedAVBridge:
 NODE_CLASS_MAPPINGS = {
     "MiniMaxH3ContexMaskedAVBridge": MiniMaxH3ContexMaskedAVBridge,
 }
+NODE_CLASS_MAPPINGS = {add_suffix(name): value for name, value in NODE_CLASS_MAPPINGS.items()}
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3ContexMaskedAVBridge": (
         "MiniMax H3 Masking · Two-Clip AV Bridge"),
 }
+NODE_DISPLAY_NAME_MAPPINGS = {add_suffix(name): value for name, value in NODE_DISPLAY_NAME_MAPPINGS.items()}

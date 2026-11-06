@@ -72,8 +72,8 @@ async function browserChecks() {
     try {
         await import("/web/h3_project_asset_manager.js");
         // Both creation orders exercise globally injected CSS without leakage.
-        for (const type of ["MiniMaxH3ProjectAssetManager", "MiniMaxH3ProjectAssetTree",
-            "MiniMaxH3ProjectAssetTree", "MiniMaxH3ProjectAssetManager"]) {
+        for (const type of ["MiniMaxH3ProjectAssetManager|MieH3", "MiniMaxH3ProjectAssetTree|MieH3",
+            "MiniMaxH3ProjectAssetTree|MieH3", "MiniMaxH3ProjectAssetManager|MieH3"]) {
             class Node {
                 constructor() {
                     this.type = this.comfyClass = type; this.id = graph._nodes.length + 1;
@@ -94,7 +94,7 @@ async function browserChecks() {
             const node = new Node(); node.onNodeCreated(); created.push(node);
             for (let i = 0; i < 100 && !node.root?.querySelector(".h3pa-card"); i++) await wait(10);
             check(Boolean(node.root?.querySelector(".h3pa-card")), type + " mounts with its saved catalog");
-            const tree = type === "MiniMaxH3ProjectAssetTree";
+            const tree = type === "MiniMaxH3ProjectAssetTree|MieH3";
             check(getComputedStyle(node.root).display === (tree ? "grid" : "flex"), type + " uses its own layout");
             check(Boolean(node.root.querySelector(".h3pa-source-col")) === tree, "Tree column is opt-in");
             check(Boolean(node.root.querySelector(".h3pa-lineage-display")) === tree, "Related assets strip is opt-in");

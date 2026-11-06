@@ -192,7 +192,7 @@ const context = vm.createContext({
 vm.runInContext(fs.readFileSync(new URL('../web/h3_checkpoint_multiselect.mjs', import.meta.url), 'utf8')
     .replace(/^export /gm, '') + '\n' + source, context);
 class NodeType {}
-await extension.beforeRegisterNodeDef(NodeType, {name:"MiniMaxH3ChainCheckpointManager"});
+await extension.beforeRegisterNodeDef(NodeType, {name:"MiniMaxH3ChainCheckpointManager|MieH3"});
 const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
 function makeNode(saved="", properties={}) {
     const node = {properties:{h3_checkpoint_manager_run:"demo", ...properties},
@@ -282,7 +282,7 @@ assert.match(byClass(first, "h3cm-output-summary").textContent, /pinned to this 
 assert.equal(value(second), otherBefore, "other manager unaffected");
 assert.equal(mutations, 0);
 assert.ok(dirty > 0, "widget changes are serialized and mark the workflow dirty");
-const connectedPlan = {type:"MiniMaxH3ChainPlan", widgets:[
+const connectedPlan = {type:"MiniMaxH3ChainPlan|MieH3", widgets:[
     {name:"run_name", value:"other"}, {name:"plan_json", value:"unchanged Plan"},
 ]};
 first.inputs = [{link:1}];
@@ -783,7 +783,7 @@ const forkView = makeNode(); await settle();
 assert.ok(byText(forkView,"S2 · bbbbbbbb").children.some(item=>item.textContent === "Save #1 of 2"));
 assert.ok(byText(forkView,"S2 · cccccccc").children.some(item=>item.textContent === "Reused clip · Save #2 of 2 · Latest"));
 assert.ok(byText(forkView,"S1 · aaaaaaaa").children.some(item=>item.textContent === "Save order unknown"));
-const studio = {type:"MiniMaxH3ChainPlanStudio", inputs:[], outputs:[], widgets:[
+const studio = {type:"MiniMaxH3ChainPlanStudio|MieH3", inputs:[], outputs:[], widgets:[
     {name:"run_name",value:"demo"}, {name:"plan_json",value:'{"shots":[{"id":"one"}]}'},
     {name:"working_branch_id",value:"main"},
 ]};

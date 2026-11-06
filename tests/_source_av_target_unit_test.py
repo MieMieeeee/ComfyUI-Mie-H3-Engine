@@ -177,8 +177,8 @@ def main():
     assert torch.allclose(overlap[-1], full_mask[310])
 
     assert set(module.NODE_CLASS_MAPPINGS) == {
-        "MiniMaxH3ContexLoopSourceAVTarget",
-        "MiniMaxH3ContexLoopMaskSlice",
+        "MiniMaxH3ContexLoopSourceAVTarget|MieH3",
+        "MiniMaxH3ContexLoopMaskSlice|MieH3",
     }
 
     print(

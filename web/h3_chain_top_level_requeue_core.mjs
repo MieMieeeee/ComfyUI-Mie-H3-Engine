@@ -14,7 +14,7 @@ export const LEGACY_MODE = RECURSIVE_MODE; // Preserve existing helper imports.
 export const REQUEUE_MODE = "top_level_requeue";
 
 export function migrateRecursiveExecutionMode(node) {
-    if ((node?.comfyClass ?? node?.type) !== "MiniMaxH3ChainLoopEnd") return;
+    if ((node?.comfyClass ?? node?.type) !== "MiniMaxH3ChainLoopEnd|MieH3") return;
     const widget = node.widgets?.find(item => item.name === "execution_mode");
     if (widget?.value === "recursive_legacy") widget.value = RECURSIVE_MODE;
 }

@@ -237,9 +237,9 @@ def main():
     assert conversion[1]["default"] == ops.MASK_CONVERSION_MODES[0]
 
     expected_ids = {
-        "MiniMaxH3ContexTrimSourceAV",
-        "MiniMaxH3ContexMaskedTarget",
-        "MiniMaxH3ContexMaskGridPreview",
+        "MiniMaxH3ContexTrimSourceAV|MieH3",
+        "MiniMaxH3ContexMaskedTarget|MieH3",
+        "MiniMaxH3ContexMaskGridPreview|MieH3",
     }
     assert expected_ids == set(nodes.NODE_CLASS_MAPPINGS)
     old_pack_ids = {
@@ -257,12 +257,12 @@ def main():
     workflow_nodes = {item["id"]: item for item in workflow["nodes"]}
     workflow_types = {item["type"] for item in workflow["nodes"]}
     assert {
-        "MiniMaxH3ContexMaskedTarget",
-        "MiniMaxH3ContexMaskGridPreview",
-        "MiniMaxH3ContexLoopSourceAVTarget",
-        "MiniMaxH3ContexLoopMaskSlice",
-        "MiniMaxH3ChainLoopStart",
-        "MiniMaxH3ChainLoopEnd",
+        "MiniMaxH3ContexMaskedTarget|MieH3",
+        "MiniMaxH3ContexMaskGridPreview|MieH3",
+        "MiniMaxH3ContexLoopSourceAVTarget|MieH3",
+        "MiniMaxH3ContexLoopMaskSlice|MieH3",
+        "MiniMaxH3ChainLoopStart|MieH3",
+        "MiniMaxH3ChainLoopEnd|MieH3",
     } <= workflow_types
     assert not workflow_types.intersection({
         "LTXVConcatAVLatent", "LTXVSeparateAVLatent"})
@@ -282,7 +282,7 @@ def main():
 
     masked_node = next(
         item for item in workflow["nodes"]
-        if item["type"] == "MiniMaxH3ContexMaskedTarget")
+        if item["type"] == "MiniMaxH3ContexMaskedTarget|MieH3")
     sampler = next(
         item for item in workflow["nodes"]
         if item["type"] == "SamplerCustomAdvanced")
@@ -292,10 +292,10 @@ def main():
     assert mask_link[1:3] == [masked_node["id"], 0]
     source_target = next(
         item for item in workflow["nodes"]
-        if item["type"] == "MiniMaxH3ContexLoopSourceAVTarget")
+        if item["type"] == "MiniMaxH3ContexLoopSourceAVTarget|MieH3")
     chain_context = next(
         item for item in workflow["nodes"]
-        if item["type"] == "MiniMaxH3ChainContext")
+        if item["type"] == "MiniMaxH3ChainContext|MieH3")
     source_target_link = next(
         link for link in workflow["links"]
         if link[0] == chain_context["inputs"][3]["link"])

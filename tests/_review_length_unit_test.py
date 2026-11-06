@@ -187,7 +187,7 @@ assert chain._deferred_review_enabled(pending_policy)
 assert chain.MiniMaxH3ChainReview.INPUT_TYPES()["optional"][
     "pending_review"][0] == chain.REVIEW_DISPOSITION_TYPE
 assert chain.CHAIN_NODE_CLASS_MAPPINGS[
-    "MiniMaxH3PendingReview"] is chain.MiniMaxH3PendingReview
+    "MiniMaxH3PendingReview|MieH3"] is chain.MiniMaxH3PendingReview
 try:
     chain._review_candidate_target(21)
 except ValueError as exc:

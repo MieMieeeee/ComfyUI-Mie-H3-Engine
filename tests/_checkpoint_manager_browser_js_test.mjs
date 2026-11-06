@@ -59,7 +59,7 @@ async function browserChecks(extensionSource, keepStorageOpen, inspectorOnly) {
         seven[0].alternates = [alternate];
         payload.revisions = [...seven, alternate];
         const named = "a".repeat(32);
-        const studio = {type:"MiniMaxH3ChainPlanStudio",inputs:[],widgets:[{name:"run_name",value:"demo"},
+        const studio = {type:"MiniMaxH3ChainPlanStudio|MieH3",inputs:[],widgets:[{name:"run_name",value:"demo"},
             {name:"plan_json",value:JSON.stringify({shots:Array.from({length:8}, (_,i)=>({id:`scene_${i+1}`,seed:String(i+1)}))})},{name:"working_branch_id",value:named}]};
         let contextRefreshes = 0;
         const refreshRestoredPlanEditors = () => { contextRefreshes++; };

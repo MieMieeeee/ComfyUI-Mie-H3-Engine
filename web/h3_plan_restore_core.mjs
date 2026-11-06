@@ -10,8 +10,8 @@ import {
 import {resolveAudioContextLength, resolveAudioPolicy, resolveTransitionPolicy} from "./h3_socket_presentation_core.mjs?v=0.7.11";
 
 const CHAIN_POLICY_NODE = "MiniMaxH3ChainPolicy";
-const PROFILE_POLICY_NODE = "MiniMaxH3GenerationProfile";
-const ADVANCED_POLICY_NODE = "MiniMaxH3AdvancedPolicy";
+const PROFILE_POLICY_NODE = "MiniMaxH3GenerationProfile|MieH3";
+const ADVANCED_POLICY_NODE = "MiniMaxH3AdvancedPolicy|MieH3";
 const LEGACY_POLICY_NODE = "MiniMaxH3Legacy04PolicyAdapter";
 
 function nodeType(node) {

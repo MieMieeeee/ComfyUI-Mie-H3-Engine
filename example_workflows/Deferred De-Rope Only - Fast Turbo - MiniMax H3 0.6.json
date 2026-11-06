@@ -6,7 +6,7 @@
   "nodes": [
     {
       "id": 1,
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "pos": [
         80,
         610
@@ -36,7 +36,7 @@
       ],
       "title": "Checkpoint Manager",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainCheckpointManager"
+        "Node name for S&R": "MiniMaxH3ChainCheckpointManager|MieH3"
       },
       "widgets_values": [
         ""
@@ -44,7 +44,7 @@
     },
     {
       "id": 2,
-      "type": "MiniMaxH3ChainUpscaleAdapter",
+      "type": "MiniMaxH3ChainUpscaleAdapter|MieH3",
       "pos": [
         1500,
         180
@@ -91,7 +91,7 @@
       ],
       "title": "Chain Upscale Adapter",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainUpscaleAdapter"
+        "Node name for S&R": "MiniMaxH3ChainUpscaleAdapter|MieH3"
       },
       "widgets_values": [
         "h3_derope_native_turbo",
@@ -106,7 +106,7 @@
     },
     {
       "id": 3,
-      "type": "MiniMaxH3ChainUpscaleCurrent",
+      "type": "MiniMaxH3ChainUpscaleCurrent|MieH3",
       "pos": [
         1500,
         2380
@@ -235,7 +235,7 @@
       ],
       "title": "Chain Upscale Current",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainUpscaleCurrent"
+        "Node name for S&R": "MiniMaxH3ChainUpscaleCurrent|MieH3"
       },
       "widgets_values": []
     },
@@ -422,7 +422,7 @@
     },
     {
       "id": 9,
-      "type": "MiniMaxH3ChainUpscaleReferenceConditioning",
+      "type": "MiniMaxH3ChainUpscaleReferenceConditioning|MieH3",
       "pos": [
         3720,
         588
@@ -500,7 +500,7 @@
       ],
       "title": "Chain Upscale Reference Conditioning",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainUpscaleReferenceConditioning"
+        "Node name for S&R": "MiniMaxH3ChainUpscaleReferenceConditioning|MieH3"
       },
       "widgets_values": [
         "text_only",
@@ -732,7 +732,7 @@
     },
     {
       "id": 15,
-      "type": "MiniMaxH3ChainUpscaleSegmentSave",
+      "type": "MiniMaxH3ChainUpscaleSegmentSave|MieH3",
       "pos": [
         5760,
         404
@@ -782,13 +782,13 @@
       ],
       "title": "Chain Upscale Segment Save",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainUpscaleSegmentSave"
+        "Node name for S&R": "MiniMaxH3ChainUpscaleSegmentSave|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 16,
-      "type": "MiniMaxH3ChainUpscaleLoopEnd",
+      "type": "MiniMaxH3ChainUpscaleLoopEnd|MieH3",
       "pos": [
         6270,
         180
@@ -853,13 +853,13 @@
       ],
       "title": "Chain Upscale Loop End",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainUpscaleLoopEnd"
+        "Node name for S&R": "MiniMaxH3ChainUpscaleLoopEnd|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 17,
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "pos": [
         6270,
         444
@@ -897,7 +897,7 @@
       ],
       "title": "Assemble Final Video",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainAssemble"
+        "Node name for S&R": "MiniMaxH3ChainAssemble|MieH3"
       },
       "widgets_values": [
         "plan",
@@ -914,7 +914,7 @@
     },
     {
       "id": 18,
-      "type": "H3ConditioningSyncFromLatents",
+      "type": "H3ConditioningSyncFromLatents|MieH3",
       "pos": [
         4230,
         180
@@ -984,7 +984,7 @@
       ],
       "title": "H3Conditioning Sync From Latents",
       "properties": {
-        "Node name for S&R": "H3ConditioningSyncFromLatents"
+        "Node name for S&R": "H3ConditioningSyncFromLatents|MieH3"
       },
       "widgets_values": [
         "bilinear",
@@ -993,7 +993,7 @@
     },
     {
       "id": 19,
-      "type": "MiniMaxH3UpscaleReferencePromptOverride",
+      "type": "MiniMaxH3UpscaleReferencePromptOverride|MieH3",
       "pos": [
         1500,
         1700
@@ -1040,7 +1040,7 @@
       ],
       "title": "Upscale Reference Prompt Override",
       "properties": {
-        "Node name for S&R": "MiniMaxH3UpscaleReferencePromptOverride"
+        "Node name for S&R": "MiniMaxH3UpscaleReferencePromptOverride|MieH3"
       },
       "widgets_values": [
         "",
@@ -1252,7 +1252,7 @@
     },
     {
       "id": 24,
-      "type": "MiniMaxH3ChainDeropeGuard",
+      "type": "MiniMaxH3ChainDeropeGuard|MieH3",
       "pos": [
         2640,
         180
@@ -1309,7 +1309,7 @@
       ],
       "title": "Chain Derope Guard",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainDeropeGuard"
+        "Node name for S&R": "MiniMaxH3ChainDeropeGuard|MieH3"
       },
       "widgets_values": []
     },
@@ -1536,7 +1536,7 @@
     },
     {
       "id": 29,
-      "type": "MiniMaxH3ChainDeropeContinuity",
+      "type": "MiniMaxH3ChainDeropeContinuity|MieH3",
       "pos": [
         3720,
         384
@@ -1578,13 +1578,13 @@
       ],
       "title": "Chain Derope Continuity",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainDeropeContinuity"
+        "Node name for S&R": "MiniMaxH3ChainDeropeContinuity|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 30,
-      "type": "MiniMaxH3ChainDeropeFreezeMask",
+      "type": "MiniMaxH3ChainDeropeFreezeMask|MieH3",
       "pos": [
         3150,
         1328
@@ -1629,7 +1629,7 @@
       ],
       "title": "Chain Derope Freeze Mask",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainDeropeFreezeMask"
+        "Node name for S&R": "MiniMaxH3ChainDeropeFreezeMask|MieH3"
       },
       "widgets_values": []
     },
@@ -1973,7 +1973,7 @@
     },
     {
       "id": 38,
-      "type": "MiniMaxH3ChainRecoveredAV",
+      "type": "MiniMaxH3ChainRecoveredAV|MieH3",
       "pos": [
         5760,
         180
@@ -2019,7 +2019,7 @@
       ],
       "title": "Chain Recovered AV",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainRecoveredAV"
+        "Node name for S&R": "MiniMaxH3ChainRecoveredAV|MieH3"
       },
       "widgets_values": []
     },
@@ -2089,7 +2089,7 @@
     },
     {
       "id": 40,
-      "type": "MiniMaxH3ChainDeropeBudget",
+      "type": "MiniMaxH3ChainDeropeBudget|MieH3",
       "pos": [
         2640,
         724
@@ -2148,7 +2148,7 @@
       ],
       "title": "De-Rope Budget",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainDeropeBudget"
+        "Node name for S&R": "MiniMaxH3ChainDeropeBudget|MieH3"
       },
       "widgets_values": []
     },

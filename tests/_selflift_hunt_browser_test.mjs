@@ -97,7 +97,7 @@ async function browserChecks() {
                 this.viewport.style.height = height + "px";
             }
         }
-        window.extension.beforeRegisterNodeDef(Node, {name:"MiniMaxH3SelfLiftSeedHunt"});
+        window.extension.beforeRegisterNodeDef(Node, {name:"MiniMaxH3SelfLiftSeedHunt|MieH3"});
         const node = new Node([840, 1000]); node.onNodeCreated();
         await new Promise(resolve => setTimeout(resolve, 80));
         const root = node.root, video = root.querySelector("video");

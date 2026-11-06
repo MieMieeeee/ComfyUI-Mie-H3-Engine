@@ -8,6 +8,20 @@ import json
 from pathlib import Path
 import re
 
+try:
+    from .fork_identity import type_alias_set
+except ImportError:
+    from fork_identity import type_alias_set
+
+# Node kinds this pack accepts in a saved prompt. A prompt written before
+# the rename carries the upstream name, and a prompt executed against the
+# upstream pack carries it too, so both are accepted.
+_TAGGED_SCENE_OPTIONS_TYPES = type_alias_set("MiniMaxH3TaggedSceneOptions")
+_REFERENCE_VIDEO_TYPES = type_alias_set(
+    "MiniMaxH3TaggedReferenceToVideo", "MiniMaxH3ScheduledReferenceToVideo")
+_CURRENT_TAGGED_SCENE_TYPES = type_alias_set(
+    "MiniMaxH3CurrentTaggedReferenceScene")
+
 
 class ReferenceRecoveryUnavailable(ValueError):
     pass
@@ -68,7 +82,7 @@ def _saved_setting(prompt, value, key=None, seen=frozenset()):
         return _saved_setting(prompt, inputs.get("value"), key, seen)
     if key is None and kind in ("PrimitiveString", "PrimitiveStringMultiline"):
         return _saved_setting(prompt, inputs.get("value"), seen=seen)
-    if key is not None and kind == "MiniMaxH3TaggedSceneOptions":
+    if key is not None and kind in _TAGGED_SCENE_OPTIONS_TYPES:
         defaults = {"ref_image_size": "match", "semantic_anchor_size": "512",
                     "semantic_anchor_mode": "timestamped_video"}
         return _saved_setting(prompt, inputs.get(key, defaults[key]), seen=seen)
@@ -83,9 +97,9 @@ def _recipe_settings(prompt, defaults):
         if not isinstance(node, dict) or not isinstance(node.get("inputs"), dict):
             continue
         inputs, kind = node["inputs"], node.get("class_type")
-        if kind in ("MiniMaxH3TaggedReferenceToVideo", "MiniMaxH3ScheduledReferenceToVideo"):
+        if kind in _REFERENCE_VIDEO_TYPES:
             candidates.append({key: _saved_setting(prompt, inputs.get(key)) for key in defaults})
-        elif kind == "MiniMaxH3CurrentTaggedReferenceScene":
+        elif kind in _CURRENT_TAGGED_SCENE_TYPES:
             candidates.append(dict(defaults) if "options" not in inputs else {
                 key: _saved_setting(prompt, inputs["options"], key) for key in defaults})
     # Unconnected Options nodes are not evidence. Nor is a literal from one

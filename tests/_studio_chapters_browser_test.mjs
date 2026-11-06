@@ -79,7 +79,7 @@ async function browserChecks() {
         class Node {
             constructor(saved) {
                 this.id = graph._nodes.length + 1;
-                this.type = this.comfyClass = "MiniMaxH3ChainPlanStudio";
+                this.type = this.comfyClass = "MiniMaxH3ChainPlanStudio|MieH3";
                 this.graph = graph; this.inputs = []; this.outputs = []; this.size = [1100, 1000];
                 this.properties = saved?.properties ?? {h3_plan_studio_view:"player"};
                 this.widgets = Object.entries({plan_json:saved?.plan ?? JSON.stringify({
@@ -100,7 +100,7 @@ async function browserChecks() {
                 return {element:root};
             }
         }
-        await window.extension.beforeRegisterNodeDef(Node, {name:"MiniMaxH3ChainPlanStudio"});
+        await window.extension.beforeRegisterNodeDef(Node, {name:"MiniMaxH3ChainPlanStudio|MieH3"});
         let node = new Node(); node.onNodeCreated();
         await waitFor(() => node.root?.querySelectorAll(".h3studio-chapter-fold").length === 2);
         await wait(150);

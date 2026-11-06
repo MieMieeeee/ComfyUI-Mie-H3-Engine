@@ -149,9 +149,9 @@ function publishCompanionPrompt(...args) {
     return promptCompanionSync.publishCompanionPrompt?.(...args) ?? 0;
 }
 
-const NODE_NAME = "MiniMaxH3ChainPlanStudio";
-const PLAN_NAME = "MiniMaxH3ChainPlan";
-const MODERN_PLAN_NAME = "MiniMaxH3ChainPlanModern";
+const NODE_NAME = "MiniMaxH3ChainPlanStudio|MieH3";
+const PLAN_NAME = "MiniMaxH3ChainPlan|MieH3";
+const MODERN_PLAN_NAME = "MiniMaxH3ChainPlanModern|MieH3";
 const PLAN_NAMES = new Set([PLAN_NAME, MODERN_PLAN_NAME]);
 const ACTIVE_PROPERTY = "h3_plan_studio_active_scene";
 const ACTIVE_CHAPTER_PROPERTY = "h3_plan_studio_active_chapter";
@@ -1538,7 +1538,7 @@ function mount(node) {
 
     function promptEditorLabel() {
         if (state.promptEditors.length > 1) return `${state.promptEditors.length} linked prompt editors`;
-        return nodeType(state.promptEditors[0]) === "MiniMaxH3ChainRichScenePromptEditor"
+        return nodeType(state.promptEditors[0]) === "MiniMaxH3ChainRichScenePromptEditor|MieH3"
             ? "Rich Scene Prompt Editor" : "Scene Prompt Editor";
     }
 

@@ -36,6 +36,7 @@ to native guide records and installs no H3 layout or payload wrapper. Version
 0.5 emits a one-time update warning before using the legacy fallback.
 """
 
+from .fork_identity import display_name as _fork_display_name
 from .tokenizer_compat import (
     install_minimax_tokenizer_compat as _install_minimax_tokenizer_compat,
 )
@@ -123,6 +124,15 @@ NODE_DISPLAY_NAME_MAPPINGS.update(_SOURCE_AV_TARGET_NODE_DISPLAY_NAME_MAPPINGS)
 NODE_DISPLAY_NAME_MAPPINGS.update(
     _REFERENCE_VIDEO_FADE_DISPLAY_NAMES)
 NODE_DISPLAY_NAME_MAPPINGS.update(_AUDIO_REFINE_NAMES)
+
+# The keys are already suffixed: each module suffixes its own mapping
+# dictionaries, so there is ONE name space for a node type - the one in
+# the module dictionaries, the one ComfyUI registers, and the one that
+# appears in workflows and prompts.
+NODE_DISPLAY_NAME_MAPPINGS = {
+    name: _fork_display_name(value)
+    for name, value in NODE_DISPLAY_NAME_MAPPINGS.items()
+}
 
 WEB_DIRECTORY = "./web"
 

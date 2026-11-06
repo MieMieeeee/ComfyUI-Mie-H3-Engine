@@ -67,12 +67,12 @@ assert.equal(result.calls.filter(c => c === "submit").length, 1, "never retry un
 // ComfyUI server, models, user files, or real prompt submissions are involved.
 const browserSource = fs.readFileSync(new URL("../web/h3_chain_review_final.js", import.meta.url), "utf8")
     .replace(/^import\s[\s\S]*?from\s["'][^"']+["'];\n/gm, "");
-function browser({type = "MiniMaxH3ChainPlan", duringHistory = () => {}} = {}) {
+function browser({type = "MiniMaxH3ChainPlan|MieH3", duringHistory = () => {}} = {}) {
     const widget = (name, value) => ({name, value});
     const source = {id: 1, type, widgets: [widget("plan_json", JSON.stringify(plan)), widget("run_name", "project")]};
-    const start = {id: 2, type: "MiniMaxH3ChainLoopStart", inputs: [{link: 1}],
+    const start = {id: 2, type: "MiniMaxH3ChainLoopStart|MieH3", inputs: [{link: 1}],
         widgets: [widget("start_clip", 1), widget("scene_range", "")]};
-    const gate = {id: 3, type: "MiniMaxH3ChainReview", inputs: [{link: 2}]};
+    const gate = {id: 3, type: "MiniMaxH3ChainReview|MieH3", inputs: [{link: 2}]};
     const graph = {_nodes: [source, start, gate], links: {1: {origin_id: 1}, 2: {origin_id: 2}},
         getNodeById(id) { return this._nodes.find(n => n.id === id); }};
     for (const node of graph._nodes) node.graph = graph;
@@ -90,7 +90,7 @@ function browser({type = "MiniMaxH3ChainPlan", duringHistory = () => {}} = {}) {
     return {source, start, gate, app, submitted, messages,
         intent: () => context.appendIntent(gate, review), report: msg => messages.push(msg)};
 }
-for (const type of ["MiniMaxH3ChainPlan", "MiniMaxH3ChainPlanModern", "MiniMaxH3ChainPlanStudio"]) {
+for (const type of ["MiniMaxH3ChainPlan|MieH3", "MiniMaxH3ChainPlanModern|MieH3", "MiniMaxH3ChainPlanStudio|MieH3"]) {
     const b = browser({type});
     const intent = b.intent();
     assert.equal(intent.nextIndex, 3);
@@ -123,7 +123,7 @@ assert.equal(linked.intent(), null, "do not queue a stale widget when a linked S
 const linkedStart = browser();
 linkedStart.start.inputs.push({name: "start_clip", link: 11});
 assert.equal(linkedStart.intent(), null, "a linked start index cannot be changed through its widget");
-const studio = browser({type: "MiniMaxH3ChainPlanStudio"});
+const studio = browser({type: "MiniMaxH3ChainPlanStudio|MieH3"});
 studio.source.widgets[0].value = JSON.stringify({...plan, _branch_id: undefined});
 studio.source.widgets.push({name: "working_branch_id", value: "branch"});
 assert.ok(studio.intent(), "standalone Studio's branch widget is authoritative");

@@ -1,6 +1,6 @@
 // Frame capture must never guess a project from an unrelated node on canvas.
-const CAROUSELS = new Set(["MiniMaxH3ProjectAssetManager", "MiniMaxH3ProjectAssetTree"]);
-const PLANS = new Set(["MiniMaxH3ChainPlan", "MiniMaxH3ChainPlanModern"]);
+const CAROUSELS = new Set(["MiniMaxH3ProjectAssetManager|MieH3", "MiniMaxH3ProjectAssetTree|MieH3"]);
+const PLANS = new Set(["MiniMaxH3ChainPlan|MieH3", "MiniMaxH3ChainPlanModern|MieH3"]);
 const type = (node) => node?.comfyClass ?? node?.type ?? node?.constructor?.type;
 
 export function captureCarousels(graph, seen = new Set()) {

@@ -1,8 +1,8 @@
 export const RETIRED_SOURCE_AUDIO_NODES = new Set([
-    "MiniMaxH3ChainPlanStudio", "MiniMaxH3ChainPreflight",
-    "MiniMaxH3ChainLoopStart", "MiniMaxH3ChainCurrent",
-    "MiniMaxH3ChainReview", "MiniMaxH3ChainManifestLoad",
-    "MiniMaxH3ChainLatentVideoAdapter", "MiniMaxH3ChainAssemble",
+    "MiniMaxH3ChainPlanStudio|MieH3", "MiniMaxH3ChainPreflight|MieH3",
+    "MiniMaxH3ChainLoopStart|MieH3", "MiniMaxH3ChainCurrent|MieH3",
+    "MiniMaxH3ChainReview|MieH3", "MiniMaxH3ChainManifestLoad|MieH3",
+    "MiniMaxH3ChainLatentVideoAdapter|MieH3", "MiniMaxH3ChainAssemble|MieH3",
 ]);
 
 export function retireSourceAudioInput(node) {

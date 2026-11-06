@@ -218,9 +218,9 @@ const firstImage = add(makeNode(4, "LoadImage", {image: "first.png"}));
 const secondImage = add(makeNode(5, "LoadImage", {image: "second.png"}));
 const audioFile = add(makeNode(6, "LoadAudio", {audio: "score.wav"}));
 
-const taggedEditor = add(makeNode(30, "MiniMaxH3ChainScenePromptEditor"));
-const taggedRelay = add(makeNode(31, "MiniMaxH3ChainCurrent"));
-const taggedWrapper = add(makeNode(32, "MiniMaxH3TaggedReferenceToVideo"));
+const taggedEditor = add(makeNode(30, "MiniMaxH3ChainScenePromptEditor|MieH3"));
+const taggedRelay = add(makeNode(31, "MiniMaxH3ChainCurrent|MieH3"));
+const taggedWrapper = add(makeNode(32, "MiniMaxH3TaggedReferenceToVideo|MieH3"));
 const taggedPromptSet = add(makeNode(64, "SetNode", {
     Constant: "tagged_prompt",
 }));
@@ -238,7 +238,7 @@ const taggedImageA = add(makeNode(33, "LoadImage", {image: "face.png"}));
 const taggedImageB = add(makeNode(34, "LoadImage", {image: "look.png"}));
 const taggedVideoFile = add(makeNode(35, "LoadVideo", {video: "motion.mp4"}));
 const taggedVideoAudio = add(makeNode(36, "LoadAudio", {audio: "motion.wav"}));
-const taggedPictureA = add(makeNode(37, "MiniMaxH3TaggedPictureReference", {
+const taggedPictureA = add(makeNode(37, "MiniMaxH3TaggedPictureReference|MieH3", {
     tag: "hero_face",
 }));
 const taggedPictureTagText = add(makeNode(169, "PrimitiveNode", {
@@ -251,23 +251,23 @@ const taggedPictureTagSet = add(makeNode(170, "SetNode", {
 const taggedPictureTagGet = add(makeNode(171, "GetNode", {
     Constant: "picture_tag_text",
 }));
-const taggedPictureB = add(makeNode(38, "MiniMaxH3TaggedPictureReference", {
+const taggedPictureB = add(makeNode(38, "MiniMaxH3TaggedPictureReference|MieH3", {
     tag: "hero_look",
 }));
-const taggedVideo = add(makeNode(39, "MiniMaxH3TaggedVideoReference", {
+const taggedVideo = add(makeNode(39, "MiniMaxH3TaggedVideoReference|MieH3", {
     tag: "performance", audio_tag: "performance_audio",
 }));
 const taggedMotionVideo = add(makeNode(60, "LoadVideo", {
     video: "motion-role.mp4",
 }));
-const taggedMotion = add(makeNode(61, "MiniMaxH3TaggedMotionReference", {
+const taggedMotion = add(makeNode(61, "MiniMaxH3TaggedMotionReference|MieH3", {
     tag: "motion", target_subject: "<Subject 1> and <Subject 2>",
 }));
-const taggedLazyLoader = add(makeNode(63, "MiniMaxH3SourceTimeline", {
+const taggedLazyLoader = add(makeNode(63, "MiniMaxH3SourceTimeline|MieH3", {
     video_path: "/media/lazy-motion.mkv",
 }));
 const taggedLazyMotion = add(makeNode(
-    62, "MiniMaxH3TaggedMotionReferencePath", {
+    62, "MiniMaxH3TaggedMotionReferencePath|MieH3", {
         video_path: "", tag: "lazy_motion",
         target_subject: "<Subject 1>", use_embedded_audio: true,
         audio_tag: "lazy_motion_audio",
@@ -367,23 +367,23 @@ assert.deepEqual(
         "performance_audio", "lazy_motion_audio"],
 );
 
-const semanticEditor = add(makeNode(80, "MiniMaxH3ChainScenePromptEditor"));
-const semanticRelay = add(makeNode(81, "MiniMaxH3ChainCurrent"));
-const semanticWrapper = add(makeNode(82, "MiniMaxH3TaggedReferenceToVideo"));
+const semanticEditor = add(makeNode(80, "MiniMaxH3ChainScenePromptEditor|MieH3"));
+const semanticRelay = add(makeNode(81, "MiniMaxH3ChainCurrent|MieH3"));
+const semanticWrapper = add(makeNode(82, "MiniMaxH3TaggedReferenceToVideo|MieH3"));
 const nativeImage = add(makeNode(83, "LoadImage", {image: "native.png"}));
-const nativePicture = add(makeNode(84, "MiniMaxH3TaggedPictureReference", {
+const nativePicture = add(makeNode(84, "MiniMaxH3TaggedPictureReference|MieH3", {
     tag: "native",
 }));
 const semanticImageA = add(makeNode(85, "LoadImage", {image: "beat-a.png"}));
 const semanticImageB = add(makeNode(86, "LoadImage", {image: "beat-b.png"}));
 const semanticAnchorA = add(makeNode(
-    87, "MiniMaxH3SemanticPictureAnchor", {tag: "beat_a"},
+    87, "MiniMaxH3SemanticPictureAnchor|MieH3", {tag: "beat_a"},
 ));
 const semanticAnchorB = add(makeNode(
-    88, "MiniMaxH3SemanticPictureAnchor", {tag: "beat_b"},
+    88, "MiniMaxH3SemanticPictureAnchor|MieH3", {tag: "beat_b"},
 ));
 const semanticBundle = add(makeNode(
-    89, "MiniMaxH3SemanticAnchorBundle", {
+    89, "MiniMaxH3SemanticAnchorBundle|MieH3", {
         semantic_anchor_size: "768",
         semantic_anchor_mode: "picture_storyboard",
     },
@@ -428,19 +428,19 @@ assert.deepEqual(
 // Packing the semantic registry into a ComfyUI subgraph is presentation-only.
 // Discovery must cross the output rail to find the bundle and the input rail
 // to resolve an externally connected image used by an internal anchor.
-const nestedEditor = add(makeNode(180, "MiniMaxH3ChainScenePromptEditor"));
-const nestedRelay = add(makeNode(181, "MiniMaxH3ChainCurrent"));
-const nestedWrapper = add(makeNode(182, "MiniMaxH3TaggedReferenceToVideo"));
+const nestedEditor = add(makeNode(180, "MiniMaxH3ChainScenePromptEditor|MieH3"));
+const nestedRelay = add(makeNode(181, "MiniMaxH3ChainCurrent|MieH3"));
+const nestedWrapper = add(makeNode(182, "MiniMaxH3TaggedReferenceToVideo|MieH3"));
 const nestedHost = add(makeNode(183, "semantic-registry-subgraph"));
 const nestedImage = add(makeNode(184, "LoadImage", {image: "nested.png"}));
 const nestedGraph = makeSubgraph(
     nestedHost, ["semantic_image"], ["references"],
 );
 const nestedAnchor = addInside(nestedGraph, makeNode(
-    185, "MiniMaxH3SemanticPictureAnchor", {tag: "nested_beat"},
+    185, "MiniMaxH3SemanticPictureAnchor|MieH3", {tag: "nested_beat"},
 ));
 const nestedBundle = addInside(nestedGraph, makeNode(
-    186, "MiniMaxH3SemanticAnchorBundle", {
+    186, "MiniMaxH3SemanticAnchorBundle|MieH3", {
         semantic_anchor_size: "768",
         semantic_anchor_mode: "timestamped_video",
     },
@@ -472,9 +472,9 @@ assert.deepEqual(
 // The 0.5 Source Timeline motion node can be the final link in a tagged chain.
 // Discovery must traverse through it or every earlier picture reference also
 // disappears from both prompt editors.
-const timelineEditor = add(makeNode(70, "MiniMaxH3ChainScenePromptEditor"));
-const timelineRelay = add(makeNode(71, "MiniMaxH3ChainCurrent"));
-const timelineWrapper = add(makeNode(72, "MiniMaxH3TaggedReferenceToVideo"));
+const timelineEditor = add(makeNode(70, "MiniMaxH3ChainScenePromptEditor|MieH3"));
+const timelineRelay = add(makeNode(71, "MiniMaxH3ChainCurrent|MieH3"));
+const timelineWrapper = add(makeNode(72, "MiniMaxH3TaggedReferenceToVideo|MieH3"));
 const timelineCharacterImage = add(makeNode(73, "LoadImage", {
     image: "timeline-character.png",
 }));
@@ -482,16 +482,16 @@ const timelineKeyframeImage = add(makeNode(74, "LoadImage", {
     image: "timeline-keyframe.png",
 }));
 const timelineCharacter = add(makeNode(
-    75, "MiniMaxH3TaggedPictureReference", {tag: "character"},
+    75, "MiniMaxH3TaggedPictureReference|MieH3", {tag: "character"},
 ));
 const timelineKeyframe = add(makeNode(
-    76, "MiniMaxH3TaggedPictureReference", {tag: "keyframe"},
+    76, "MiniMaxH3TaggedPictureReference|MieH3", {tag: "keyframe"},
 ));
-const sourceTimeline = add(makeNode(77, "MiniMaxH3SourceTimeline", {
+const sourceTimeline = add(makeNode(77, "MiniMaxH3SourceTimeline|MieH3", {
     video_path: "/media/source-motion.mp4",
 }));
 const timelineMotion = add(makeNode(
-    78, "MiniMaxH3TaggedMotionReferenceTimeline", {
+    78, "MiniMaxH3TaggedMotionReferenceTimeline|MieH3", {
         tag: "motion", paired_audio: "embedded", audio_tag: "audio_1",
     },
 ));
@@ -527,8 +527,8 @@ assert.deepEqual(
     ],
 );
 
-const coreEditor = add(makeNode(10, "MiniMaxH3ChainScenePromptEditor"));
-const coreRelay = add(makeNode(11, "MiniMaxH3ChainCurrent"));
+const coreEditor = add(makeNode(10, "MiniMaxH3ChainScenePromptEditor|MieH3"));
+const coreRelay = add(makeNode(11, "MiniMaxH3ChainCurrent|MieH3"));
 const core = add(makeNode(12, "MiniMaxH3ReferenceToVideo"));
 const coreImage = add(makeNode(13, "LoadImage", {image: "core.png"}));
 const coreAudio = add(makeNode(14, "LoadAudio", {audio: "core.wav"}));
@@ -548,8 +548,8 @@ assert.deepEqual(
     ["<Picture 1>", "<Audio 1>"],
 );
 
-const flEditor = add(makeNode(15, "MiniMaxH3ChainScenePromptEditor"));
-const flRelay = add(makeNode(16, "MiniMaxH3ChainCurrent"));
+const flEditor = add(makeNode(15, "MiniMaxH3ChainScenePromptEditor|MieH3"));
+const flRelay = add(makeNode(16, "MiniMaxH3ChainCurrent|MieH3"));
 const fl2v = add(makeNode(17, "MiniMaxH3ImageToVideo"));
 const firstFrame = add(makeNode(18, "LoadImage", {image: "first.png"}));
 const lastFrame = add(makeNode(19, "LoadImage", {image: "last.png"}));
@@ -568,11 +568,11 @@ assert.deepEqual(
 );
 assert.equal(referencePreviewRecords(flEditor, 1).mode, "native_keyframes");
 
-const indexedEditor = add(makeNode(40, "MiniMaxH3ChainRichScenePromptEditor"));
-const indexedRelay = add(makeNode(41, "MiniMaxH3ChainCurrent"));
+const indexedEditor = add(makeNode(40, "MiniMaxH3ChainRichScenePromptEditor|MieH3"));
+const indexedRelay = add(makeNode(41, "MiniMaxH3ChainCurrent|MieH3"));
 const indexedFl2v = add(makeNode(42, "MiniMaxH3ImageToVideo"));
-const indexedGate = add(makeNode(43, "MiniMaxH3ChainFirstSceneImage"));
-const indexedSwitch = add(makeNode(44, "MiniMaxH3ChainFrameIndexSwitch"));
+const indexedGate = add(makeNode(43, "MiniMaxH3ChainFirstSceneImage|MieH3"));
+const indexedSwitch = add(makeNode(44, "MiniMaxH3ChainFrameIndexSwitch|MieH3"));
 const frameA = add(makeNode(45, "LoadImage", {image: "frame-a.png"}));
 const frameB = add(makeNode(46, "LoadImage", {image: "frame-b.png"}));
 connect(indexedEditor, indexedRelay, "state");
@@ -607,11 +607,11 @@ assert.deepEqual(
     [frameA.id, frameB.id],
 );
 
-const i2vEditor = add(makeNode(24, "MiniMaxH3ChainScenePromptEditor"));
-const i2vRelay = add(makeNode(25, "MiniMaxH3ChainCurrent"));
+const i2vEditor = add(makeNode(24, "MiniMaxH3ChainScenePromptEditor|MieH3"));
+const i2vRelay = add(makeNode(25, "MiniMaxH3ChainCurrent|MieH3"));
 const i2v = add(makeNode(26, "MiniMaxH3ImageToVideo"));
 const openingFrame = add(makeNode(27, "LoadImage", {image: "opening.png"}));
-const firstSceneGate = add(makeNode(28, "MiniMaxH3ChainFirstSceneImage"));
+const firstSceneGate = add(makeNode(28, "MiniMaxH3ChainFirstSceneImage|MieH3"));
 connect(i2vEditor, i2vRelay, "state");
 connect(i2vRelay, i2v, "prompt");
 connect(openingFrame, firstSceneGate, "image");
@@ -631,8 +631,8 @@ assert.deepEqual(
 );
 assert.deepEqual(availableReferenceRecords(i2vEditor, 2).records, []);
 
-const lEditor = add(makeNode(20, "MiniMaxH3ChainScenePromptEditor"));
-const lRelay = add(makeNode(21, "MiniMaxH3ChainCurrent"));
+const lEditor = add(makeNode(20, "MiniMaxH3ChainScenePromptEditor|MieH3"));
+const lRelay = add(makeNode(21, "MiniMaxH3ChainCurrent|MieH3"));
 const l2v = add(makeNode(22, "MiniMaxH3ImageToVideo"));
 const onlyLastFrame = add(makeNode(23, "LoadImage", {image: "last-only.png"}));
 connect(lEditor, lRelay, "state");
@@ -643,8 +643,8 @@ assert.deepEqual(
     [{token: "<Picture 1>", role: "last frame"}],
 );
 
-const projectEditor = add(makeNode(270, "MiniMaxH3ChainScenePromptEditor"));
-const projectManager = add(makeNode(271, "MiniMaxH3ProjectAssetManager", {
+const projectEditor = add(makeNode(270, "MiniMaxH3ChainScenePromptEditor|MieH3"));
+const projectManager = add(makeNode(271, "MiniMaxH3ProjectAssetManager|MieH3", {
     catalog_json: JSON.stringify({
         project: "episode_1",
         assets: [
@@ -660,7 +660,7 @@ const projectManager = add(makeNode(271, "MiniMaxH3ProjectAssetManager", {
     }),
     semantic_anchor_mode: "timestamped_video",
 }));
-const projectRef2va = add(makeNode(272, "MiniMaxH3TaggedReferenceToVideo"));
+const projectRef2va = add(makeNode(272, "MiniMaxH3TaggedReferenceToVideo|MieH3"));
 connect(projectEditor, projectRef2va, "prompt");
 connect(projectManager, projectRef2va, "references", 1);
 const projectRecords = taggedReferenceRecords(
@@ -680,16 +680,16 @@ assert.deepEqual(
 );
 assert.ok(projectRecords.every((record) => record.previewUrl?.includes(
     "project=episode_1")));
-projectManager.type = projectManager.comfyClass = "MiniMaxH3ProjectAssetTree";
+projectManager.type = projectManager.comfyClass = "MiniMaxH3ProjectAssetTree|MieH3";
 assert.equal(findProjectAssetManager(projectRef2va), projectManager);
 assert.deepEqual(taggedReferenceRecords(
     projectEditor, "Use @hero and @walk with #door[2.00s] and @voice.",
 ).records, projectRecords, "Tree node preserves all native and semantic references");
 
-const compactEditor = add(makeNode(273, "MiniMaxH3ChainScenePromptEditor"));
-const compactLoopStart = add(makeNode(274, "MiniMaxH3ChainLoopStart"));
+const compactEditor = add(makeNode(273, "MiniMaxH3ChainScenePromptEditor|MieH3"));
+const compactLoopStart = add(makeNode(274, "MiniMaxH3ChainLoopStart|MieH3"));
 const compactRef2va = add(makeNode(
-    275, "MiniMaxH3CurrentTaggedReferenceScene",
+    275, "MiniMaxH3CurrentTaggedReferenceScene|MieH3",
 ));
 connect(compactEditor, compactLoopStart, "plan");
 connect(compactLoopStart, compactRef2va, "state");
@@ -706,7 +706,7 @@ assert.deepEqual(
 // downstream from Plan Studio, while the same Carousel feeds Plan Studio's
 // project_assets/tagged_references inputs upstream. Reference discovery must
 // not depend on reaching the hidden Ref2VA wrapper through engine outputs.
-const studioManager = add(makeNode(276, "MiniMaxH3ProjectAssetManager", {
+const studioManager = add(makeNode(276, "MiniMaxH3ProjectAssetManager|MieH3", {
     catalog_json: JSON.stringify({
         project: "studio_project",
         assets: [{
@@ -716,10 +716,10 @@ const studioManager = add(makeNode(276, "MiniMaxH3ProjectAssetManager", {
     }),
     semantic_anchor_mode: "timestamped_video",
 }));
-const modernPlan = add(makeNode(277, "MiniMaxH3ChainPlanModern"));
-const planStudio = add(makeNode(278, "MiniMaxH3ChainPlanStudio"));
+const modernPlan = add(makeNode(277, "MiniMaxH3ChainPlanModern|MieH3"));
+const planStudio = add(makeNode(278, "MiniMaxH3ChainPlanStudio|MieH3"));
 const richEditor = add(makeNode(
-    279, "MiniMaxH3ChainRichScenePromptEditor",
+    279, "MiniMaxH3ChainRichScenePromptEditor|MieH3",
 ));
 connect(studioManager, modernPlan, "project_assets");
 connect(modernPlan, planStudio, "plan");

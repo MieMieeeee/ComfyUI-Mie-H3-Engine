@@ -1,7 +1,7 @@
-export const PLAN_STUDIO_NODE_TYPE = "MiniMaxH3ChainPlanStudio";
+export const PLAN_STUDIO_NODE_TYPE = "MiniMaxH3ChainPlanStudio|MieH3";
 export const PROMPT_EDITOR_NODE_TYPES = Object.freeze([
-    "MiniMaxH3ChainScenePromptEditor",
-    "MiniMaxH3ChainRichScenePromptEditor",
+    "MiniMaxH3ChainScenePromptEditor|MieH3",
+    "MiniMaxH3ChainRichScenePromptEditor|MieH3",
 ]);
 
 function nodeType(node) {

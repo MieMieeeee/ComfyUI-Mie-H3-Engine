@@ -50,8 +50,8 @@ wire("end", "flow", "adapter", "flow")
 wire("assemble", "manifest", "end", "manifest")
 assert "recovered_audio" not in nodes["save"]["inputs"]
 assert "source_audio" not in nodes["assemble"]["inputs"]
-assert not {"MiniMaxH3ReferenceToVideo", "MiniMaxH3ChainUpscalePixelConditioning",
-            "UltimateSDUpscaleNoUpscaleGuider", "MiniMaxH3ChainPass2Prepare",
+assert not {"MiniMaxH3ReferenceToVideo", "MiniMaxH3ChainUpscalePixelConditioning|MieH3",
+            "UltimateSDUpscaleNoUpscaleGuider", "MiniMaxH3ChainPass2Prepare|MieH3",
             "VHS_LoadVideo", "AIToolkitMiniMaxH3RefVideo", "VAEDecodeAudio"} & {
                 node["type"] for node in nodes.values()}
 assert not any(source == ["split", "audio_latent"] for node in nodes.values()

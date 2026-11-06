@@ -19,8 +19,15 @@ spec.loader.exec_module(contracts)
 
 
 def class_node(module, name):
+    """Find the Python class for a node type.
+
+    The class keeps its upstream name; only the registered node type
+    carries this fork's suffix. Accept either spelling so the callers can
+    use the type name they see in the fixtures and the workflows.
+    """
+    class_name = name.split("|", 1)[0] if "|" in name else name
     return next(item for item in module.body
-                if isinstance(item, ast.ClassDef) and item.name == name)
+                if isinstance(item, ast.ClassDef) and item.name == class_name)
 
 
 def literal_string_tuple(value):
@@ -39,7 +46,7 @@ def return_names(module, name):
 
 
 def plan_required_input_order(module):
-    node = class_node(module, "MiniMaxH3ChainPlan")
+    node = class_node(module, "MiniMaxH3ChainPlan|MieH3")
     method = next(item for item in node.body
                   if isinstance(item, ast.FunctionDef)
                   and item.name == "INPUT_TYPES")
@@ -357,15 +364,15 @@ def main():
     assert plan_required_input_order(module) == FIXTURE[
         "plan_required_input_order"]
     loop_optional = method_input_order(
-        module, "MiniMaxH3ChainLoopStart", "optional")
+        module, "MiniMaxH3ChainLoopStart|MieH3", "optional")
     retained_optional = [name for name in FIXTURE["loop_start_optional_input_order"]
                          if name != "source_audio"]
     assert loop_optional[:len(retained_optional)] == retained_optional
     assert loop_optional[len(retained_optional):] == ["source_timeline", "tagged_references"] + (
         ["initial_state"] if "initial_state" in loop_optional else [])
     appended_outputs = {
-        "MiniMaxH3ChainCurrent": ["video_blend_frames"],
-        "MiniMaxH3ChainContext": ["model"],
+        "MiniMaxH3ChainCurrent|MieH3": ["video_blend_frames"],
+        "MiniMaxH3ChainContext|MieH3": ["model"],
     }
     for node_name, output_names in FIXTURE["positional_outputs"].items():
         observed = return_names(module, node_name)

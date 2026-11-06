@@ -6,7 +6,7 @@
   "nodes": [
     {
       "id": 1,
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "pos": [
         80,
         610
@@ -36,7 +36,7 @@
       ],
       "title": "Checkpoint Manager",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainCheckpointManager"
+        "Node name for S&R": "MiniMaxH3ChainCheckpointManager|MieH3"
       },
       "widgets_values": [
         ""
@@ -76,7 +76,7 @@
     },
     {
       "id": 3,
-      "type": "MiniMaxH3ChainLatentVideoAdapter",
+      "type": "MiniMaxH3ChainLatentVideoAdapter|MieH3",
       "pos": [
         1500,
         1188
@@ -121,7 +121,7 @@
       ],
       "title": "Chain Latent Video Adapter",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainLatentVideoAdapter"
+        "Node name for S&R": "MiniMaxH3ChainLatentVideoAdapter|MieH3"
       },
       "widgets_values": [
         "plan",

@@ -13,14 +13,14 @@ import {captureProjectPlan} from "../web/h3_project_plan_switch.mjs";
 
 // Old Plans retain hidden 0.4 defaults. Connected policy nodes override them
 // at runtime, including when the Plan itself has never executed.
-for (const planType of ["MiniMaxH3ChainPlan", "MiniMaxH3ChainPlanModern", "MiniMaxH3ChainPlanStudio"]) {
+for (const planType of ["MiniMaxH3ChainPlan|MieH3", "MiniMaxH3ChainPlanModern|MieH3", "MiniMaxH3ChainPlanStudio|MieH3"]) {
     for (const [type, settings, mode, context, audioContext] of [
-        ["MiniMaxH3GenerationProfile", {scene_continuity:"Hard picture + smooth audio", audio_profile:"Generate audio"}, "audio_feathered_av", 39, 39],
+        ["MiniMaxH3GenerationProfile|MieH3", {scene_continuity:"Hard picture + smooth audio", audio_profile:"Generate audio"}, "audio_feathered_av", 39, 39],
         ["MiniMaxH3ChainPolicy", {incoming_transition:"hard_av"}, "masked_av", 39, 39],
-        ["MiniMaxH3AdvancedPolicy", {incoming_transition:"drift_av"}, "drift_control_av", 39, 39],
+        ["MiniMaxH3AdvancedPolicy|MieH3", {incoming_transition:"drift_av"}, "drift_control_av", 39, 39],
         ["MiniMaxH3Legacy04PolicyAdapter", {continuation_mode:"guide", context_length:17, audio_context_length:22}, "guide", 17, 22],
         ["MiniMaxH3Legacy04PolicyAdapter", {continuation_mode:"masked_av", context_length:39, audio_context_length:17}, "masked_av", 39, 17],
-        ["MiniMaxH3GenerationProfile", {scene_continuity:"Independent scenes", audio_profile:"Generate audio"}, "guide", 0, 0],
+        ["MiniMaxH3GenerationProfile|MieH3", {scene_continuity:"Independent scenes", audio_profile:"Generate audio"}, "guide", 0, 0],
     ]) {
         const policy = {id:2, type, inputs:[], widgets:Object.entries(settings).map(([name,value])=>widget(name,value))};
         const plan = {id:1, type:planType, inputs:[{name:"chain_policy",link:1}], widgets:[
@@ -54,7 +54,7 @@ for (const planType of ["MiniMaxH3ChainPlan", "MiniMaxH3ChainPlanModern", "MiniM
         widget("source_reference", "off"), widget("generated_continuity", "on"),
         widget("lock_source_audio", false),
     ]};
-    const plan = {id:1,type:"MiniMaxH3ChainPlanModern",inputs:[{name:"chain_policy",link:1}],widgets:[]};
+    const plan = {id:1,type:"MiniMaxH3ChainPlanModern|MieH3",inputs:[{name:"chain_policy",link:1}],widgets:[]};
     const graph = {links:{1:{origin_id:2}},getNodeById:id=>id===2?policy:plan};
     plan.graph=policy.graph=graph;
     const saved = {audio_context_length:39,policy_inputs:captureBranchPolicyInputs(plan)};
@@ -95,7 +95,7 @@ const graph = {
 };
 const plan = {
     id: 1,
-    type: "MiniMaxH3ChainPlan",
+    type: "MiniMaxH3ChainPlan|MieH3",
     graph,
     inputs: [{name: "chain_policy", link: 10}],
     widgets: [],
@@ -123,19 +123,19 @@ const reroute = {
 };
 const sceneEditor = {
     id: 5,
-    type: "MiniMaxH3ChainScenePromptEditor",
+    type: "MiniMaxH3ChainScenePromptEditor|MieH3",
     graph,
     _h3ScenePromptEditorRefresh() { this.refreshCount = (this.refreshCount ?? 0) + 1; },
 };
 const richEditor = {
     id: 6,
-    type: "MiniMaxH3ChainRichScenePromptEditor",
+    type: "MiniMaxH3ChainRichScenePromptEditor|MieH3",
     graph,
     _h3RichPromptRefresh() { this.refreshCount = (this.refreshCount ?? 0) + 1; },
 };
 const studio = {
     id: 7,
-    type: "MiniMaxH3ChainPlanStudio",
+    type: "MiniMaxH3ChainPlanStudio|MieH3",
     graph,
     _h3PlanStudioRefresh() { this.refreshCount = (this.refreshCount ?? 0) + 1; },
 };
@@ -194,7 +194,7 @@ const compactGraph = {
     getNodeById(id) { return this._nodes.find((node) => node.id === id); },
 };
 const compactPlan = {
-    id: 8, type: "MiniMaxH3ChainPlan", graph: compactGraph,
+    id: 8, type: "MiniMaxH3ChainPlan|MieH3", graph: compactGraph,
     inputs: [{name: "chain_policy", link: 20}], widgets: [],
 };
 const compactPolicy = {
@@ -270,11 +270,11 @@ const profileGraph = {
     getNodeById(id) { return this._nodes.find((node) => node.id === id); },
 };
 const profilePlan = {
-    id: 16, type: "MiniMaxH3ChainPlan", graph: profileGraph,
+    id: 16, type: "MiniMaxH3ChainPlan|MieH3", graph: profileGraph,
     inputs: [{name: "chain_policy", link: 60}], widgets: [],
 };
 const generationProfile = {
-    id: 17, type: "MiniMaxH3GenerationProfile", graph: profileGraph,
+    id: 17, type: "MiniMaxH3GenerationProfile|MieH3", graph: profileGraph,
     inputs: [],
     widgets: [
         widget("scene_continuity", "Visual continuity"),
@@ -343,7 +343,7 @@ const layeredGraph = {
     getNodeById(id) { return this._nodes.find((node) => node.id === id); },
 };
 const layeredPlan = {
-    id: 10, type: "MiniMaxH3ChainPlan", graph: layeredGraph,
+    id: 10, type: "MiniMaxH3ChainPlan|MieH3", graph: layeredGraph,
     inputs: [{name: "chain_policy", link: 30}], widgets: [],
 };
 const layeredBase = {
@@ -357,7 +357,7 @@ const layeredBase = {
     ],
 };
 const layeredAdvanced = {
-    id: 12, type: "MiniMaxH3AdvancedPolicy", graph: layeredGraph,
+    id: 12, type: "MiniMaxH3AdvancedPolicy|MieH3", graph: layeredGraph,
     inputs: [{name: "chain_policy", link: 31}],
     widgets: [widget("incoming_transition", "detail_av")],
 };
@@ -401,7 +401,7 @@ const legacyLayerGraph = {
     getNodeById(id) { return this._nodes.find((node) => node.id === id); },
 };
 const legacyLayerPlan = {
-    id: 13, type: "MiniMaxH3ChainPlan", graph: legacyLayerGraph,
+    id: 13, type: "MiniMaxH3ChainPlan|MieH3", graph: legacyLayerGraph,
     inputs: [{name: "chain_policy", link: 50}], widgets: [],
 };
 const legacyLayerBase = {

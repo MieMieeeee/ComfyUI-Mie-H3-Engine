@@ -9,6 +9,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 try:
+    from .fork_identity import type_alias_set, type_aliases
+except ImportError:
+    from fork_identity import type_alias_set, type_aliases
+
+try:
     from .asset_store import RunAssetStore
     from .chain_layout import state_root, output_path
 except ImportError:  # Standalone unit tests import this module without a package.
@@ -46,9 +51,14 @@ except ImportError:  # Standalone unit tests import this module without a packag
     )
 
 
+# The plan node is recognised in saved prompts and saved workflows. Both
+# this pack's type name and the upstream one are accepted, because a
+# document written before the rename - or executed against the upstream
+# pack - carries the upstream name.
 PLAN_NODE_TYPE = "MiniMaxH3ChainPlan"
 MODERN_PLAN_NODE_TYPE = "MiniMaxH3ChainPlanModern"
-PLAN_NODE_TYPES = (PLAN_NODE_TYPE, MODERN_PLAN_NODE_TYPE)
+PLAN_NODE_TYPES = type_alias_set(PLAN_NODE_TYPE, MODERN_PLAN_NODE_TYPE)
+MODERN_PLAN_NODE_TYPES = type_aliases(MODERN_PLAN_NODE_TYPE)
 PLAN_WIDGET_NAMES = (
     "plan_json",
     "run_name",
@@ -196,7 +206,7 @@ def _workflow_inputs(document: Any, run_name: str) -> dict[str, Any]:
     if selected is None:
         return {}
     plan_type, selected = selected
-    if plan_type == MODERN_PLAN_NODE_TYPE:
+    if plan_type in MODERN_PLAN_NODE_TYPES:
         if (len(selected) < len(MODERN_PLAN_WIDGET_NAMES)
                 or selected[5] not in ("video", "frames")
                 or selected[6] not in ("disabled", "center")):

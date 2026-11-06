@@ -194,7 +194,7 @@ with tempfile.TemporaryDirectory() as temporary:
     assert "audio_tracks" not in chain.MiniMaxH3ProjectAssetManager().build("catalog")[3]
     store.delete("catalog", ids["vocals"])
 
-    assert chain.CHAIN_NODE_CLASS_MAPPINGS["MiniMaxH3AudioTracks"] is chain.MiniMaxH3AudioTracks
+    assert chain.CHAIN_NODE_CLASS_MAPPINGS["MiniMaxH3AudioTracks|MieH3"] is chain.MiniMaxH3AudioTracks
     node_source, status = chain.MiniMaxH3AudioTracks().build(
         full_mix=audio(0.3), vocals=vocal_audio)
     assert "lip-sync=vocals" in status

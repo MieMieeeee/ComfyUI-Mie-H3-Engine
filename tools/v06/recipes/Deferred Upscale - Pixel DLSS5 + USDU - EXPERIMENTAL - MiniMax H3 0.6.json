@@ -3,7 +3,7 @@
   "nodes": [
     {
       "key": "manager",
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "settings": {
         "selection_json": ""
       },
@@ -11,7 +11,7 @@
     },
     {
       "key": "adapter",
-      "type": "MiniMaxH3ChainUpscaleAdapter",
+      "type": "MiniMaxH3ChainUpscaleAdapter|MieH3",
       "settings": {
         "profile": "h3_pixel_dlss5",
         "backend": "pixel",
@@ -39,7 +39,7 @@
     },
     {
       "key": "current",
-      "type": "MiniMaxH3ChainUpscalePixelCurrent",
+      "type": "MiniMaxH3ChainUpscalePixelCurrent|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -124,7 +124,7 @@
     },
     {
       "key": "override",
-      "type": "MiniMaxH3UpscaleReferencePromptOverride",
+      "type": "MiniMaxH3UpscaleReferencePromptOverride|MieH3",
       "settings": {
         "prompt_override": "",
         "disabled_tags": ""
@@ -133,7 +133,7 @@
     },
     {
       "key": "conditioning",
-      "type": "MiniMaxH3ChainUpscalePixelConditioning",
+      "type": "MiniMaxH3ChainUpscalePixelConditioning|MieH3",
       "settings": {
         "missing_cache": "text_only",
         "motion_ref_mode": "exclude_video_keep_audio",
@@ -261,7 +261,7 @@
     },
     {
       "key": "save",
-      "type": "MiniMaxH3ChainUpscaleSegmentSave",
+      "type": "MiniMaxH3ChainUpscaleSegmentSave|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -276,7 +276,7 @@
     },
     {
       "key": "end",
-      "type": "MiniMaxH3ChainUpscaleLoopEnd",
+      "type": "MiniMaxH3ChainUpscaleLoopEnd|MieH3",
       "settings": {},
       "inputs": {
         "flow": [
@@ -299,7 +299,7 @@
     },
     {
       "key": "assemble",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "h3_pixel_upscaled_%date:yyyy-MM-dd%",

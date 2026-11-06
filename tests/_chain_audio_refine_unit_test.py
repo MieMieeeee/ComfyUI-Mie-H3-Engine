@@ -111,7 +111,7 @@ class RefineTest(unittest.TestCase):
             refine.refinement_mask({}, {})
 
     def test_registered_schema(self):
-        self.assertIs(package.NODE_CLASS_MAPPINGS["MiniMaxH3ChainAudioRefineSampler"],
+        self.assertIs(package.NODE_CLASS_MAPPINGS["MiniMaxH3ChainAudioRefineSampler|MieH3"],
                       refine.MiniMaxH3ChainAudioRefineSampler)
         schema = refine.MiniMaxH3ChainAudioRefineSampler.INPUT_TYPES()["required"]
         self.assertIn("context_latent", schema)

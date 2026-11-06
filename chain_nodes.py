@@ -41,6 +41,7 @@ from typing import Any
 
 import folder_paths
 
+from .fork_identity import add_suffix
 from .chain_layout import (
     create_project, output_path as layout_output_path,
     resolve_path as layout_path, state_root as layout_state_root,
@@ -98,7 +99,22 @@ from .nodes import (
     _resize,
     _streams_from_latent,
 )
+from .fork_identity import add_suffix, type_alias_set, type_aliases
 from .motion_context_upstream import apply_motion_context
+
+# Node type names this pack accepts in saved documents. A prompt, manifest
+# or workflow written before the rename carries the upstream name, and a
+# workflow executed against the upstream pack carries it too, so both are
+# accepted everywhere a document is inspected.
+_PROJECT_ASSET_NODE_TYPES = type_alias_set(
+    "MiniMaxH3ProjectAssetManager", "MiniMaxH3ProjectAssetTree")
+_PLAN_NODE_TYPES = type_alias_set(
+    "MiniMaxH3ChainPlan", "MiniMaxH3ChainPlanModern")
+_REFERENCE_VIDEO_NODE_TYPES = type_alias_set(
+    "MiniMaxH3ScheduledReferenceToVideo", "MiniMaxH3TaggedReferenceToVideo")
+_CHAPTER_DELIVERY_NODE_TYPES = type_aliases("MiniMaxH3ChainChapterDelivery")
+_CHAIN_LOOP_END_NODE_TYPES = type_aliases("MiniMaxH3ChainLoopEnd")
+
 from .chapter_resolution import (
     normalize_resolution, scene_resolution, saved_resolution,
     apply_chapter_resolutions, common_saved_resolution,
@@ -1190,9 +1206,7 @@ def _downstream_reference_compliance(
                     for value in inputs.values()):
                 continue
             visited.add(str(node_id))
-            if node.get("class_type") in (
-                    "MiniMaxH3ScheduledReferenceToVideo",
-                    "MiniMaxH3TaggedReferenceToVideo"):
+            if node.get("class_type") in _REFERENCE_VIDEO_NODE_TYPES:
                 try:
                     modes.append(_reference_compliance_mode(
                         inputs.get(
@@ -1233,7 +1247,8 @@ def _has_downstream_review_gate(dynprompt: Any, unique_id: Any) -> bool:
         except Exception:
             continue
         if (not isinstance(node, dict)
-                or node.get("class_type") != "MiniMaxH3ChainReview"):
+                or node.get("class_type") not in type_aliases(
+                        "MiniMaxH3ChainReview")):
             continue
         inputs = node.get("inputs")
         link = inputs.get("segment") if isinstance(inputs, dict) else None
@@ -10038,13 +10053,12 @@ def _matching_plan_node_ids(api_prompt: Any,
     exact: list[tuple[str, dict[str, Any]]] = []
     for node_id, node in document.items():
         if (isinstance(node, dict) and
-                node.get("class_type") in ("MiniMaxH3ProjectAssetManager",
-                                           "MiniMaxH3ProjectAssetTree")):
+                node.get("class_type") in _PROJECT_ASSET_NODE_TYPES):
             inputs = node.get("inputs")
             if isinstance(inputs, dict):
                 inputs["ownership_json"] = ""
-        if (not isinstance(node, dict) or node.get("class_type") not in
-                ("MiniMaxH3ChainPlan", "MiniMaxH3ChainPlanModern")):
+        if (not isinstance(node, dict)
+                or node.get("class_type") not in _PLAN_NODE_TYPES):
             continue
         inputs = node.get("inputs")
         if not isinstance(inputs, dict):
@@ -10069,7 +10083,7 @@ def _strip_workflow_ownership(value: Any) -> None:
         return
     if not isinstance(value, dict):
         return
-    if value.get("type") in ("MiniMaxH3ProjectAssetManager", "MiniMaxH3ProjectAssetTree"):
+    if value.get("type") in _PROJECT_ASSET_NODE_TYPES:
         widgets = value.get("widgets_values")
         if isinstance(widgets, list) and len(widgets) > 5:
             widgets[5] = ""
@@ -14049,7 +14063,8 @@ class MiniMaxH3TaggedReferenceToVideo:
                 } for anchor in hybrid_anchors],
             }
             semantic = graph.node(
-                "MiniMaxH3SemanticAnchorConditioning", "SemanticAnchors")
+                add_suffix("MiniMaxH3SemanticAnchorConditioning"),
+                "SemanticAnchors")
             semantic.set_input("positive", positive)
             semantic.set_input("clip", clip)
             semantic.set_input("prompt", compiled)
@@ -14439,13 +14454,14 @@ class MiniMaxH3CurrentTaggedReferenceScene:
         settings = _tagged_scene_options(options)
         graph = GraphBuilder()
 
-        current = graph.node("MiniMaxH3ChainCurrent", "CurrentScene")
+        current = graph.node(
+            add_suffix("MiniMaxH3ChainCurrent"), "CurrentScene")
         current.set_input("state", state)
         current.set_input(
             "align_audio_reference", settings["align_audio_reference"])
 
         tagged = graph.node(
-            "MiniMaxH3TaggedReferenceToVideo", "TaggedRef2VA")
+            add_suffix("MiniMaxH3TaggedReferenceToVideo"), "TaggedRef2VA")
         for key, value in (
                 ("clip", clip), ("vae", vae), ("audio_vae", audio_vae),
                 ("references", references), ("state", current.out(0)),
@@ -14462,7 +14478,7 @@ class MiniMaxH3CurrentTaggedReferenceScene:
             tagged.set_input(key, value)
 
         pack = graph.node(
-            "MiniMaxH3CurrentTaggedScenePack", "SceneData")
+            add_suffix("MiniMaxH3CurrentTaggedScenePack"), "SceneData")
         for key, value in (
                 ("state", current.out(0)),
                 ("clip_index", current.out(1)),
@@ -22291,7 +22307,8 @@ class MiniMaxH3ChainLoopEnd:
             parent_id = value[0]
             display_id = dynprompt.get_display_node_id(parent_id)
             display_node = dynprompt.get_node(display_id)
-            if display_node["class_type"] != "MiniMaxH3ChainLoopEnd":
+            if display_node["class_type"] not in type_aliases(
+                        "MiniMaxH3ChainLoopEnd"):
                 parent_ids.append(display_id)
             if parent_id not in upstream:
                 upstream[parent_id] = []
@@ -22349,7 +22366,8 @@ class MiniMaxH3ChainLoopEnd:
 
         open_node = str(flow[0])
         start_info = dynprompt.get_node(open_node)
-        if start_info["class_type"] != "MiniMaxH3ChainLoopStart":
+        if start_info["class_type"] not in type_aliases(
+                        "MiniMaxH3ChainLoopStart"):
             raise ValueError("H3 Chain Loop End must receive flow from H3 Chain Loop Start.")
         contained: dict[str, bool] = {unique_id: True, open_node: True}
         self._collect_contained(open_node, upstream, contained)
@@ -27046,10 +27064,12 @@ def _review_partial_current_chapter(
         for node_id, name in consumers.get(parent, []):
             node = prompt[node_id]
             kind = node.get("class_type")
-            if kind == "MiniMaxH3ChainChapterDelivery" and name == "manifest":
+            if (kind in _CHAPTER_DELIVERY_NODE_TYPES
+                    and name == "manifest"):
                 selections.add(toggle(node.get("inputs", {}).get("enabled", True)))
             elif (kind == "Reroute" or
-                  (kind == "MiniMaxH3ChainLoopEnd" and name == "segment")):
+                  (kind in _CHAIN_LOOP_END_NODE_TYPES
+                   and name == "segment")):
                 pending.append(node_id)
     if len(selections) > 1:
         raise ValueError(
@@ -31576,6 +31596,7 @@ CHAIN_NODE_CLASS_MAPPINGS = {
     "MiniMaxH3ChainLatentVideoAdapter": MiniMaxH3ChainLatentVideoAdapter,
     "MiniMaxH3ChainAssemble": MiniMaxH3ChainAssemble,
 }
+CHAIN_NODE_CLASS_MAPPINGS = {add_suffix(name): value for name, value in CHAIN_NODE_CLASS_MAPPINGS.items()}
 
 scope_nodes(CHAIN_NODE_CLASS_MAPPINGS)
 
@@ -31644,3 +31665,4 @@ CHAIN_NODE_DISPLAY_NAME_MAPPINGS = {
         "MiniMax H3 Full-Chain Latent Video Adapter"),
     "MiniMaxH3ChainAssemble": "MiniMax H3 Context Loop Assemble",
 }
+CHAIN_NODE_DISPLAY_NAME_MAPPINGS = {add_suffix(name): value for name, value in CHAIN_NODE_DISPLAY_NAME_MAPPINGS.items()}

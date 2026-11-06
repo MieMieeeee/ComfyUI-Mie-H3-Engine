@@ -2,7 +2,7 @@ import {app} from "../../scripts/app.js";
 import {bindNodeWheel} from "./h3_dom_wheel.mjs?v=0.7.1";
 import {api} from "../../scripts/api.js";
 
-const NODE_NAME = "MiniMaxH3ReviewRelay";
+const NODE_NAME = "MiniMaxH3ReviewRelay|MieH3";
 const ENDPOINT = "/minimax_h3_context_loop/review-relay";
 
 function element(tag, text = "") {

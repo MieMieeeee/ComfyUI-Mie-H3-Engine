@@ -242,7 +242,7 @@ def main():
                 owner_plan)
             api_prompt = {
                 "7": {
-                    "class_type": "MiniMaxH3ProjectAssetManager",
+                    "class_type": "MiniMaxH3ProjectAssetManager|MieH3",
                     "inputs": {"ownership_json": "secret proof"},
                 },
             }
@@ -251,11 +251,11 @@ def main():
             assert sanitized_prompt["7"]["inputs"]["ownership_json"] == ""
             workflow = {
                 "nodes": [{
-                    "type": "MiniMaxH3ProjectAssetManager",
+                    "type": "MiniMaxH3ProjectAssetManager|MieH3",
                     "widgets_values": ["run", "{}", "512", "mode", "", "secret"],
                 }],
                 "definitions": {"subgraphs": [{"nodes": [{
-                    "type": "MiniMaxH3ProjectAssetManager",
+                    "type": "MiniMaxH3ProjectAssetManager|MieH3",
                     "widgets_values": ["run", "{}", "512", "mode", "", "nested"],
                 }]}]},
             }

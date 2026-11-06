@@ -23,8 +23,8 @@ for (const type of RETIRED_SOURCE_AUDIO_NODES) {
     assert.equal(node.inputs[1].link, 99, "Connected legacy wires must remain visible for explicit rewiring");
     assert.match(node.inputs[1].label, /REMOVED/);
 }
-for (const type of ["MiniMaxH3SourceTimeline", "MiniMaxH3ChainExternalVideo",
-    "MiniMaxH3ReferenceVideoPrepare", "MiniMaxH3ChainPass2Prepare"]) {
+for (const type of ["MiniMaxH3SourceTimeline|MieH3", "MiniMaxH3ChainExternalVideo|MieH3",
+    "MiniMaxH3ReferenceVideoPrepare|MieH3", "MiniMaxH3ChainPass2Prepare|MieH3"]) {
     const node = {type, inputs: [{name: "source_audio", link: null}], removeInput() {throw Error("Active input removed");}};
     assert.equal(retireSourceAudioInput(node), false);
 }

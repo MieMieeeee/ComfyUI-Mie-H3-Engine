@@ -131,9 +131,9 @@ def expect_error(action, phrase):
 
 def main():
     assert chain.CHAIN_NODE_CLASS_MAPPINGS[
-        "MiniMaxH3ChainChapterDelivery"] is chain.MiniMaxH3ChainChapterDelivery
+        "MiniMaxH3ChainChapterDelivery|MieH3"] is chain.MiniMaxH3ChainChapterDelivery
     assert chain.CHAIN_NODE_CLASS_MAPPINGS[
-        "MiniMaxH3ChainChapterLoad"] is chain.MiniMaxH3ChainChapterLoad
+        "MiniMaxH3ChainChapterLoad|MieH3"] is chain.MiniMaxH3ChainChapterLoad
     schema = chain.MiniMaxH3ChainChapterDelivery.INPUT_TYPES()
     assert list(schema["required"]) == ["manifest", "enabled"]
     toggle = schema["required"]["enabled"]

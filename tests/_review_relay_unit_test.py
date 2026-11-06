@@ -171,7 +171,7 @@ async def main():
         assert parsed(await chain._list_review_relay(Request()))["reviews"] == []
         chain._ACTIVE_CANDIDATE_BATCHES.clear()
 
-    cls = chain.CHAIN_NODE_CLASS_MAPPINGS["MiniMaxH3ReviewRelay"]
+    cls = chain.CHAIN_NODE_CLASS_MAPPINGS["MiniMaxH3ReviewRelay|MieH3"]
     assert cls.INPUT_TYPES() == {"required": {}} and cls.RETURN_TYPES == ()
     assert not getattr(cls, "OUTPUT_NODE", False) and cls().noop() == ()
     print("Review relay: memory-only discovery, 10 candidates, uint64 seeds, original ownership/branch, double decisions and ended jobs pass")

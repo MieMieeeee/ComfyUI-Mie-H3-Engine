@@ -45,10 +45,10 @@ import {
 } from "./h3_plan_restore_core.mjs?v=0.7.22";
 import {projectMutationOptions} from "./h3_project_ownership.mjs?v=0.7.6";
 
-const NODE_NAME = "MiniMaxH3ChainCheckpointManager";
-const PLAN_NAME = "MiniMaxH3ChainPlan";
-const PLAN_NAMES = new Set([PLAN_NAME, "MiniMaxH3ChainPlanModern"]);
-const START_NAME = "MiniMaxH3ChainLoopStart";
+const NODE_NAME = "MiniMaxH3ChainCheckpointManager|MieH3";
+const PLAN_NAME = "MiniMaxH3ChainPlan|MieH3";
+const PLAN_NAMES = new Set([PLAN_NAME, "MiniMaxH3ChainPlanModern|MieH3"]);
+const START_NAME = "MiniMaxH3ChainLoopStart|MieH3";
 const RUN_PROPERTY = "h3_checkpoint_manager_run";
 const SCENE_PROPERTY = "h3_checkpoint_manager_scene";
 const REVISION_PROPERTY = "h3_checkpoint_manager_revision";
@@ -92,7 +92,7 @@ function upstreamPlanNode(start, includeStudio = false) {
         if (!current || seen.has(current)) continue;
         seen.add(current);
         if (current !== start && (PLAN_NAMES.has(nodeType(current))
-                || (includeStudio && nodeType(current) === "MiniMaxH3ChainPlanStudio"))) return current;
+                || (includeStudio && nodeType(current) === "MiniMaxH3ChainPlanStudio|MieH3"))) return current;
         for (const input of current.inputs ?? []) {
             if (input.link == null) continue;
             const link = graphLink(current.graph, input.link);
@@ -791,12 +791,12 @@ function mount(node) {
         if (!plan) return null; // Never guess from an unrelated workflow/tab.
         try {
             const authored = JSON.parse(String(widget(plan, "plan_json")?.value ?? ""));
-            const branch = nodeType(plan) === "MiniMaxH3ChainPlanStudio"
+            const branch = nodeType(plan) === "MiniMaxH3ChainPlanStudio|MieH3"
                 ? widget(plan, "working_branch_id")?.value ?? authored._branch_id ?? "main"
                 : authored._branch_id ?? "main";
             if (!/^(main|[0-9a-f]{32})$/.test(branch)) return null;
-            const studio = nodeType(plan) === "MiniMaxH3ChainPlanStudio" ? plan
-                : connectedNode(plan, "MiniMaxH3ChainPlanStudio");
+            const studio = nodeType(plan) === "MiniMaxH3ChainPlanStudio|MieH3" ? plan
+                : connectedNode(plan, "MiniMaxH3ChainPlanStudio|MieH3");
             return {run:String(widget(plan, "run_name")?.value ?? "").trim(), branch,
                 label:studio && (studio === plan || upstreamPlanNode(studio) === plan) ? "In Plan Studio" : "In connected Plan"};
         } catch { return null; }

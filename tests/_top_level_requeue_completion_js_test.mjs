@@ -11,14 +11,14 @@ import {activeSceneFromOutput} from "../web/h3_chain_cancel_reroll_core.mjs";
 const source = fs.readFileSync(new URL("../web/h3_chain_top_level_requeue.js", import.meta.url), "utf8");
 function harness({startClip = 1, sceneRange = "", endClip = 3, total = 3, nested = false, branchId = "main"} = {}) {
     let extension, scene = startClip, queued = 0, promptId = "initial";
-    const start = {id: 1, comfyClass: "MiniMaxH3ChainLoopStart", widgets: [
+    const start = {id: 1, comfyClass: "MiniMaxH3ChainLoopStart|MieH3", widgets: [
         {name: "start_clip", value: startClip}, {name: "scene_range", value: sceneRange},
     ]};
-    const plan = {id: 2, comfyClass: "MiniMaxH3ChainPlan", widgets: [
+    const plan = {id: 2, comfyClass: "MiniMaxH3ChainPlan|MieH3", widgets: [
         {name: "run_name", value: "run"}, {name: "plan_json", value: JSON.stringify({_branch_id: branchId})},
     ]};
-    const current = {id: 3, comfyClass: "MiniMaxH3ChainCurrent", inputs: [{link: 1}, {link: 2}]};
-    const end = {id: 4, comfyClass: "MiniMaxH3ChainLoopEnd", inputs: [{link: 3}]};
+    const current = {id: 3, comfyClass: "MiniMaxH3ChainCurrent|MieH3", inputs: [{link: 1}, {link: 2}]};
+    const end = {id: 4, comfyClass: "MiniMaxH3ChainLoopEnd|MieH3", inputs: [{link: 3}]};
     const graph = {
         nodes: [start, plan, current, end],
         links: {1: {origin_id: 1}, 2: {origin_id: 2}, 3: {origin_id: 3}},
@@ -177,8 +177,8 @@ for (const invalid of [{run_name: "other"}, {scene: 2}, {end_clip: 4},
 }
 const unrelated = harness();
 await unrelated.advance(); await unrelated.advance();
-const otherCurrent = {id: 30, comfyClass: "MiniMaxH3ChainCurrent", inputs: [], graph: unrelated.graph};
-const otherEnd = {id: 40, comfyClass: "MiniMaxH3ChainLoopEnd", inputs: [{link: 30}], graph: unrelated.graph};
+const otherCurrent = {id: 30, comfyClass: "MiniMaxH3ChainCurrent|MieH3", inputs: [], graph: unrelated.graph};
+const otherEnd = {id: 40, comfyClass: "MiniMaxH3ChainLoopEnd|MieH3", inputs: [{link: 30}], graph: unrelated.graph};
 unrelated.graph.nodes.push(otherCurrent, otherEnd);
 unrelated.graph.links[30] = {origin_id: 30};
 unrelated.emitEnd({h3_chain_top_level_complete: [{run_name: "run", scene: 3, end_clip: 3, workflow_fingerprint: "fp"}]}, "40");
@@ -205,7 +205,7 @@ for (const change of [
 const replaced = harness();
 await replaced.advance(); await replaced.advance(); replaced.finished();
 replaced.app.extensionManager.workflow.activeWorkflow = null;
-const fresh = {id: 1, comfyClass: "MiniMaxH3ChainLoopStart", widgets: [
+const fresh = {id: 1, comfyClass: "MiniMaxH3ChainLoopStart|MieH3", widgets: [
     {name: "start_clip", value: 3}, {name: "scene_range", value: ""},
 ], graph: replaced.graph};
 replaced.graph.nodes[0] = fresh;

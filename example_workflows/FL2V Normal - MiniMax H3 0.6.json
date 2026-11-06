@@ -171,7 +171,7 @@
     },
     {
       "id": 6,
-      "type": "MiniMaxH3ChainCurrent",
+      "type": "MiniMaxH3ChainCurrent|MieH3",
       "pos": [
         2970,
         180
@@ -290,7 +290,7 @@
       ],
       "title": "Current Scene",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainCurrent"
+        "Node name for S&R": "MiniMaxH3ChainCurrent|MieH3"
       },
       "widgets_values": [
         false
@@ -298,7 +298,7 @@
     },
     {
       "id": 7,
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "pos": [
         2990,
         3272
@@ -336,7 +336,7 @@
       ],
       "title": "RECOVERY • Assemble Final Video",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainAssemble"
+        "Node name for S&R": "MiniMaxH3ChainAssemble|MieH3"
       },
       "widgets_values": [
         "plan",
@@ -490,7 +490,7 @@
     },
     {
       "id": 10,
-      "type": "MiniMaxH3ChainContext",
+      "type": "MiniMaxH3ChainContext|MieH3",
       "pos": [
         4230,
         180
@@ -579,7 +579,7 @@
       ],
       "title": "Apply Scene Context",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainContext"
+        "Node name for S&R": "MiniMaxH3ChainContext|MieH3"
       },
       "widgets_values": []
     },
@@ -860,7 +860,7 @@
     },
     {
       "id": 17,
-      "type": "MiniMaxH3LoopTrim",
+      "type": "MiniMaxH3LoopTrim|MieH3",
       "pos": [
         5310,
         180
@@ -929,7 +929,7 @@
       ],
       "title": "Trim Carried Overlap",
       "properties": {
-        "Node name for S&R": "MiniMaxH3LoopTrim"
+        "Node name for S&R": "MiniMaxH3LoopTrim|MieH3"
       },
       "widgets_values": [
         0,
@@ -940,7 +940,7 @@
     },
     {
       "id": 18,
-      "type": "MiniMaxH3ChainSegmentSave",
+      "type": "MiniMaxH3ChainSegmentSave|MieH3",
       "pos": [
         5310,
         530
@@ -1000,13 +1000,13 @@
       ],
       "title": "Save Segment + Checkpoint",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainSegmentSave"
+        "Node name for S&R": "MiniMaxH3ChainSegmentSave|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 19,
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "pos": [
         6830,
         180
@@ -1044,7 +1044,7 @@
       ],
       "title": "Assemble Final Video",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainAssemble"
+        "Node name for S&R": "MiniMaxH3ChainAssemble|MieH3"
       },
       "widgets_values": [
         "plan",
@@ -1099,7 +1099,7 @@
     },
     {
       "id": 21,
-      "type": "MiniMaxH3ChainLoopEnd",
+      "type": "MiniMaxH3ChainLoopEnd|MieH3",
       "pos": [
         5920,
         1160
@@ -1164,7 +1164,7 @@
       ],
       "title": "Loop End",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainLoopEnd"
+        "Node name for S&R": "MiniMaxH3ChainLoopEnd|MieH3"
       },
       "widgets_values": [
         "off",
@@ -1173,7 +1173,7 @@
     },
     {
       "id": 22,
-      "type": "MiniMaxH3ChainPlanModern",
+      "type": "MiniMaxH3ChainPlanModern|MieH3",
       "pos": [
         80,
         862
@@ -1238,7 +1238,7 @@
       ],
       "title": "Production Plan",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainPlanModern"
+        "Node name for S&R": "MiniMaxH3ChainPlanModern|MieH3"
       },
       "widgets_values": [
         "{\n  \"defaults\": {\n    \"steps\": 20\n  },\n  \"shots\": [\n    {\n      \"id\": \"arrival_to_delivery\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] <Picture 1> aligns with 0.00 seconds and <Picture 2> aligns with the final target frame. Begin from the exact adult courier, mustard waterproof jacket, teal trousers, charcoal helmet, olive messenger bag, silver bicycle, parcel, glass entrance, wet paving, lighting, lens, and landscape composition in <Picture 1>. In one continuous shot he walks the bicycle through the doorway, turns toward the potting table, and places the parcel down. Progressively match the courier's final pose, bicycle position, parcel placement, warm greenhouse bulbs, plant geometry, reflections, and framing in <Picture 2>. Reach <Picture 2> only on the final frame; do not freeze early, cut, or introduce another person.\\n\\noverall_soundscape:\\nRain on glass, tire roll, freewheel ticks, footsteps, door hinge, jacket rustle, and the parcel touching wood follow the visible action continuously.\\n\\nnon_diegetic_music:\\nNo non-diegetic music.\",\n      \"length\": 362,\n      \"steps\": 20,\n      \"seed\": \"6101\"\n    },\n    {\n      \"id\": \"delivery_to_arrival\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] Continue from the incoming greenhouse delivery context. The carried overlap already contains the completed parcel placement; begin new action only after it. The courier checks his bicycle, turns it smoothly toward the open door, and walks back onto the wet paving. Preserve his exact identity and wardrobe, the bicycle, greenhouse layout, parcel remaining on the table, camera height, and screen direction. During the final seconds, progressively align the doorway, exterior reflections, courier stance, bicycle position, and composition with <Picture 1>, reaching that picture only on the final frame without a cut or early hold.\\n\\noverall_soundscape:\\nContinue greenhouse room tone and rain, then add the bicycle freewheel, footsteps, door hinge, and brighter exterior rain as he exits.\\n\\nnon_diegetic_music:\\nNo non-diegetic music.\",\n      \"length\": 362,\n      \"steps\": 20,\n      \"seed\": \"6102\"\n    }\n  ]\n}",
@@ -1257,7 +1257,7 @@
     },
     {
       "id": 23,
-      "type": "MiniMaxH3ChainManifestLoad",
+      "type": "MiniMaxH3ChainManifestLoad|MieH3",
       "pos": [
         2420,
         3272
@@ -1307,7 +1307,7 @@
       ],
       "title": "RECOVERY • Load Saved Clips",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainManifestLoad"
+        "Node name for S&R": "MiniMaxH3ChainManifestLoad|MieH3"
       },
       "widgets_values": []
     },
@@ -1350,7 +1350,7 @@
     },
     {
       "id": 25,
-      "type": "MiniMaxH3ChainLoopStart",
+      "type": "MiniMaxH3ChainLoopStart|MieH3",
       "pos": [
         2420,
         2876
@@ -1407,7 +1407,7 @@
       ],
       "title": "Loop Start",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainLoopStart"
+        "Node name for S&R": "MiniMaxH3ChainLoopStart|MieH3"
       },
       "widgets_values": [
         1,
@@ -1417,7 +1417,7 @@
     },
     {
       "id": 26,
-      "type": "MiniMaxH3ChainFrameIndexSwitch",
+      "type": "MiniMaxH3ChainFrameIndexSwitch|MieH3",
       "pos": [
         2970,
         1420
@@ -1500,7 +1500,7 @@
       ],
       "title": "Chain Frame Index Switch",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainFrameIndexSwitch"
+        "Node name for S&R": "MiniMaxH3ChainFrameIndexSwitch|MieH3"
       },
       "widgets_values": [
         1
@@ -1508,7 +1508,7 @@
     },
     {
       "id": 27,
-      "type": "MiniMaxH3ChainFirstSceneImage",
+      "type": "MiniMaxH3ChainFirstSceneImage|MieH3",
       "pos": [
         3580,
         180
@@ -1565,13 +1565,13 @@
       ],
       "title": "Chain First Scene Image",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainFirstSceneImage"
+        "Node name for S&R": "MiniMaxH3ChainFirstSceneImage|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 28,
-      "type": "MiniMaxH3ChainReview",
+      "type": "MiniMaxH3ChainReview|MieH3",
       "pos": [
         5920,
         180
@@ -1621,7 +1621,7 @@
       ],
       "title": "Review Candidates",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainReview"
+        "Node name for S&R": "MiniMaxH3ChainReview|MieH3"
       },
       "widgets_values": [
         true,
@@ -1674,7 +1674,7 @@
     },
     {
       "id": 30,
-      "type": "MiniMaxH3ChainScenePromptEditor",
+      "type": "MiniMaxH3ChainScenePromptEditor|MieH3",
       "pos": [
         1200,
         180
@@ -1705,13 +1705,13 @@
       ],
       "title": "Scene Prompts",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainScenePromptEditor"
+        "Node name for S&R": "MiniMaxH3ChainScenePromptEditor|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 31,
-      "type": "MiniMaxH3ChainPreflight",
+      "type": "MiniMaxH3ChainPreflight|MieH3",
       "pos": [
         2420,
         2332
@@ -1771,7 +1771,7 @@
       ],
       "title": "Chain Preflight",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainPreflight"
+        "Node name for S&R": "MiniMaxH3ChainPreflight|MieH3"
       },
       "widgets_values": [
         1,
@@ -1781,7 +1781,7 @@
     },
     {
       "id": 32,
-      "type": "MiniMaxH3GenerationProfile",
+      "type": "MiniMaxH3GenerationProfile|MieH3",
       "pos": [
         80,
         610
@@ -1816,7 +1816,7 @@
       ],
       "title": "Generation Profile",
       "properties": {
-        "Node name for S&R": "MiniMaxH3GenerationProfile"
+        "Node name for S&R": "MiniMaxH3GenerationProfile|MieH3"
       },
       "widgets_values": [
         "Visual continuity",

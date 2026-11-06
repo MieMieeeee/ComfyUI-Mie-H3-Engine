@@ -31,10 +31,10 @@ import {projectMutationOptions} from "./h3_project_ownership.mjs?v=0.7.6";
 import {appendedReviewPrompts, appendedReviewScene, continueAppendedReview} from "./h3_chain_review_append.mjs?v=0.7.1";
 import {submitWithPromptIdentity} from "./h3_chain_top_level_requeue_coordinator.mjs?v=0.7.26";
 
-const NODE_NAME = "MiniMaxH3ChainReview";
-const PLAN_NAME = "MiniMaxH3ChainPlan";
-const PLAN_NAMES = new Set([PLAN_NAME, "MiniMaxH3ChainPlanModern"]);
-const PROJECT_ASSET_MANAGER_NODES = new Set(["MiniMaxH3ProjectAssetManager", "MiniMaxH3ProjectAssetTree"]);
+const NODE_NAME = "MiniMaxH3ChainReview|MieH3";
+const PLAN_NAME = "MiniMaxH3ChainPlan|MieH3";
+const PLAN_NAMES = new Set([PLAN_NAME, "MiniMaxH3ChainPlanModern|MieH3"]);
+const PROJECT_ASSET_MANAGER_NODES = new Set(["MiniMaxH3ProjectAssetManager|MieH3", "MiniMaxH3ProjectAssetTree|MieH3"]);
 const VIDEO_HEIGHT_PROPERTY = "h3_chain_review_video_height";
 const DEFAULT_VIDEO_HEIGHT = 300;
 const MIN_VIDEO_HEIGHT = 140;
@@ -383,8 +383,8 @@ function upstreamPlanNode(reviewNode) {
 
 function connectedReviewPlan(reviewNode) {
     const source = findUpstreamNode(reviewNode,
-        new Set([...PLAN_NAMES, "MiniMaxH3ChainPlanStudio"]));
-    if (nodeType(source) === "MiniMaxH3ChainPlanStudio"
+        new Set([...PLAN_NAMES, "MiniMaxH3ChainPlanStudio|MieH3"]));
+    if (nodeType(source) === "MiniMaxH3ChainPlanStudio|MieH3"
             && source.inputs?.some(input => input.name === "plan" && input.link != null)) {
         return findUpstreamNode(source, PLAN_NAMES);
     }
@@ -396,7 +396,7 @@ function widgetByName(node, name) {
 }
 
 function reviewPlanBranch(source, plan) {
-    return nodeType(source) === "MiniMaxH3ChainPlanStudio"
+    return nodeType(source) === "MiniMaxH3ChainPlanStudio|MieH3"
         ? widgetByName(source, "working_branch_id")?.value ?? plan._branch_id ?? "main"
         : plan._branch_id ?? "main";
 }
@@ -563,8 +563,8 @@ function checkpointRevisionLabel(revision) {
 }
 
 function prepareResume(reviewNode, nextIndex, endIndex = null, clipCount = null) {
-    const startNode = findUpstreamNode(reviewNode, "MiniMaxH3ChainLoopStart") ??
-        allNodes(appRootGraph()).find((item) => nodeType(item) === "MiniMaxH3ChainLoopStart");
+    const startNode = findUpstreamNode(reviewNode, "MiniMaxH3ChainLoopStart|MieH3") ??
+        allNodes(appRootGraph()).find((item) => nodeType(item) === "MiniMaxH3ChainLoopStart|MieH3");
     const widget = startNode?.widgets?.find((item) => item.name === "start_clip");
     if (!widget) return false;
     widget.value = nextIndex;
@@ -590,7 +590,7 @@ function prepareResume(reviewNode, nextIndex, endIndex = null, clipCount = null)
 function appendedReviewIntent(node, review) {
     if (Number(review.clip_index) !== Number(review.clip_count)
             || review.scene_range_explicit !== false) return null;
-    const start = findUpstreamNode(node, "MiniMaxH3ChainLoopStart");
+    const start = findUpstreamNode(node, "MiniMaxH3ChainLoopStart|MieH3");
     const source = start && connectedReviewPlan(start);
     const planWidget = widgetByName(source, "plan_json");
     const startWidget = widgetByName(start, "start_clip");
@@ -625,7 +625,7 @@ function appendedReviewIntent(node, review) {
                     || appendedReviewScene(review, approved, rangeWidget.value) !== nextIndex
                     || app.extensionManager?.workflow?.activeWorkflow !== workflow
                     || !allNodes(graph).includes(node)
-                    || findUpstreamNode(node, "MiniMaxH3ChainLoopStart") !== start
+                    || findUpstreamNode(node, "MiniMaxH3ChainLoopStart|MieH3") !== start
                     || connectedReviewPlan(start) !== source
                     || externallyControlled()
                     || planWidget.value !== approvedPlan

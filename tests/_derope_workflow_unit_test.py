@@ -20,20 +20,20 @@ def main():
         records = {n["type"]: n for n in recipe["nodes"]}
         fast = "Fast Turbo" in name
         native = "Only" in name
-        current = one(workflow, "MiniMaxH3ChainUpscaleCurrent")
+        current = one(workflow, "MiniMaxH3ChainUpscaleCurrent|MieH3")
         oracle = one(workflow, "H3JerkOracle")
         ranges = one(workflow, "H3ManualHoldMap")
-        guard = one(workflow, "MiniMaxH3ChainDeropeGuard")
-        budget = one(workflow, "MiniMaxH3ChainDeropeBudget")
+        guard = one(workflow, "MiniMaxH3ChainDeropeGuard|MieH3")
+        budget = one(workflow, "MiniMaxH3ChainDeropeBudget|MieH3")
         smear = one(workflow, "H3TimeSmear")
-        freeze = one(workflow, "MiniMaxH3ChainDeropeFreezeMask")
-        continuity = one(workflow, "MiniMaxH3ChainDeropeContinuity")
+        freeze = one(workflow, "MiniMaxH3ChainDeropeFreezeMask|MieH3")
+        continuity = one(workflow, "MiniMaxH3ChainDeropeContinuity|MieH3")
         init = one(workflow, "H3V2VInit")
         schedule = one(workflow, "H3InjectSchedule")
         sample = one(workflow, "SamplerCustomAdvanced")
         recover = one(workflow, "H3ExactRecover")
         audio_recover = one(workflow, "H3AudioRecover")
-        packed = one(workflow, "MiniMaxH3ChainRecoveredAV")
+        packed = one(workflow, "MiniMaxH3ChainRecoveredAV|MieH3")
         assert origin(workflow, oracle, "samples") == current
         assert origin(workflow, oracle, "length") == current
         assert origin(workflow, ranges, "oracle_hold_map") == oracle
@@ -59,10 +59,10 @@ def main():
         assert records["H3AudioRecover"]["settings"]["audio_source"] == "keep the original performance (safe default)"
         assert origin(workflow, origin(workflow, packed, "video_latent"), "pixels") == recover
         assert origin(workflow, origin(workflow, packed, "audio_latent"), "audio") == audio_recover
-        for kind in ("MiniMaxH3ChainUpscaleSegmentSave", "MiniMaxH3ChainUpscaleLoopEnd"):
+        for kind in ("MiniMaxH3ChainUpscaleSegmentSave|MieH3", "MiniMaxH3ChainUpscaleLoopEnd|MieH3"):
             assert origin(workflow, one(workflow, kind), "upscaled_latent") == packed
             assert origin(workflow, one(workflow, kind), "images") == recover
-        adapter = records["MiniMaxH3ChainUpscaleAdapter"]["settings"]
+        adapter = records["MiniMaxH3ChainUpscaleAdapter|MieH3"]["settings"]
         assert adapter["save_latent"] is True
         meta = json.loads(adapter["recipe_json"])
         settings = records["H3InjectSchedule"]["settings"]
@@ -73,7 +73,7 @@ def main():
         assert records["H3TimeSmear"]["settings"]["est_steps"] == steps
         previews = nodes(workflow, "PreviewAny")
         assert {origin(workflow, p, "source")["type"] for p in previews} == {
-            "MiniMaxH3ChainDeropeBudget", "H3TimeSmear"}
+            "MiniMaxH3ChainDeropeBudget|MieH3", "H3TimeSmear"}
         if native:
             assert not nodes(workflow, "MinimaxH3LatentUpscaler3D")
             encode = origin(workflow, continuity, "video_latent")

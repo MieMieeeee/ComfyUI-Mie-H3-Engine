@@ -4,7 +4,7 @@
   "nodes": [
     {
       "key": "manager",
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "settings": {
         "selection_json": ""
       },
@@ -12,7 +12,7 @@
     },
     {
       "key": "adapter",
-      "type": "MiniMaxH3ChainUpscaleAdapter",
+      "type": "MiniMaxH3ChainUpscaleAdapter|MieH3",
       "settings": {
         "profile": "h3_lms_experimental",
         "backend": "pixel",
@@ -40,7 +40,7 @@
     },
     {
       "key": "current",
-      "type": "MiniMaxH3ChainUpscalePixelCurrent",
+      "type": "MiniMaxH3ChainUpscalePixelCurrent|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -153,7 +153,7 @@
     },
     {
       "key": "guide",
-      "type": "MiniMaxH3ChainLMSGuide",
+      "type": "MiniMaxH3ChainLMSGuide|MieH3",
       "settings": {
         "prompt": "Enhance this video with sharp, crisp details while preserving a natural photorealistic appearance."
       },
@@ -283,7 +283,7 @@
     },
     {
       "key": "save",
-      "type": "MiniMaxH3ChainUpscaleSegmentSave",
+      "type": "MiniMaxH3ChainUpscaleSegmentSave|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -302,7 +302,7 @@
     },
     {
       "key": "end",
-      "type": "MiniMaxH3ChainUpscaleLoopEnd",
+      "type": "MiniMaxH3ChainUpscaleLoopEnd|MieH3",
       "settings": {},
       "inputs": {
         "flow": [
@@ -329,7 +329,7 @@
     },
     {
       "key": "assemble",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "h3_lms_experimental_%date:yyyy-MM-dd%",

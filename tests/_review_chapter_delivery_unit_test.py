@@ -29,12 +29,12 @@ class DynamicPrompt:
 
 def graph(enabled=True, prefix=''):
     return {
-        prefix + 'gate': {'class_type': 'MiniMaxH3ChainReview', 'inputs': {}},
-        prefix + 'end': {'class_type': 'MiniMaxH3ChainLoopEnd',
+        prefix + 'gate': {'class_type': 'MiniMaxH3ChainReview|MieH3', 'inputs': {}},
+        prefix + 'end': {'class_type': 'MiniMaxH3ChainLoopEnd|MieH3',
                          'inputs': {'segment': [prefix + 'gate', 0]}},
-        prefix + 'chapter': {'class_type': 'MiniMaxH3ChainChapterDelivery',
+        prefix + 'chapter': {'class_type': 'MiniMaxH3ChainChapterDelivery|MieH3',
                              'inputs': {'manifest': [prefix + 'end', 0], 'enabled': enabled}},
-        prefix + 'assemble': {'class_type': 'MiniMaxH3ChainAssemble',
+        prefix + 'assemble': {'class_type': 'MiniMaxH3ChainAssemble|MieH3',
                               'inputs': {'manifest': [prefix + 'chapter', 0]}},
     }
 

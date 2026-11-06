@@ -31,14 +31,14 @@ def main():
     assert guide == (ROOT / "example_workflows/guides" / NAME.replace(".json", ".md")).read_text()
 
     by_key = {n["key"]: n for n in recipe["nodes"]}
-    current = one(workflow, "MiniMaxH3ChainUpscaleCurrent")
+    current = one(workflow, "MiniMaxH3ChainUpscaleCurrent|MieH3")
     learned = one(workflow, "MinimaxH3LatentUpscaler3D")
     split = one(workflow, "MMH3SplitUpscale")
     separate = one(workflow, "LTXVSeparateAVLatent")
     joins = nodes(workflow, "LTXVConcatAVLatent")
     assert len(joins) == 2
     clean = origin(workflow, split, "latent")
-    saved = origin(workflow, one(workflow, "MiniMaxH3ChainUpscaleSegmentSave"), "upscaled_latent")
+    saved = origin(workflow, one(workflow, "MiniMaxH3ChainUpscaleSegmentSave|MieH3"), "upscaled_latent")
     assert clean != saved and clean in joins and saved in joins
     assert origin(workflow, clean, "video_latent") == learned
     assert origin(workflow, clean, "audio_latent") == current
@@ -46,8 +46,8 @@ def main():
     assert origin(workflow, saved, "video_latent") == separate
     assert origin(workflow, saved, "audio_latent") == current
     assert origin(workflow, one(workflow, "VAEDecode"), "samples") == separate
-    assert origin(workflow, one(workflow, "MiniMaxH3ChainUpscaleLoopEnd"), "upscaled_latent") == saved
-    assert input_socket(one(workflow, "MiniMaxH3ChainUpscaleSegmentSave"), "recovered_audio")["link"] is None
+    assert origin(workflow, one(workflow, "MiniMaxH3ChainUpscaleLoopEnd|MieH3"), "upscaled_latent") == saved
+    assert input_socket(one(workflow, "MiniMaxH3ChainUpscaleSegmentSave|MieH3"), "recovered_audio")["link"] is None
     # Separate BEFORE the second concat: passing nested AV directly would fit
     # the source audio to upstream's potentially shorter result audio length.
     assert by_key["restore_audio"]["inputs"] == {
@@ -55,13 +55,13 @@ def main():
         "audio_latent": ["n3", "source_audio_latent"],
     }
     assert by_key["join_clean"]["inputs"]["audio_latent"] == ["n3", "source_audio_latent"]
-    for forbidden in ("MiniMaxH3ChainPass2Prepare", "DisableNoise", "BasicGuider",
+    for forbidden in ("MiniMaxH3ChainPass2Prepare|MieH3", "DisableNoise", "BasicGuider",
                       "SamplerCustomAdvanced", "LoraLoaderModelOnly"):
         assert not nodes(workflow, forbidden), forbidden
     assert origin(workflow, split, "noise")["type"] == "RandomNoise"
     assert by_key["n11"]["inputs"]["noise_seed"] == ["n3", "seed"]
     assert by_key["n11"]["settings"]["control_after_generate"] == "fixed"
-    assert origin(workflow, split, "conditioning")["type"] == "H3ConditioningSyncFromLatents"
+    assert origin(workflow, split, "conditioning")["type"] == "H3ConditioningSyncFromLatents|MieH3"
     assert origin(workflow, split, "temporal_split_param")["type"] == "MMH3TemporalSplitParamsV10"
     assert origin(workflow, split, "spatial_split_param")["type"] == "MMH3SpatialSplitParamsV10"
     assert input_socket(split, "negative")["link"] is None

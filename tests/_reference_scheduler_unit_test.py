@@ -186,9 +186,9 @@ assert "must be strict, soft, or disabled" in (
 
 disabled_graph = FakeDynamicPrompt({
     "audio": {
-        "class_type": "MiniMaxH3TaggedAudioReference", "inputs": {}},
+        "class_type": "MiniMaxH3TaggedAudioReference|MieH3", "inputs": {}},
     "wrapper": {
-        "class_type": "MiniMaxH3TaggedReferenceToVideo",
+        "class_type": "MiniMaxH3TaggedReferenceToVideo|MieH3",
         "inputs": {
             "references": ["audio", 0],
             "reference_policy": "disabled",
@@ -205,7 +205,7 @@ assert "skipped because reference policy is disabled" in skipped_status
 
 disabled_picture_graph = FakeDynamicPrompt({
     "picture": {
-        "class_type": "MiniMaxH3TaggedPictureReference", "inputs": {}},
+        "class_type": "MiniMaxH3TaggedPictureReference|MieH3", "inputs": {}},
     "wrapper": disabled_graph.nodes["wrapper"] | {
         "inputs": {
             "references": ["picture", 0],
@@ -246,7 +246,7 @@ assert "Reference schedule ignored" in malformed_summary
 soft_graph = FakeDynamicPrompt({
     "audio": disabled_graph.nodes["audio"],
     "wrapper": {
-        "class_type": "MiniMaxH3TaggedReferenceToVideo",
+        "class_type": "MiniMaxH3TaggedReferenceToVideo|MieH3",
         "inputs": {
             "references": ["audio", 0],
             "reference_policy": "soft",
@@ -1022,7 +1022,7 @@ try:
     merged_graph = merged["expand"]
     assert set(merged_graph) == {"CurrentScene", "TaggedRef2VA", "SceneData"}
     assert merged_graph["CurrentScene"]["class_type"] == (
-        "MiniMaxH3ChainCurrent")
+        "MiniMaxH3ChainCurrent|MieH3")
     assert merged_graph["CurrentScene"]["inputs"] == {
         "state": modern_state,
         "align_audio_reference": True,
@@ -1509,7 +1509,7 @@ else:
     raise AssertionError("invalid external plan JSON bypassed Plan validation")
 
 gate_node = next(node for node in i2va_workflow["nodes"]
-                 if node.get("type") == "MiniMaxH3ChainFirstSceneImage")
+                 if node.get("type") == "MiniMaxH3ChainFirstSceneImage|MieH3")
 assert gate_node["inputs"][0]["name"] == "state"
 assert gate_node["inputs"][1]["name"] == "image"
 opening_image = object()

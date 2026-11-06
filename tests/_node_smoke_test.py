@@ -176,7 +176,7 @@ def main():
     patch_layout = sys.modules["h3mc_pkg.patch_layout"]
     patch_payload = sys.modules["h3mc_pkg.patch_payload"]
     assert pkg.NODE_CLASS_MAPPINGS
-    assert "MiniMaxH3ContexLoopSeamProbe" in pkg.NODE_CLASS_MAPPINGS
+    assert "MiniMaxH3ContexLoopSeamProbe|MieH3" in pkg.NODE_CLASS_MAPPINGS
     assert "MiniMaxH3MotionContextSeamProbe" not in pkg.NODE_CLASS_MAPPINGS
     assert "MiniMaxH3VisualContextLateRevealModelPatch" not in (
         pkg.NODE_CLASS_MAPPINGS)

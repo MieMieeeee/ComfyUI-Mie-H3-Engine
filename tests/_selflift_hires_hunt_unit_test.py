@@ -22,7 +22,7 @@ class HiresHuntTests(unittest.IsolatedAsyncioTestCase):
             "low": {"class_type": "UNETLoader", "inputs": {"unet_name": "base.safetensors"}},
             "high": {"class_type": "UNETLoader", "inputs": {"unet_name": high}},
             "high_lora": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["high", 0], "strength_model": strength}},
-            "hunt": {"class_type": "MiniMaxH3SelfLiftSeedHunt", "inputs": own},
+            "hunt": {"class_type": "MiniMaxH3SelfLiftSeedHunt|MieH3", "inputs": own},
         }
 
     async def run_node(self, high=None, prompt=None, **kwargs):

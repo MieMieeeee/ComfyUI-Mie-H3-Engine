@@ -76,8 +76,8 @@ async function browserChecks() {
     try {
         await import("/web/h3_chain_plan_editor.js");
         const {MODERN_PLAN_WIDGET_NAMES} = await import("/web/h3_plan_upgrade_core.mjs");
-        for (const type of ["MiniMaxH3ChainPlan", "MiniMaxH3ChainPlanModern"]) {
-            const modern = type === "MiniMaxH3ChainPlanModern";
+        for (const type of ["MiniMaxH3ChainPlan|MieH3", "MiniMaxH3ChainPlanModern|MieH3"]) {
+            const modern = type === "MiniMaxH3ChainPlanModern|MieH3";
             class Node {
                 constructor(saved) {
                     this.id = graph._nodes.length + 1; this.type = this.comfyClass = type;

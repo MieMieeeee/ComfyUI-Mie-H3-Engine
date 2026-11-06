@@ -6,7 +6,7 @@
   "nodes": [
     {
       "id": 1,
-      "type": "MiniMaxH3ChainScenePromptEditor",
+      "type": "MiniMaxH3ChainScenePromptEditor|MieH3",
       "pos": [
         1200,
         180
@@ -37,7 +37,7 @@
       ],
       "title": "Scene Prompts",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainScenePromptEditor"
+        "Node name for S&R": "MiniMaxH3ChainScenePromptEditor|MieH3"
       },
       "widgets_values": []
     },
@@ -83,7 +83,7 @@
     },
     {
       "id": 3,
-      "type": "MiniMaxH3ChainPlanModern",
+      "type": "MiniMaxH3ChainPlanModern|MieH3",
       "pos": [
         80,
         862
@@ -148,7 +148,7 @@
       ],
       "title": "Production Plan",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainPlanModern"
+        "Node name for S&R": "MiniMaxH3ChainPlanModern|MieH3"
       },
       "widgets_values": [
         "{\n  \"defaults\": {\n    \"steps\": 20\n  },\n  \"shots\": [\n    {\n      \"id\": \"tram_stop_arrival\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] A grounded cinematic wide shot at a rain-darkened neighborhood tram stop just before dawn. One elderly watchmaker in a navy wool coat waits beneath the shelter, holding a small paper parcel with both hands. Sodium streetlights glow in wet pavement while an empty tram approaches from deep background. The camera makes a slow, steady push toward him. He hears the rails sing, looks up, and takes one deliberate step toward the curb. Keep exactly one person, natural body mechanics, restrained contrast, fine rain, and realistic lens breathing. End with the tram entering frame and his step still in progress.\\n\\noverall_soundscape:\\nFine rain on glass, distant tires on wet road, a low electrical rail hum, the approaching tram bell, coat fabric, and one measured footstep. Preserve a quiet predawn acoustic space.\\n\\nnon_diegetic_music:\\nNo non-diegetic music.\",\n      \"length\": 243,\n      \"steps\": 20,\n      \"seed\": \"6101\"\n    },\n    {\n      \"id\": \"tram_boarding\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] Continue the same unbroken predawn tram-stop moment from the incoming H3 Motion Context. The carried opening overlap already contains the watchmaker's step and the tram entering frame; begin new action only after that overlap. Preserve his identity, navy coat, parcel, lighting direction, rain density, camera height, lens, and left-to-right tram motion. He completes the step, the doors align beside him and open, and warm interior light reaches across the wet pavement. He gives the parcel a protective glance and boards in one calm motion while the camera settles outside. No cut, no extra pedestrian, no reset of the carried movement.\\n\\noverall_soundscape:\\nContinue the same rain and rail hum through the boundary. Add braking metal, a soft pneumatic door release, one final pavement step, two hollow tram-floor steps, and subdued interior ventilation without restarting the ambience.\\n\\nnon_diegetic_music:\\nNo non-diegetic music.\",\n      \"length\": 243,\n      \"steps\": 20,\n      \"seed\": \"6102\"\n    }\n  ]\n}",
@@ -167,7 +167,7 @@
     },
     {
       "id": 4,
-      "type": "MiniMaxH3GenerationProfile",
+      "type": "MiniMaxH3GenerationProfile|MieH3",
       "pos": [
         80,
         610
@@ -202,7 +202,7 @@
       ],
       "title": "Generation Profile",
       "properties": {
-        "Node name for S&R": "MiniMaxH3GenerationProfile"
+        "Node name for S&R": "MiniMaxH3GenerationProfile|MieH3"
       },
       "widgets_values": [
         "Visual continuity",
@@ -244,7 +244,7 @@
     },
     {
       "id": 6,
-      "type": "MiniMaxH3ChainLoopStart",
+      "type": "MiniMaxH3ChainLoopStart|MieH3",
       "pos": [
         2420,
         412
@@ -301,7 +301,7 @@
       ],
       "title": "Loop Start",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainLoopStart"
+        "Node name for S&R": "MiniMaxH3ChainLoopStart|MieH3"
       },
       "widgets_values": [
         1,
@@ -311,7 +311,7 @@
     },
     {
       "id": 7,
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "pos": [
         5670,
         500
@@ -349,7 +349,7 @@
       ],
       "title": "Assemble Final Video",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainAssemble"
+        "Node name for S&R": "MiniMaxH3ChainAssemble|MieH3"
       },
       "widgets_values": [
         "plan",
@@ -366,7 +366,7 @@
     },
     {
       "id": 8,
-      "type": "MiniMaxH3ChainLoopEnd",
+      "type": "MiniMaxH3ChainLoopEnd|MieH3",
       "pos": [
         5670,
         180
@@ -431,7 +431,7 @@
       ],
       "title": "Loop End",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainLoopEnd"
+        "Node name for S&R": "MiniMaxH3ChainLoopEnd|MieH3"
       },
       "widgets_values": [
         "off",
@@ -440,7 +440,7 @@
     },
     {
       "id": 9,
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "pos": [
         2990,
         2396
@@ -478,7 +478,7 @@
       ],
       "title": "RECOVERY • Assemble Final Video",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainAssemble"
+        "Node name for S&R": "MiniMaxH3ChainAssemble|MieH3"
       },
       "widgets_values": [
         "plan",
@@ -495,7 +495,7 @@
     },
     {
       "id": 10,
-      "type": "MiniMaxH3ChainManifestLoad",
+      "type": "MiniMaxH3ChainManifestLoad|MieH3",
       "pos": [
         2420,
         2396
@@ -545,7 +545,7 @@
       ],
       "title": "RECOVERY • Load Saved Clips",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainManifestLoad"
+        "Node name for S&R": "MiniMaxH3ChainManifestLoad|MieH3"
       },
       "widgets_values": []
     },
@@ -792,7 +792,7 @@
     },
     {
       "id": 15,
-      "type": "MiniMaxH3ChainCurrent",
+      "type": "MiniMaxH3ChainCurrent|MieH3",
       "pos": [
         2420,
         1608
@@ -908,7 +908,7 @@
       ],
       "title": "Current Scene",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainCurrent"
+        "Node name for S&R": "MiniMaxH3ChainCurrent|MieH3"
       },
       "widgets_values": [
         false
@@ -1180,7 +1180,7 @@
     },
     {
       "id": 23,
-      "type": "MiniMaxH3LoopTrim",
+      "type": "MiniMaxH3LoopTrim|MieH3",
       "pos": [
         4190,
         588
@@ -1249,7 +1249,7 @@
       ],
       "title": "Trim Carried Overlap",
       "properties": {
-        "Node name for S&R": "MiniMaxH3LoopTrim"
+        "Node name for S&R": "MiniMaxH3LoopTrim|MieH3"
       },
       "widgets_values": [
         0,
@@ -1260,7 +1260,7 @@
     },
     {
       "id": 24,
-      "type": "MiniMaxH3ChainContext",
+      "type": "MiniMaxH3ChainContext|MieH3",
       "pos": [
         3030,
         1520
@@ -1349,13 +1349,13 @@
       ],
       "title": "Apply Scene Context",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainContext"
+        "Node name for S&R": "MiniMaxH3ChainContext|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 25,
-      "type": "MiniMaxH3ChainSegmentSave",
+      "type": "MiniMaxH3ChainSegmentSave|MieH3",
       "pos": [
         4760,
         180
@@ -1415,13 +1415,13 @@
       ],
       "title": "Save Segment + Checkpoint",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainSegmentSave"
+        "Node name for S&R": "MiniMaxH3ChainSegmentSave|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 26,
-      "type": "MiniMaxH3ChainReview",
+      "type": "MiniMaxH3ChainReview|MieH3",
       "pos": [
         4760,
         500
@@ -1471,7 +1471,7 @@
       ],
       "title": "Review Candidates",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainReview"
+        "Node name for S&R": "MiniMaxH3ChainReview|MieH3"
       },
       "widgets_values": [
         true,

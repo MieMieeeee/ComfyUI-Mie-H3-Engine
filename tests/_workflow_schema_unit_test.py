@@ -67,7 +67,7 @@ def main():
     # The old audit passed this real broken array: prompt -> clip_index,
     # "match" -> height. Ensure it can never pass release checks again.
     wf = json.loads((ROOT / "example_workflows/Ref2V Studio - MiniMax H3 0.6.json").read_text())
-    tagged = next(n for n in wf["nodes"] if n["type"] == "MiniMaxH3TaggedReferenceToVideo")
+    tagged = next(n for n in wf["nodes"] if n["type"] == "MiniMaxH3TaggedReferenceToVideo|MieH3")
     tagged["widgets_values"] = tagged["widgets_values"][2:]
     try:
         validate_workflow(wf, schemas)
@@ -80,16 +80,16 @@ def main():
     for path in paths:
         recipe = json.loads((ROOT / "tools/v06/recipes" / path.relative_to(ROOT / "example_workflows")).read_text())
         for node in recipe["nodes"]:
-            if node["type"] == "MiniMaxH3ChainContext":
+            if node["type"] == "MiniMaxH3ChainContext|MieH3":
                 assert "visual_cond_noise_aug" not in node["settings"]
                 assert "future_end_anchor" not in node["settings"]
                 assert "boundary_anchors" not in node["inputs"]
-            if node["type"] == "MiniMaxH3ProjectAssetManager":
+            if node["type"] == "MiniMaxH3ProjectAssetManager|MieH3":
                 assert node["settings"]["ownership_json"] == ""
-            if node["type"] == "MiniMaxH3ChainReview":
+            if node["type"] == "MiniMaxH3ChainReview|MieH3":
                 assert "pending_review" not in node["inputs"]
     wf = json.loads((ROOT / "example_workflows/T2V Normal - MiniMax H3 0.6.json").read_text())
-    profile = next(n for n in wf["nodes"] if n["type"] == "MiniMaxH3GenerationProfile")
+    profile = next(n for n in wf["nodes"] if n["type"] == "MiniMaxH3GenerationProfile|MieH3")
     profile["widgets_values"] = profile["widgets_values"][:-1]
     try:
         validate_workflow(wf, schemas)

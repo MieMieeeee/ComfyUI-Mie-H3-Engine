@@ -79,9 +79,9 @@ function publishCompanionPrompt(...args) {
 // The compact reference and dialogue authoring interactions are inspired by
 // nkxx188/ComfyUI-MiniMaxH3-Easy (MIT); see THIRD_PARTY_NOTICES.md.
 
-const NODE_NAME = "MiniMaxH3ChainScenePromptEditor";
-const PLAN_NAME = "MiniMaxH3ChainPlan";
-const PLAN_NAMES = new Set([PLAN_NAME, "MiniMaxH3ChainPlanModern"]);
+const NODE_NAME = "MiniMaxH3ChainScenePromptEditor|MieH3";
+const PLAN_NAME = "MiniMaxH3ChainPlan|MieH3";
+const PLAN_NAMES = new Set([PLAN_NAME, "MiniMaxH3ChainPlanModern|MieH3"]);
 const ACTIVE_SCENE_PROPERTY = "h3_scene_prompt_editor_active_scene";
 const FONT_SIZE_PROPERTY = "h3_scene_prompt_editor_font_size";
 const PRESENTATION_PROPERTY = "h3_scene_prompt_editor_rich_text";

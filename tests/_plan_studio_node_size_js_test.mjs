@@ -32,7 +32,7 @@ const pair = value => Array.from(value);
 
 class Studio {
     constructor() {
-        this.type = "MiniMaxH3ChainPlanStudio";
+        this.type = "MiniMaxH3ChainPlanStudio|MieH3";
         this.properties = {};
         this.size = [391, 806];
         this.graph = {setDirtyCanvas() {}};
@@ -51,7 +51,7 @@ class Studio {
     setSize(size) { this.size = pair(size); this.onResize(this.size); }
     serialize() { return JSON.parse(JSON.stringify({size:this.size, properties:this.properties})); }
 }
-await extension.beforeRegisterNodeDef(Studio, {name:"MiniMaxH3ChainPlanStudio"});
+await extension.beforeRegisterNodeDef(Studio, {name:"MiniMaxH3ChainPlanStudio|MieH3"});
 
 async function openTab(saved, mountFirst = true) {
     app.configuringGraph = true;
@@ -112,7 +112,7 @@ for (const invalid of [[NaN, 10], [Infinity, 1000], [-1, 1000], [0, 0], null]) {
 // No prototype/global resize patch: other node types remain untouched.
 class Other { onConfigure() {} onResize() {} }
 const originalResize = Other.prototype.onResize;
-await extension.beforeRegisterNodeDef(Other, {name:"MiniMaxH3ChainPlan"});
+await extension.beforeRegisterNodeDef(Other, {name:"MiniMaxH3ChainPlan|MieH3"});
 assert.equal(Other.prototype.onResize, originalResize);
 assert.match(source, /domWidget\.serialize = false;\s+restoreStudioNodeSize\(node\);/);
 assert.doesNotMatch(source, /setInterval\([^\n]*restoreStudioNodeSize/);

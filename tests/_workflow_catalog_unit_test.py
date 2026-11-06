@@ -179,9 +179,9 @@ def validate_layout(workflow: dict) -> None:
             bx, by, bw, bh = second["bounding"]
             assert not (ax < bx + bw and bx < ax + aw and ay < by + bh and by < ay + ah), (first["title"], second["title"])
     recovery_loaders = [n for n in workflow["nodes"]
-                        if n["type"] == "MiniMaxH3ChainManifestLoad" and n["mode"] == 2]
+                        if n["type"] == "MiniMaxH3ChainManifestLoad|MieH3" and n["mode"] == 2]
     recovery_assemblers = [n for n in workflow["nodes"]
-                           if n["type"] == "MiniMaxH3ChainAssemble" and n["mode"] == 2]
+                           if n["type"] == "MiniMaxH3ChainAssemble|MieH3" and n["mode"] == 2]
     if recovery_loaders and recovery_assemblers:
         assert recovery_loaders[0]["pos"][0] < recovery_assemblers[0]["pos"][0]
     assert not any(n.get("title", "").startswith("RECOVERY") and n["mode"] != 2
@@ -221,11 +221,11 @@ def validate_modern_authoring(workflow: dict, path: Path) -> None:
               "MiniMaxH3ChainRunManager", "MiniMaxH3Legacy04PolicyAdapter"}
     assert not [node for node in workflow["nodes"]
                 if node["type"] in legacy], path.name
-    plans = nodes(workflow, "MiniMaxH3ChainPlanModern")
+    plans = nodes(workflow, "MiniMaxH3ChainPlanModern|MieH3")
     if not plans:
         return
-    plan = one(workflow, "MiniMaxH3ChainPlanModern")
-    profile = one(workflow, "MiniMaxH3GenerationProfile")
+    plan = one(workflow, "MiniMaxH3ChainPlanModern|MieH3")
+    profile = one(workflow, "MiniMaxH3GenerationProfile|MieH3")
     assert origin(workflow, plan, "chain_policy") == profile
     assert len(plan["widgets_values"]) == 12
     assert plan["widgets_values"][8] == 20
@@ -261,25 +261,25 @@ def validate_modern_authoring(workflow: dict, path: Path) -> None:
 
 
 def validate_studio(workflow: dict, path: Path) -> None:
-    studios = nodes(workflow, "MiniMaxH3ChainPlanStudio")
+    studios = nodes(workflow, "MiniMaxH3ChainPlanStudio|MieH3")
     if not studios:
         return
-    studio = one(workflow, "MiniMaxH3ChainPlanStudio")
-    carousel = one(workflow, "MiniMaxH3ProjectAssetManager")
-    manager = one(workflow, "MiniMaxH3ChainCheckpointManager")
-    plan = one(workflow, "MiniMaxH3ChainPlanModern")
-    loop_start = one(workflow, "MiniMaxH3ChainLoopStart")
+    studio = one(workflow, "MiniMaxH3ChainPlanStudio|MieH3")
+    carousel = one(workflow, "MiniMaxH3ProjectAssetManager|MieH3")
+    manager = one(workflow, "MiniMaxH3ChainCheckpointManager|MieH3")
+    plan = one(workflow, "MiniMaxH3ChainPlanModern|MieH3")
+    loop_start = one(workflow, "MiniMaxH3ChainLoopStart|MieH3")
     assert origin(workflow, plan, "project_assets") == carousel
     assert origin(workflow, studio, "project_assets") == carousel
     assert origin(workflow, studio, "tagged_references") == carousel
     assert origin(workflow, manager, "plan") == studio
-    if nodes(workflow, "MiniMaxH3SelfLiftProject"):
-        switch = one(workflow, "MiniMaxH3SelfLiftProject")
+    if nodes(workflow, "MiniMaxH3SelfLiftProject|MieH3"):
+        switch = one(workflow, "MiniMaxH3SelfLiftProject|MieH3")
         assert origin(workflow, switch, "plan") == studio
         assert origin(workflow, loop_start, "plan") == switch
     else:
         assert origin(workflow, loop_start, "plan") == studio
-    for external in nodes(workflow, "MiniMaxH3ChainExternalVideo"):
+    for external in nodes(workflow, "MiniMaxH3ChainExternalVideo|MieH3"):
         assert origin(workflow, external, "plan") == studio
     assert manager["size"][0] >= 1200 and manager["size"][1] >= 900
     assert carousel["size"][0] >= 760 and carousel["size"][1] >= 700
@@ -288,8 +288,8 @@ def validate_studio(workflow: dict, path: Path) -> None:
     assert float(author_group["bounding"][2]) <= 4300
     assert not nodes(workflow, "MiniMaxH3ChainRunManager")
     if path.name.startswith("Ref2V Studio"):
-        assert not nodes(workflow, "MiniMaxH3TaggedPictureReference")
-        wrapper = one(workflow, "MiniMaxH3TaggedReferenceToVideo")
+        assert not nodes(workflow, "MiniMaxH3TaggedPictureReference|MieH3")
+        wrapper = one(workflow, "MiniMaxH3TaggedReferenceToVideo|MieH3")
         assert origin(workflow, wrapper, "references") == carousel
     if path.name == "Ref2V Studio - MiniMax H3 0.6.json":
         note = one(workflow, "Note")
@@ -299,24 +299,24 @@ def validate_studio(workflow: dict, path: Path) -> None:
                          "preset alone does not load an audio file", "Carousel.project_assets"):
             assert required in instructions, f"Missing source-audio setup note: {required}"
         assert note["size"][1] >= 70 + 20 * len(instructions.splitlines())
-        profile = one(workflow, "MiniMaxH3GenerationProfile")
+        profile = one(workflow, "MiniMaxH3GenerationProfile|MieH3")
         assert profile["widgets_values"][1] == "Generate audio"
         assert not nodes(workflow, "LoadAudio")
-        assert not nodes(workflow, "MiniMaxH3SourceTimeline")
-        context = one(workflow, "MiniMaxH3ChainContext")
+        assert not nodes(workflow, "MiniMaxH3SourceTimeline|MieH3")
+        context = one(workflow, "MiniMaxH3ChainContext|MieH3")
         audio_vae = origin(workflow, context, "audio_vae")
         assert audio_vae["type"] == "VAELoader"
         assert "audio_vae" in audio_vae["widgets_values"][0]
 
 
 def validate_execution_regressions(workflow: dict, path: Path) -> None:
-    for start in nodes(workflow, "MiniMaxH3ChainLoopStart"):
+    for start in nodes(workflow, "MiniMaxH3ChainLoopStart|MieH3"):
         assert start["widgets_values"][0] == 1, "Release examples must start a fresh project"
-    for external in nodes(workflow, "MiniMaxH3ChainExternalVideo"):
+    for external in nodes(workflow, "MiniMaxH3ChainExternalVideo|MieH3"):
         assert origin(workflow, external, "source_video")["type"] == "LoadVideo"
         assert input_socket(external, "source_frames")["link"] is None
         assert input_socket(external, "source_audio")["link"] is None
-    for target in nodes(workflow, "MiniMaxH3ContexLoopSourceAVTarget"):
+    for target in nodes(workflow, "MiniMaxH3ContexLoopSourceAVTarget|MieH3"):
         components = origin(workflow, target, "source_frames")
         assert components["type"] == "GetVideoComponents"
         assert origin(workflow, components, "video")["type"] == "LoadVideo"
@@ -327,9 +327,9 @@ def validate_execution_regressions(workflow: dict, path: Path) -> None:
                               ("source_fps", "fps")):
             wire = link(workflow, input_socket(target, field)["link"])
             assert components["outputs"][wire[2]]["name"] == output
-    for bridge in nodes(workflow, "MiniMaxH3ContexMaskedAVBridge"):
+    for bridge in nodes(workflow, "MiniMaxH3ContexMaskedAVBridge|MieH3"):
         assert not nodes(workflow, "VHS_LoadVideo")
-        prepare = one(workflow, "MiniMaxH3ReferenceVideoPrepare")
+        prepare = one(workflow, "MiniMaxH3ReferenceVideoPrepare|MieH3")
         assert prepare["widgets_values"][0] == 311
         resize = one(workflow, "ImageScale")
         conditioning = one(workflow, "MiniMaxH3ImageToVideo")
@@ -353,12 +353,12 @@ def validate_execution_regressions(workflow: dict, path: Path) -> None:
 
 def validate_reference_preflight(workflow: dict) -> None:
     """Conditioning and each independent preflight must see the same registry."""
-    conditioners = nodes(workflow, "MiniMaxH3TaggedReferenceToVideo")
+    conditioners = nodes(workflow, "MiniMaxH3TaggedReferenceToVideo|MieH3")
     if not conditioners:
         return
-    conditioner = one(workflow, "MiniMaxH3TaggedReferenceToVideo")
+    conditioner = one(workflow, "MiniMaxH3TaggedReferenceToVideo|MieH3")
     reference_link = link(workflow, input_socket(conditioner, "references")["link"])
-    for kind in ("MiniMaxH3ChainLoopStart", "MiniMaxH3ChainPreflight", "MiniMaxH3ChainPlanStudio"):
+    for kind in ("MiniMaxH3ChainLoopStart|MieH3", "MiniMaxH3ChainPreflight|MieH3", "MiniMaxH3ChainPlanStudio|MieH3"):
         for validator in nodes(workflow, kind):
             socket = input_socket(validator, "tagged_references")
             assert socket.get("link") is not None, (kind, "missing reference registry")
@@ -381,32 +381,32 @@ def validate_assets() -> None:
 
 def validate_independent_source_audio() -> None:
     workflow = load(EXAMPLES / "tagged/Ref2V Tagged Source Audio - MiniMax H3 0.6.json")
-    assert not nodes(workflow, "MiniMaxH3ProjectAssetManager")
+    assert not nodes(workflow, "MiniMaxH3ProjectAssetManager|MieH3")
     audio = one(workflow, "LoadAudio")
-    timeline = one(workflow, "MiniMaxH3SourceTimeline")
-    reference = one(workflow, "MiniMaxH3TaggedAudioReference")
-    current = one(workflow, "MiniMaxH3ChainCurrent")
-    conditioner = one(workflow, "MiniMaxH3TaggedReferenceToVideo")
-    plan = one(workflow, "MiniMaxH3ChainPlanModern")
+    timeline = one(workflow, "MiniMaxH3SourceTimeline|MieH3")
+    reference = one(workflow, "MiniMaxH3TaggedAudioReference|MieH3")
+    current = one(workflow, "MiniMaxH3ChainCurrent|MieH3")
+    conditioner = one(workflow, "MiniMaxH3TaggedReferenceToVideo|MieH3")
+    plan = one(workflow, "MiniMaxH3ChainPlanModern|MieH3")
     assert origin(workflow, timeline, "source_audio") == audio
     assert origin(workflow, reference, "audio") == audio
     assert reference["widgets_values"][1] == "source_timeline"
     assert origin(workflow, conditioner, "state") == current
     assert origin(workflow, conditioner, "references") == reference
-    context = one(workflow, "MiniMaxH3ChainContext")
+    context = one(workflow, "MiniMaxH3ChainContext|MieH3")
     assert origin(workflow, context, "audio_vae") == origin(
         workflow, conditioner, "audio_vae"), "Lip-sync context needs the audio VAE"
     recipe = load(ROOT / "tools" / "v06" / "recipes" / "tagged" /
                   "Ref2V Tagged Source Audio - MiniMax H3 0.6.json")
-    assert one(recipe, "MiniMaxH3ChainContext")["inputs"]["audio_vae"] == (
-        one(recipe, "MiniMaxH3TaggedReferenceToVideo")["inputs"]["audio_vae"])
+    assert one(recipe, "MiniMaxH3ChainContext|MieH3")["inputs"]["audio_vae"] == (
+        one(recipe, "MiniMaxH3TaggedReferenceToVideo|MieH3")["inputs"]["audio_vae"])
     assert origin(workflow, plan, "generation_fingerprint") == reference
-    for kind in ("MiniMaxH3ChainPreflight", "MiniMaxH3ChainLoopStart"):
+    for kind in ("MiniMaxH3ChainPreflight|MieH3", "MiniMaxH3ChainLoopStart|MieH3"):
         target = one(workflow, kind)
         assert origin(workflow, target, "source_timeline") == timeline
         assert not any(value["name"] == "source_audio" for value in target["inputs"])
         assert origin(workflow, target, "tagged_references") == reference
-    assert one(workflow, "MiniMaxH3GenerationProfile")["widgets_values"][1] == "Lip-sync to source audio"
+    assert one(workflow, "MiniMaxH3GenerationProfile|MieH3")["widgets_values"][1] == "Lip-sync to source audio"
     assert origin(workflow, one(workflow, "BasicScheduler"), "steps") == current
     # Check the complete graph, including authoring/fingerprint edges, for a
     # source_audio_slice -> registry -> Plan -> Current Scene cycle.
@@ -421,8 +421,8 @@ def validate_independent_source_audio() -> None:
         resolved.update(ready)
     for name in ("tagged/Ref2V Tagged", "Ref2V Studio"):
         base = load(EXAMPLES / (name + " - MiniMax H3 0.6.json"))
-        assert origin(base, one(base, "MiniMaxH3TaggedReferenceToVideo"),
-                      "state") == one(base, "MiniMaxH3ChainCurrent")
+        assert origin(base, one(base, "MiniMaxH3TaggedReferenceToVideo|MieH3"),
+                      "state") == one(base, "MiniMaxH3ChainCurrent|MieH3")
 
 
 def main() -> None:
@@ -435,7 +435,7 @@ def main() -> None:
     assert {p.relative_to(recipe_root).as_posix() for p in recipe_root.rglob("*.json")} == WORKFLOWS
     basic = load(EXAMPLES / "Ref2V Basic - MiniMax H3 0.6.json")
     assert nodes(basic, "LoadImage") and nodes(basic, "MiniMaxH3ReferenceToVideo")
-    assert not nodes(basic, "MiniMaxH3ProjectAssetManager"), "Basic stays a direct-image graph"
+    assert not nodes(basic, "MiniMaxH3ProjectAssetManager|MieH3"), "Basic stays a direct-image graph"
     uuids = set()
     for path in paths:
         workflow = load(path)
@@ -446,10 +446,10 @@ def main() -> None:
         validate_studio(workflow, path)
         validate_execution_regressions(workflow, path)
         validate_reference_preflight(workflow)
-        if nodes(workflow, "MiniMaxH3TaggedReferenceToVideo"):
+        if nodes(workflow, "MiniMaxH3TaggedReferenceToVideo|MieH3"):
             # Reproduce the missing Loop Start wire, even when Studio or the
             # explicit Preflight and the conditioner remain correctly wired.
-            start = one(workflow, "MiniMaxH3ChainLoopStart")
+            start = one(workflow, "MiniMaxH3ChainLoopStart|MieH3")
             registry = input_socket(start, "tagged_references")
             saved_link = registry["link"]
             try:
@@ -473,9 +473,9 @@ def main() -> None:
         assert workflow["id"] == str(uuid.uuid5(
             uuid.UUID("aedf0e28-4e77-4ec8-98d8-7662561e4cf4"), path.name))
         uuids.add(workflow["id"])
-        pixel = bool(nodes(workflow, "MiniMaxH3ChainUpscalePixelConditioning")
+        pixel = bool(nodes(workflow, "MiniMaxH3ChainUpscalePixelConditioning|MieH3")
                      or nodes(workflow, "CATH3UpscaleVideoConditioning"))
-        lms = bool(nodes(workflow, "MiniMaxH3ChainLMSGuide"))
+        lms = bool(nodes(workflow, "MiniMaxH3ChainLMSGuide|MieH3"))
         derope_fast = path.name == "Deferred De-Rope Only - Fast Turbo - MiniMax H3 0.6.json"
         for node in workflow["nodes"]:
             if node["type"] in {"UNETLoader", "CLIPLoader", "VAELoader"}:
@@ -483,7 +483,7 @@ def main() -> None:
                 if values and values[0] in CANONICAL_H3_MODELS:
                     assert "/" not in values[0] and "\\" not in values[0]
             if node["type"] == "KSamplerSelect":
-                expected = "euler" if lms or nodes(workflow, "MiniMaxH3SelfLiftProject") else "gradient_estimation" if derope_fast else "er_sde" if pixel else "res_multistep"
+                expected = "euler" if lms or nodes(workflow, "MiniMaxH3SelfLiftProject|MieH3") else "gradient_estimation" if derope_fast else "er_sde" if pixel else "res_multistep"
                 assert node["widgets_values"] == [expected]
             elif node["type"] == "BasicScheduler":
                 assert node["widgets_values"][:2] == (["simple", 8] if lms else ["beta", 3] if pixel else ["simple", 20])
@@ -502,15 +502,15 @@ def main() -> None:
     }
     tagged = load(EXAMPLES / "tagged/Ref2V Tagged - MiniMax H3 0.6.json")
     assert {node["widgets_values"][0]
-            for node in nodes(tagged, "MiniMaxH3TaggedPictureReference")} == {
+            for node in nodes(tagged, "MiniMaxH3TaggedPictureReference|MieH3")} == {
         "courier_arrival", "greenhouse_delivery"}
     sequential = load(
         EXAMPLES / "tagged/Ref2V Sequential Motion - EXPERIMENTAL - MiniMax H3 0.6.json")
-    video_ref = one(sequential, "MiniMaxH3TaggedVideoReference")
+    video_ref = one(sequential, "MiniMaxH3TaggedVideoReference|MieH3")
     assert video_ref["widgets_values"] == [
         "courier_motion", "courier_motion_audio", "sequential"]
     sequential_plan = json.loads(one(
-        sequential, "MiniMaxH3ChainPlanModern")["widgets_values"][0])
+        sequential, "MiniMaxH3ChainPlanModern|MieH3")["widgets_values"][0])
     assert all("@courier_motion" in shot["prompt"]
                and "@courier_motion_audio" in shot["prompt"]
                for shot in sequential_plan["shots"])

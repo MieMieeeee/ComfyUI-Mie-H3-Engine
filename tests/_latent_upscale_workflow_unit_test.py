@@ -31,7 +31,7 @@ def main():
         assert widgets[1:4] == ["scale by multiplier", 2.0, 32], name
         compiled = make_node(one(recipe, "MinimaxH3LatentUpscaler3D"), schema, 1)
         assert compiled["widgets_values"] == widgets, name
-        metadata = json.loads(one(recipe, "MiniMaxH3ChainUpscaleAdapter")
+        metadata = json.loads(one(recipe, "MiniMaxH3ChainUpscaleAdapter|MieH3")
                               ["settings"]["recipe_json"])
         assert metadata["scale_multiplier"] == 2.0, name
         if name == NAMES[0]:
@@ -39,7 +39,7 @@ def main():
             assert metadata["pass2_steps"] == schedule["steps"] == 20
             assert metadata["denoise"] == schedule["denoise"] == 0.24
         assert "target_megapixels" not in metadata, name
-        adapter = one(workflow, "MiniMaxH3ChainUpscaleAdapter")
+        adapter = one(workflow, "MiniMaxH3ChainUpscaleAdapter|MieH3")
         assert any(isinstance(value, str) and value.startswith("{")
                    and json.loads(value) == metadata
                    for value in adapter["widgets_values"]), name

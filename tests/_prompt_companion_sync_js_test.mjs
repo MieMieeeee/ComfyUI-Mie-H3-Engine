@@ -30,9 +30,9 @@ assert.equal(activeSceneIndexAfterRefresh(
 assert.equal(activeSceneIndexAfterRefresh(null, {shots:[{id:"one"}]}, 8), 0);
 assert.equal(activeSceneIndexAfterRefresh(null, {shots:[]}, 8), 0);
 
-const plan = {id:1, type:"MiniMaxH3ChainPlan"};
-const studio = {id:2, type:"MiniMaxH3ChainPlanStudio", inputs:[{link:10}], outputs:[{links:[11]}]};
-const editor = {id:3, type:"MiniMaxH3ChainRichScenePromptEditor", inputs:[{link:11}], outputs:[]};
+const plan = {id:1, type:"MiniMaxH3ChainPlan|MieH3"};
+const studio = {id:2, type:"MiniMaxH3ChainPlanStudio|MieH3", inputs:[{link:10}], outputs:[{links:[11]}]};
+const editor = {id:3, type:"MiniMaxH3ChainRichScenePromptEditor|MieH3", inputs:[{link:11}], outputs:[]};
 const nodes = new Map([[1,plan],[2,studio],[3,editor]]);
 const links = {
     10:{origin_id:1,target_id:2},
@@ -55,7 +55,7 @@ assert.deepEqual(received, {receivedPlan:plan,index:2,source:studio});
 editor._h3PromptCompanionSetActiveScene = () => false;
 assert.equal(publishCompanionScene(studio, plan, 4), 0);
 
-const review = {id:4, type:"MiniMaxH3ChainReview", graph};
+const review = {id:4, type:"MiniMaxH3ChainReview|MieH3", graph};
 graph._nodes.push(review);
 editor._h3PromptCompanionSetActiveScene = (receivedPlan, index, source) => {
     received = {receivedPlan,index,source};

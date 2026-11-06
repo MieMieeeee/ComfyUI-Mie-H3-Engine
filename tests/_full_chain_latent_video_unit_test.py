@@ -60,8 +60,8 @@ class FakeVAE:
 
 def main():
     package, chain = load_package()
-    assert "MiniMaxH3ChainLatentVideoAdapter" in package.NODE_CLASS_MAPPINGS
-    node = package.NODE_CLASS_MAPPINGS["MiniMaxH3ChainLatentVideoAdapter"]
+    assert "MiniMaxH3ChainLatentVideoAdapter|MieH3" in package.NODE_CLASS_MAPPINGS
+    node = package.NODE_CLASS_MAPPINGS["MiniMaxH3ChainLatentVideoAdapter|MieH3"]
     schema = node.INPUT_TYPES()
     for section in ("required", "optional"):
         for name, spec in schema.get(section, {}).items():

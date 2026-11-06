@@ -17,7 +17,7 @@ await import("data:text/javascript;base64," + Buffer.from(source).toString("base
 
 class DeliveryNode {
     constructor() {
-        this.comfyClass = "MiniMaxH3ChainChapterDelivery";
+        this.comfyClass = "MiniMaxH3ChainChapterDelivery|MieH3";
         this.widgets = [{name: "enabled", type: "toggle", value: true}];
         this.inputs = [{name: "manifest", link: 11}];
         this.outputs = [{name: "delivery_manifest", links: [12]}];
@@ -26,7 +26,7 @@ class DeliveryNode {
     onNodeCreated() { this.created = true; }
     onConfigure() { this.configured = true; }
 }
-await extension.beforeRegisterNodeDef(DeliveryNode, {name: "MiniMaxH3ChainChapterDelivery"});
+await extension.beforeRegisterNodeDef(DeliveryNode, {name: "MiniMaxH3ChainChapterDelivery|MieH3"});
 for (const savedValues of [null, [true, 0], [true, 2], [false, 2]]) {
     const node = new DeliveryNode();
     node.onNodeCreated();

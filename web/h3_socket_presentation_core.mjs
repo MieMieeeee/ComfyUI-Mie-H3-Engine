@@ -8,37 +8,37 @@ import {
 } from "./h3_policy_core.mjs?v=0.7.10";
 
 export const CHAIN_POLICY_NODE = "MiniMaxH3ChainPolicy";
-export const PROFILE_POLICY_NODE = "MiniMaxH3GenerationProfile";
-export const ADVANCED_POLICY_NODE = "MiniMaxH3AdvancedPolicy";
+export const PROFILE_POLICY_NODE = "MiniMaxH3GenerationProfile|MieH3";
+export const ADVANCED_POLICY_NODE = "MiniMaxH3AdvancedPolicy|MieH3";
 export const LEGACY_POLICY_NODE = "MiniMaxH3Legacy04PolicyAdapter";
-export const PLAN_NODE = "MiniMaxH3ChainPlan";
-export const MODERN_PLAN_NODE = "MiniMaxH3ChainPlanModern";
+export const PLAN_NODE = "MiniMaxH3ChainPlan|MieH3";
+export const MODERN_PLAN_NODE = "MiniMaxH3ChainPlanModern|MieH3";
 export const PLAN_NODES = new Set([PLAN_NODE, MODERN_PLAN_NODE]);
 
-const CURRENT_NODE = "MiniMaxH3ChainCurrent";
+const CURRENT_NODE = "MiniMaxH3ChainCurrent|MieH3";
 
 const ADVANCED_OUTPUTS = Object.freeze({
     MiniMaxH3ChainPolicy: ["status"],
-    MiniMaxH3ChainPlan: ["summary", "clip_count", "video_blend_frames"],
-    MiniMaxH3ChainPlanModern: ["summary", "clip_count", "video_blend_frames"],
-    MiniMaxH3ChainPlanStudio: [
+    "MiniMaxH3ChainPlan|MieH3": ["summary", "clip_count", "video_blend_frames"],
+    "MiniMaxH3ChainPlanModern|MieH3": ["summary", "clip_count", "video_blend_frames"],
+    "MiniMaxH3ChainPlanStudio|MieH3": [
         "status", "report_json", "plan_summary", "clip_count",
         "video_blend_frames",
     ],
-    MiniMaxH3ChainPreflight: ["status", "report_json"],
+    "MiniMaxH3ChainPreflight|MieH3": ["status", "report_json"],
     MiniMaxH3LazyMotionAVLoader: ["source_audio", "skip_first_frames", "status"],
-    MiniMaxH3ChainCurrent: [
+    "MiniMaxH3ChainCurrent|MieH3": [
         "clip_count", "shot_id", "steps", "audio_start", "audio_duration",
         "status",
     ],
-    MiniMaxH3ChainLoopEnd: [
+    "MiniMaxH3ChainLoopEnd|MieH3": [
         "manifest_json", "last_context_frames", "last_context_latent",
     ],
-    MiniMaxH3ChainManifestLoad: ["manifest_json", "status"],
+    "MiniMaxH3ChainManifestLoad|MieH3": ["manifest_json", "status"],
 });
 
 const ALWAYS_ADVANCED_WIDGETS = Object.freeze({
-    MiniMaxH3ChainPlanStudio: [
+    "MiniMaxH3ChainPlanStudio|MieH3": [
         "verify_resume_history",
         // Backing values for the Studio's dedicated Plan settings tab. Keep
         // them serialized and recoverable through Show advanced without
@@ -48,8 +48,8 @@ const ALWAYS_ADVANCED_WIDGETS = Object.freeze({
         "audio_context_length", "default_duration_seconds", "default_steps",
         "base_seed", "segment_crf", "video_blend_frames", "continuation_mode",
     ],
-    MiniMaxH3ChainPreflight: ["verify_resume_history"],
-    MiniMaxH3ChainUpscaleAdapter: ["recipe_json"],
+    "MiniMaxH3ChainPreflight|MieH3": ["verify_resume_history"],
+    "MiniMaxH3ChainUpscaleAdapter|MieH3": ["recipe_json"],
 });
 
 export function nodeType(node) {

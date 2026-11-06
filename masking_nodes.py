@@ -5,6 +5,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
+from .fork_identity import add_suffix
 from .masking_ops import (
     GRID_MODES,
     H3_PIXEL_CELL,
@@ -503,9 +504,11 @@ NODE_CLASS_MAPPINGS = {
     "MiniMaxH3ContexMaskedTarget": MiniMaxH3ContexMaskedTarget,
     "MiniMaxH3ContexMaskGridPreview": MiniMaxH3ContexMaskGridPreview,
 }
+NODE_CLASS_MAPPINGS = {add_suffix(name): value for name, value in NODE_CLASS_MAPPINGS.items()}
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3ContexTrimSourceAV": "MiniMax H3 Masking · Trim Source AV",
     "MiniMaxH3ContexMaskedTarget": "MiniMax H3 Masking · Apply Target Mask",
     "MiniMaxH3ContexMaskGridPreview": "MiniMax H3 Masking · Grid Preview",
 }
+NODE_DISPLAY_NAME_MAPPINGS = {add_suffix(name): value for name, value in NODE_DISPLAY_NAME_MAPPINGS.items()}

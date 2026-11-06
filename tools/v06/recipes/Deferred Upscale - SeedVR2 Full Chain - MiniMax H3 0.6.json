@@ -2,7 +2,7 @@
   "nodes": [
     {
       "key": "n1",
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "settings": {
         "selection_json": ""
       },
@@ -18,7 +18,7 @@
     },
     {
       "key": "n3",
-      "type": "MiniMaxH3ChainLatentVideoAdapter",
+      "type": "MiniMaxH3ChainLatentVideoAdapter|MieH3",
       "settings": {
         "audio_source": "plan",
         "blend_schedule": "plan",

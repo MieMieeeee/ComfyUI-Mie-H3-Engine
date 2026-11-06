@@ -260,21 +260,21 @@ def assert_loop_releases_pixels(package, chain, upscale, manifest, ram_cache=Fal
             return ()
 
     prompt = {
-        "adapter": {"class_type": "MiniMaxH3ChainUpscaleAdapter", "inputs": {
+        "adapter": {"class_type": "MiniMaxH3ChainUpscaleAdapter|MieH3", "inputs": {
             "source_manifest": manifest, "profile": "memory-test-" + str(ram_cache) + ("-png" if png_export else ""), "backend": "pixel",
             "recipe_json": "{}", "start_clip": 1, "end_clip": 0,
             "save_latent": False, "segment_crf": 18}},
         "pixels": {"class_type": "MemoryTestPixels", "inputs": {"state": ["adapter", 1]}},
-        "save": {"class_type": "MiniMaxH3ChainUpscaleSegmentSave", "inputs": {
+        "save": {"class_type": "MiniMaxH3ChainUpscaleSegmentSave|MieH3", "inputs": {
             "state": ["pixels", 0], "images": ["pixels", 1]}},
-        "end": {"class_type": "MiniMaxH3ChainUpscaleLoopEnd", "inputs": {
+        "end": {"class_type": "MiniMaxH3ChainUpscaleLoopEnd|MieH3", "inputs": {
             "flow": ["adapter", 0], "state": ["pixels", 0],
             "images": ["pixels", 1], "segment": ["save", 0]}},
         "result": {"class_type": "MemoryTestResult", "inputs": {
             "manifest": ["end", 0], "tail": ["end", 2]}},
     }
     if png_export:
-        prompt["png"] = {"class_type": "MiniMaxH3ChainExportPNG", "inputs": {
+        prompt["png"] = {"class_type": "MiniMaxH3ChainExportPNG|MieH3", "inputs": {
             "video": ["pixels", 2], "state": ["pixels", 0], "export_name": "loop-sequence",
             "first_frame_number": 1, "png_compression": 1, "embed_workflow": False,
             "png_bit_depth": "16", "save_workers": 2}}
@@ -296,7 +296,7 @@ def assert_loop_releases_pixels(package, chain, upscale, manifest, ram_cache=Fal
             **package.NODE_CLASS_MAPPINGS, "MemoryTestPixels": Pixels,
             "MemoryTestAfterPNG": AfterPNG,
             "MemoryTestResult": Result,
-            "MiniMaxH3ChainUpscaleSegmentSave": (
+            "MiniMaxH3ChainUpscaleSegmentSave|MieH3": (
                 upscale.MiniMaxH3ChainUpscaleSegmentSave if ram_cache else SaveForTest)}):
         executor.execute(prompt, "pixel-memory-test", execute_outputs=["result"])
     assert executor.success, executor.status_messages
@@ -377,7 +377,7 @@ def main():
     spec.loader.exec_module(package)
     chain = sys.modules[spec.name + ".chain_nodes"]
     upscale = sys.modules[spec.name + ".upscale_nodes"]
-    for name in ("MiniMaxH3ChainUpscalePixelCurrent", "MiniMaxH3ChainUpscalePixelConditioning"):
+    for name in ("MiniMaxH3ChainUpscalePixelCurrent|MieH3", "MiniMaxH3ChainUpscalePixelConditioning|MieH3"):
         cls = package.NODE_CLASS_MAPPINGS[name]
         assert cls.EXPERIMENTAL and len(cls.OUTPUT_TOOLTIPS) == len(cls.RETURN_TYPES)
 
@@ -593,18 +593,18 @@ def main():
         def node_id(kind):
             return next(k for k, v in prompt.items() if v["class_type"] == kind)
         expanded = end._recurse(
-            [node_id("MiniMaxH3ChainUpscaleAdapter"), 0], live_next,
-            DynamicPrompt(prompt), node_id("MiniMaxH3ChainUpscaleLoopEnd"))["expand"]
+            [node_id("MiniMaxH3ChainUpscaleAdapter|MieH3"), 0], live_next,
+            DynamicPrompt(prompt), node_id("MiniMaxH3ChainUpscaleLoopEnd|MieH3"))["expand"]
         kinds = {v["class_type"]: k for k, v in expanded.items()}
-        assert {"MiniMaxH3ChainUpscalePixelCurrent", "MiniMaxH3ChainUpscalePixelConditioning",
+        assert {"MiniMaxH3ChainUpscalePixelCurrent|MieH3", "MiniMaxH3ChainUpscalePixelConditioning|MieH3",
                 "DLSS5EnhanceImages", "BasicGuider", "UltimateSDUpscaleNoUpscaleGuider",
-                "MiniMaxH3ChainUpscaleSegmentSave", "MiniMaxH3ChainUpscaleLoopEnd"} <= kinds.keys()
-        assert "MiniMaxH3ChainCheckpointManager" not in kinds and "UNETLoader" not in kinds
-        assert expanded[kinds["MiniMaxH3ChainUpscaleAdapter"]]["inputs"]["initial_state"]["index"] == 2
+                "MiniMaxH3ChainUpscaleSegmentSave|MieH3", "MiniMaxH3ChainUpscaleLoopEnd|MieH3"} <= kinds.keys()
+        assert "MiniMaxH3ChainCheckpointManager|MieH3" not in kinds and "UNETLoader" not in kinds
+        assert expanded[kinds["MiniMaxH3ChainUpscaleAdapter|MieH3"]]["inputs"]["initial_state"]["index"] == 2
         refinement_inputs = expanded[kinds["UltimateSDUpscaleNoUpscaleGuider"]]["inputs"]
-        assert refinement_inputs["upscaled_image"] == [kinds["MiniMaxH3ChainUpscalePixelConditioning"], 1]
+        assert refinement_inputs["upscaled_image"] == [kinds["MiniMaxH3ChainUpscalePixelConditioning|MieH3"], 1]
         assert expanded[kinds["BasicGuider"]]["inputs"]["conditioning"] == [
-            kinds["MiniMaxH3ChainUpscalePixelConditioning"], 0]
+            kinds["MiniMaxH3ChainUpscalePixelConditioning|MieH3"], 0]
         _, resumed, _, _ = adapter.adapt(manifest, "pixel", "pixel", "{}", 2, 0, False, 18)
         assert resumed["segments"][0]["revision"] == saved["revision"]
         fails(lambda: adapter.adapt(manifest, "pixel", "h3_latent", "{}", 2, 0, False, 18),

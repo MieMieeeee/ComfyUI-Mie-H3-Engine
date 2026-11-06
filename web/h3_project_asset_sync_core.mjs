@@ -4,7 +4,7 @@ export const PROJECT_ASSET_CATALOG_CHANGED_EVENT =
     "minimax-h3-project-assets-changed";
 
 const PLAN_TYPES = new Set([
-    "MiniMaxH3ChainPlan", "MiniMaxH3ChainPlanModern", "MiniMaxH3ChainPlanStudio",
+    "MiniMaxH3ChainPlan|MieH3", "MiniMaxH3ChainPlanModern|MieH3", "MiniMaxH3ChainPlanStudio|MieH3",
 ]);
 
 function graphNodes(graph, seen = new Set()) {

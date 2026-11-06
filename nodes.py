@@ -38,6 +38,7 @@ import folder_paths
 import node_helpers
 import torch
 
+from .fork_identity import add_suffix
 from .av_timing import (
     AUDIO_TRIM_MODE_KEY,
     AUDIO_TRIM_FRAMES_KEY,
@@ -1081,6 +1082,8 @@ class MiniMaxH3LoopTrim:
 NODE_CLASS_MAPPINGS = {
     "MiniMaxH3LoopTrim": MiniMaxH3LoopTrim,
 }
+NODE_CLASS_MAPPINGS = {add_suffix(name): value for name, value in NODE_CLASS_MAPPINGS.items()}
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3LoopTrim": "MiniMax H3 Context Loop Trim",
 }
+NODE_DISPLAY_NAME_MAPPINGS = {add_suffix(name): value for name, value in NODE_DISPLAY_NAME_MAPPINGS.items()}

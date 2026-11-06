@@ -57,7 +57,7 @@ assert chain.MiniMaxH3ChainPlanModern.RETURN_TYPES == (
     chain.MiniMaxH3ChainPlan.RETURN_TYPES)
 assert chain.MiniMaxH3ChainPlanModern.RETURN_NAMES == (
     chain.MiniMaxH3ChainPlan.RETURN_NAMES)
-assert (chain.CHAIN_NODE_CLASS_MAPPINGS["MiniMaxH3ChainPlanModern"]
+assert (chain.CHAIN_NODE_CLASS_MAPPINGS["MiniMaxH3ChainPlanModern|MieH3"]
         is chain.MiniMaxH3ChainPlanModern)
 
 plan_json = json.dumps({

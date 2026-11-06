@@ -49,11 +49,11 @@ function subgraph(root, host) {
 
 for (const map of [false, true]) {
     const root = graph(map);
-    const carousel = add(root, "MiniMaxH3ProjectAssetManager", 1, {run_name:"bob"});
-    const modern = add(root, "MiniMaxH3ChainPlanModern", 2, {run_name:"h3_chain", plan_json:'{"shots":[{"prompt":"Keep me"}]}'});
-    const oldManager = add(root, "MiniMaxH3ChainRunManager", 3);
-    const studio = add(root, "MiniMaxH3ChainPlanStudio", 4, {run_name:"h3_chain"});
-    const unrelated = add(root, "MiniMaxH3ChainPlan", 5, {run_name:"unrelated"});
+    const carousel = add(root, "MiniMaxH3ProjectAssetManager|MieH3", 1, {run_name:"bob"});
+    const modern = add(root, "MiniMaxH3ChainPlanModern|MieH3", 2, {run_name:"h3_chain", plan_json:'{"shots":[{"prompt":"Keep me"}]}'});
+    const oldManager = add(root, "MiniMaxH3ChainRunManager|MieH3", 3);
+    const studio = add(root, "MiniMaxH3ChainPlanStudio|MieH3", 4, {run_name:"h3_chain"});
+    const unrelated = add(root, "MiniMaxH3ChainPlan|MieH3", 5, {run_name:"unrelated"});
     connect(carousel, modern, "project_assets");
     connect(modern, oldManager, "plan");
     connect(oldManager, studio, "plan");
@@ -76,12 +76,12 @@ for (const map of [false, true]) {
     // Use the actual legacy Run Manager and Studio graph readers from the report.
     for (const source of [runManagerSource, studioSource]) {
         const context = vm.createContext({resolvedInputSource, nodeType,
-            PLAN_NAMES:new Set(["MiniMaxH3ChainPlan", "MiniMaxH3ChainPlanModern"])});
+            PLAN_NAMES:new Set(["MiniMaxH3ChainPlan|MieH3", "MiniMaxH3ChainPlanModern|MieH3"])});
         vm.runInContext(handler(source, "upstreamPlanNode"), context);
         assert.equal(context.upstreamPlanNode(source === runManagerSource ? oldManager : studio), modern);
     }
     const context = vm.createContext({node:oldManager, nodeType, resolvedInputSource,
-        PLAN_NAMES:new Set(["MiniMaxH3ChainPlan", "MiniMaxH3ChainPlanModern"]),
+        PLAN_NAMES:new Set(["MiniMaxH3ChainPlan|MieH3", "MiniMaxH3ChainPlanModern|MieH3"]),
         syncManagedPlanRunName, widgetByName:widget});
     vm.runInContext(handler(runManagerSource, "upstreamPlanNode") + "\n"
         + handler(runManagerSource, "activeRunName", "    "), context);
@@ -99,7 +99,7 @@ for (const map of [false, true]) {
     assert.equal(reload.adoptConnectedRunName(), false);
     assert.equal(widget(modern, "run_name").value, "bob", "A named Carousel must resync before catalog fetch/execution");
 
-    const second = add(root, "MiniMaxH3ProjectAssetTree", 6, {run_name:"other"});
+    const second = add(root, "MiniMaxH3ProjectAssetTree|MieH3", 6, {run_name:"other"});
     const relay = add(root, "Reroute (rgthree)", 7);
     connect(second, relay, "input");
     connect(relay, modern, "unused");
@@ -115,9 +115,9 @@ for (const map of [false, true]) {
 
 for (const type of ["Reroute", "Reroute (rgthree)", "SetNode"]) {
     const root = graph(true);
-    const carousel = add(root, "MiniMaxH3ProjectAssetManager", 1, {run_name:"rerouted"});
+    const carousel = add(root, "MiniMaxH3ProjectAssetManager|MieH3", 1, {run_name:"rerouted"});
     const relay = add(root, type, 2, {name:"assets"});
-    const plan = add(root, "MiniMaxH3ChainPlan", 3, {run_name:"old"});
+    const plan = add(root, "MiniMaxH3ChainPlan|MieH3", 3, {run_name:"old"});
     connect(carousel, relay, "input");
     const output = type === "SetNode" ? add(root, "GetNode", 4, {name:"assets"}) : relay;
     connect(output, plan, "project_assets");
@@ -127,19 +127,19 @@ for (const type of ["Reroute", "Reroute (rgthree)", "SetNode"]) {
 
 {
     const root = graph(true);
-    const carousel = add(root, "MiniMaxH3ProjectAssetManager", 1, {run_name:"nested"});
+    const carousel = add(root, "MiniMaxH3ProjectAssetManager|MieH3", 1, {run_name:"nested"});
     const host = add(root, "NativeSubgraph", 2);
     const child = subgraph(root, host);
-    const inside = add(child, "MiniMaxH3ChainPlanModern", 1, {run_name:"old"});
+    const inside = add(child, "MiniMaxH3ChainPlanModern|MieH3", 1, {run_name:"old"});
     connect(carousel, host, "assets");
     connect({id:-10, graph:child, outputs:[]}, inside, "project_assets");
     assert.deepEqual(connectedProjectAssetPlans(carousel), [inside]);
     syncProjectAssetPlanRun(carousel, "nested");
     assert.equal(widget(inside, "run_name").value, "nested");
     // The reverse boundary: an internal Carousel drives a Plan outside.
-    const innerCarousel = add(child, "MiniMaxH3ProjectAssetTree", 3, {run_name:"inside"});
+    const innerCarousel = add(child, "MiniMaxH3ProjectAssetTree|MieH3", 3, {run_name:"inside"});
     connect(innerCarousel, {id:-20, graph:child, inputs:[]}, "assets");
-    const outside = add(root, "MiniMaxH3ChainPlan", 4, {run_name:"old"});
+    const outside = add(root, "MiniMaxH3ChainPlan|MieH3", 4, {run_name:"old"});
     connect(host, outside, "project_assets");
     syncProjectAssetPlanRun(innerCarousel, "inside");
     assert.equal(widget(outside, "run_name").value, "inside");
@@ -148,9 +148,9 @@ for (const type of ["Reroute", "Reroute (rgthree)", "SetNode"]) {
 
 {
     const root = graph();
-    const carousel = add(root, "MiniMaxH3ProjectAssetManager", 1, {run_name:"h3_project",
+    const carousel = add(root, "MiniMaxH3ProjectAssetManager|MieH3", 1, {run_name:"h3_project",
         catalog_json:JSON.stringify({project:"saved_name",assets:[],reference_slots:[]})});
-    const plan = add(root, "MiniMaxH3ChainPlanStudio", 2, {run_name:"h3_chain"});
+    const plan = add(root, "MiniMaxH3ChainPlanStudio|MieH3", 2, {run_name:"h3_chain"});
     connect(carousel, plan, "project_assets");
     assert.equal(syncManagedPlanRunName(plan), true);
     assert.equal(widget(plan, "run_name").value, "saved_name");

@@ -45,7 +45,7 @@ const audioPolicy = node(1, CHAIN_POLICY_NODE, [], [["chain_policy", [10]]], [
     ["generated_continuity", "on"],
     ["lock_source_audio", false],
 ]);
-const plan = node(2, "MiniMaxH3ChainPlan", [
+const plan = node(2, "MiniMaxH3ChainPlan|MieH3", [
     ["chain_policy", 10],
 ], [
     ["plan", [11]], ["summary", null], ["clip_count", null],
@@ -56,7 +56,7 @@ const plan = node(2, "MiniMaxH3ChainPlan", [
     ["encode_mode", "resize"], ["anchor_mode", "head"], ["crop", "center"],
     ["video_blend_frames", 0],
 ]);
-const start = node(3, "MiniMaxH3ChainLoopStart", [
+const start = node(3, "MiniMaxH3ChainLoopStart|MieH3", [
     ["plan", 11], ["source_audio", null], ["source_timeline", null],
 ], [["flow", null], ["state", [12]], ["status", null]]);
 new Graph([audioPolicy, plan, start], {
@@ -95,7 +95,7 @@ const modernPlan = node(4, MODERN_PLAN_NODE, [
     ["encode_mode", "video"], ["crop", "disabled"],
     ["video_blend_frames", 0],
 ]);
-const modernStart = node(5, "MiniMaxH3ChainLoopStart", [
+const modernStart = node(5, "MiniMaxH3ChainLoopStart|MieH3", [
     ["plan", 14], ["source_audio", null], ["source_timeline", null],
 ]);
 new Graph([audioPolicy, modernPlan, modernStart], {
@@ -110,7 +110,7 @@ assert.equal(modernPresentation.hiddenOutputs.has("summary"), true);
 assert.equal(modernPresentation.hiddenOutputs.has("clip_count"), true);
 assert.equal(modernPresentation.hiddenWidgets.has("encode_mode"), false);
 
-const studio = node(30, "MiniMaxH3ChainPlanStudio", [], [], [
+const studio = node(30, "MiniMaxH3ChainPlanStudio|MieH3", [], [], [
     ["verify_resume_history", true], ["plan_json", "{}"],
     ["run_name", "h3_chain"], ["generation_fingerprint", ""],
     ["width", 960], ["height", 544], ["context_length", 22],
@@ -149,7 +149,7 @@ assert.equal(start.outputs[2].hidden, false);
 audioPolicy.widgets.find((item) => item.name === "source_reference").value = "on";
 assert.equal(presentationForNode(start, false).hiddenInputs.has("source_audio"), false);
 
-const timeline = node(4, "MiniMaxH3SourceTimeline", [], [["source_timeline", [13]]]);
+const timeline = node(4, "MiniMaxH3SourceTimeline|MieH3", [], [["source_timeline", [13]]]);
 start.inputs.find((slot) => slot.name === "source_timeline").link = 13;
 start.graph = new Graph([audioPolicy, plan, timeline, start], {
     10: {origin_id: 1, target_id: 2},
@@ -159,7 +159,7 @@ start.graph = new Graph([audioPolicy, plan, timeline, start], {
 assert.equal(hasSourceTimeline(start), true);
 assert.equal(presentationForNode(start, false).hiddenInputs.has("source_audio"), false);
 
-const current = node(5, "MiniMaxH3ChainCurrent", [["state", 12], ["source_audio", null]], [
+const current = node(5, "MiniMaxH3ChainCurrent|MieH3", [["state", 12], ["source_audio", null]], [
     ["state", null], ["source_audio_slice", null], ["status", null],
 ], [["align_audio_reference", false]]);
 start.graph._nodes.push(current);
@@ -170,7 +170,7 @@ assert.equal(currentPresentation.hiddenInputs.has("source_audio"), false);
 assert.equal(currentPresentation.hiddenOutputs.has("source_audio_slice"), false,
     "source reference is on, so its output stays available");
 
-const upscaleAdapter = node(25, "MiniMaxH3ChainUpscaleAdapter", [], [], [
+const upscaleAdapter = node(25, "MiniMaxH3ChainUpscaleAdapter|MieH3", [], [], [
     ["recipe_json", '{"upscaler":"LBH 3D"}'],
 ]);
 assert.equal(
@@ -184,7 +184,7 @@ assert.equal(
     "advanced disclosure keeps the recipe editable",
 );
 
-const linkedStatus = node(6, "MiniMaxH3ChainSegmentSave", [], [
+const linkedStatus = node(6, "MiniMaxH3ChainSegmentSave|MieH3", [], [
     ["segment", null], ["status", [22]],
 ]);
 applySocketPresentation(linkedStatus, false);
@@ -201,7 +201,7 @@ assert.deepEqual(resolveTransitionPolicy(plan), {
     source: "compact",
 });
 
-const unrelatedPlan = node(9, "MiniMaxH3ChainPlan", [
+const unrelatedPlan = node(9, "MiniMaxH3ChainPlan|MieH3", [
     ["chain_policy", null],
 ]);
 plan.graph._nodes.push(unrelatedPlan);
@@ -215,12 +215,12 @@ const compactPolicy = node(10, CHAIN_POLICY_NODE, [], [
     ["source_reference", "on"], ["generated_continuity", "off"],
     ["lock_source_audio", false],
 ]);
-const compactPlan = node(11, "MiniMaxH3ChainPlan", [
+const compactPlan = node(11, "MiniMaxH3ChainPlan|MieH3", [
     ["chain_policy", 31],
 ], [["plan", [32]]], [
     ["audio_context_length", 91],
 ]);
-const compactStart = node(12, "MiniMaxH3ChainLoopStart", [
+const compactStart = node(12, "MiniMaxH3ChainLoopStart|MieH3", [
     ["plan", 32], ["source_audio", null], ["source_timeline", null],
 ]);
 new Graph([compactPolicy, compactPlan, compactStart], {
@@ -270,10 +270,10 @@ const generationProfile = node(40, PROFILE_POLICY_NODE, [], [
     ["scene_continuity", "Hard picture + smooth audio"],
     ["audio_profile", "Lip-sync to source audio"],
 ]);
-const profilePlan = node(41, "MiniMaxH3ChainPlan", [
+const profilePlan = node(41, "MiniMaxH3ChainPlan|MieH3", [
     ["chain_policy", 41],
 ], [["plan", [42]]]);
-const profileStart = node(42, "MiniMaxH3ChainLoopStart", [
+const profileStart = node(42, "MiniMaxH3ChainLoopStart|MieH3", [
     ["plan", 42], ["source_audio", null], ["source_timeline", null],
 ]);
 new Graph([generationProfile, profilePlan, profileStart], {
@@ -344,7 +344,7 @@ const layeredAdvanced = node(21, ADVANCED_POLICY_NODE, [
 ], [["chain_policy", [42]], ["status", null]], [
     ["incoming_transition", "drift_av"],
 ]);
-const layeredPlan = node(22, "MiniMaxH3ChainPlan", [
+const layeredPlan = node(22, "MiniMaxH3ChainPlan|MieH3", [
     ["chain_policy", 42],
 ], [["plan", [43]]], [
     ["audio_mode", "generated_audio"],
@@ -352,7 +352,7 @@ const layeredPlan = node(22, "MiniMaxH3ChainPlan", [
     ["context_length", 5],
     ["audio_context_length", 5],
 ]);
-const layeredStart = node(23, "MiniMaxH3ChainLoopStart", [
+const layeredStart = node(23, "MiniMaxH3ChainLoopStart|MieH3", [
     ["plan", 43], ["source_audio", null], ["source_timeline", null],
 ]);
 new Graph([layeredBase, layeredAdvanced, layeredPlan, layeredStart], {

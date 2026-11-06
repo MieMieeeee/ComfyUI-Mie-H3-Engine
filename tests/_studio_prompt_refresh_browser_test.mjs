@@ -82,7 +82,7 @@ async function browserChecks() {
         class Node {
             constructor(owner) {
                 this.id = graph._nodes.length + 1;
-                this.type = this.comfyClass = "MiniMaxH3ChainPlanStudio";
+                this.type = this.comfyClass = "MiniMaxH3ChainPlanStudio|MieH3";
                 this.graph = graph; this.inputs = []; this.outputs = []; this.size = [1100, 1000];
                 this.properties = {h3_plan_studio_view:"scene"}; this.widgets = widgets();
                 if (owner) {
@@ -99,11 +99,11 @@ async function browserChecks() {
                 return {element:root};
             }
         }
-        await window.extension.beforeRegisterNodeDef(Node, {name:"MiniMaxH3ChainPlanStudio"});
+        await window.extension.beforeRegisterNodeDef(Node, {name:"MiniMaxH3ChainPlanStudio|MieH3"});
         for (const connected of [false, true]) {
             let owner;
             if (connected) {
-                owner = {id:graph._nodes.length + 1, type:"MiniMaxH3ChainPlan", widgets:widgets(), graph};
+                owner = {id:graph._nodes.length + 1, type:"MiniMaxH3ChainPlan|MieH3", widgets:widgets(), graph};
                 graph._nodes.push(owner);
             }
             const node = new Node(owner); node.onNodeCreated();

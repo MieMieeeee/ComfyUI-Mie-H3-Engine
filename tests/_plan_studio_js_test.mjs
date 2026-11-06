@@ -463,7 +463,7 @@ assert.match(source, /audio_context_unlocked/);
 assert.match(source, /audio_context_lead_source/);
 assert.match(source, /audioContextWindowStarts/);
 assert.match(source, /Standalone mode · this node owns, validates, and outputs/);
-assert.match(source, /MODERN_PLAN_NAME = "MiniMaxH3ChainPlanModern"/);
+assert.match(source, /MODERN_PLAN_NAME = "MiniMaxH3ChainPlanModern|MieH3"/);
 assert.match(source, /changes are written to the.*Modern Plan.*H3 Chain Plan/);
 assert.match(source, /modernPlan = owner\?\.type === MODERN_PLAN_NAME/);
 assert.match(source, /Visual transition, context length, audio behavior, and continuation are owned by the connected Generation Profile/);

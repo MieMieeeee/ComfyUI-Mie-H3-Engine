@@ -1,7 +1,7 @@
 import {app} from "../../scripts/app.js";
 import {sceneDataFieldPresentation} from "./h3_scene_data_core.mjs?v=0.7.3";
 
-const NODE_NAME = "MiniMaxH3SceneDataExtract";
+const NODE_NAME = "MiniMaxH3SceneDataExtract|MieH3";
 
 function fieldWidget(node) {
     return node.widgets?.find((widget) => widget.name === "field") ?? null;

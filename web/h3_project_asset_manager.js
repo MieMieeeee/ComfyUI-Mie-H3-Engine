@@ -43,8 +43,8 @@ import {
     generatedDescriptionAction,
 } from "./h3_asset_details_core.mjs?v=0.7.33";
 
-const NODE_NAME = "MiniMaxH3ProjectAssetManager";
-const TREE_NODE_NAME = "MiniMaxH3ProjectAssetTree";
+const NODE_NAME = "MiniMaxH3ProjectAssetManager|MieH3";
+const TREE_NODE_NAME = "MiniMaxH3ProjectAssetTree|MieH3";
 const NODE_NAMES = new Set([NODE_NAME, TREE_NODE_NAME]);
 const SEMANTIC_SETTING_WIDGETS = [
     "semantic_anchor_size", "semantic_anchor_mode",

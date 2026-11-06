@@ -83,7 +83,7 @@ assert.equal(writes, writesBefore + 1);
 assert.equal(state.plan.shots[0].steps, 12);
 
 // Connected fingerprint sockets must survive the real widget-collapse path.
-const widgets = vm.createContext({MODERN_NODE_NAME:"MiniMaxH3ChainPlanModern",
+const widgets = vm.createContext({MODERN_NODE_NAME:"MiniMaxH3ChainPlanModern|MieH3",
     MODERN_BACKING_WIDGETS:["generation_fingerprint", "default_steps"],
 });
 vm.runInContext(extract(editor, /^function collapseWidget\([^]*?^}/m) + "\n" +
@@ -91,7 +91,7 @@ vm.runInContext(extract(editor, /^function collapseWidget\([^]*?^}/m) + "\n" +
 const fingerprint = {name:"generation_fingerprint",type:"converted-widget",hidden:false,
     value:"saved-fingerprint",computeSize:() => [0,-4],draw:() => {}};
 const ordinary = {name:"default_steps",type:"number",value:20};
-const modern = {type:"MiniMaxH3ChainPlanModern",widgets:[fingerprint,ordinary],
+const modern = {type:"MiniMaxH3ChainPlanModern|MieH3",widgets:[fingerprint,ordinary],
     inputs:[{name:"generation_fingerprint",link:42,widget:{name:"generation_fingerprint"}}]};
 const original = {...fingerprint};
 widgets.collapseModernBackingWidgets(modern);

@@ -378,10 +378,10 @@ with tempfile.TemporaryDirectory() as temporary:
         legacy_prepared["source_timeline"])
 
 assert chain.CHAIN_NODE_CLASS_MAPPINGS[
-    "MiniMaxH3TaggedMotionReferenceTimeline"] is (
+    "MiniMaxH3TaggedMotionReferenceTimeline|MieH3"] is (
         chain.MiniMaxH3TaggedMotionReferenceTimeline)
 assert chain.CHAIN_NODE_CLASS_MAPPINGS[
-    "MiniMaxH3SourceTimelineScenePreview"] is (
+    "MiniMaxH3SourceTimelineScenePreview|MieH3"] is (
         chain.MiniMaxH3SourceTimelineScenePreview)
 
 print(

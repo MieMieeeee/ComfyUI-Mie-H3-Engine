@@ -162,18 +162,18 @@ async function browserChecks() {
             const settings={run_name:"alpha",plan_json:planText("alpha"),width:960,height:544,base_seed:1,
                 default_duration_seconds:5,default_steps:8,encode_mode:"video",crop:"disabled",
                 generation_fingerprint:"",segment_crf:18,video_blend_frames:0};
-            class Plan extends BaseNode{constructor(){super("MiniMaxH3ChainPlanModern",settings);}}
-            class Studio extends BaseNode{constructor(){super("MiniMaxH3ChainPlanStudio",{...settings,working_branch_id:"main",alternate_take_json:""});}}
-            class Carousel extends BaseNode{constructor(){super("MiniMaxH3ProjectAssetManager",
+            class Plan extends BaseNode{constructor(){super("MiniMaxH3ChainPlanModern|MieH3",settings);}}
+            class Studio extends BaseNode{constructor(){super("MiniMaxH3ChainPlanStudio|MieH3",{...settings,working_branch_id:"main",alternate_take_json:""});}}
+            class Carousel extends BaseNode{constructor(){super("MiniMaxH3ProjectAssetManager|MieH3",
                 {run_name:"alpha",catalog_json:"{}",operation_json:"",ownership_json:""});}}
-            class Rich extends BaseNode{constructor(){super("MiniMaxH3ChainRichScenePromptEditor",{});}}
-            for(const extension of extensions)for(const [Node,name]of [[Plan,"MiniMaxH3ChainPlanModern"],
-                [Studio,"MiniMaxH3ChainPlanStudio"],[Carousel,"MiniMaxH3ProjectAssetManager"],
-                [Rich,"MiniMaxH3ChainRichScenePromptEditor"]]){
+            class Rich extends BaseNode{constructor(){super("MiniMaxH3ChainRichScenePromptEditor|MieH3",{});}}
+            for(const extension of extensions)for(const [Node,name]of [[Plan,"MiniMaxH3ChainPlanModern|MieH3"],
+                [Studio,"MiniMaxH3ChainPlanStudio|MieH3"],[Carousel,"MiniMaxH3ProjectAssetManager|MieH3"],
+                [Rich,"MiniMaxH3ChainRichScenePromptEditor|MieH3"]]){
                 await extension.beforeRegisterNodeDef?.(Node,{name});
             }
             const carousel=new Carousel(),plan=new Plan(),studio=useStudio?new Studio():null;
-            const policy=new BaseNode("MiniMaxH3GenerationProfile", {
+            const policy=new BaseNode("MiniMaxH3GenerationProfile|MieH3", {
                 scene_continuity:"Hard picture + smooth audio", audio_profile:"Generate audio"});
             connect(policy,plan,"chain_policy");
             const rich=useStudio?new Rich():null;

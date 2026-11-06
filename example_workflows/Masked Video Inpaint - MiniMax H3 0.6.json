@@ -174,7 +174,7 @@
     },
     {
       "id": 6,
-      "type": "MiniMaxH3ChainLoopStart",
+      "type": "MiniMaxH3ChainLoopStart|MieH3",
       "pos": [
         3820,
         1292
@@ -231,7 +231,7 @@
       ],
       "title": "Loop Start",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainLoopStart"
+        "Node name for S&R": "MiniMaxH3ChainLoopStart|MieH3"
       },
       "widgets_values": [
         1,
@@ -241,7 +241,7 @@
     },
     {
       "id": 7,
-      "type": "MiniMaxH3ChainCurrent",
+      "type": "MiniMaxH3ChainCurrent|MieH3",
       "pos": [
         3820,
         2608
@@ -359,7 +359,7 @@
       ],
       "title": "Current Scene",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainCurrent"
+        "Node name for S&R": "MiniMaxH3ChainCurrent|MieH3"
       },
       "widgets_values": [
         false
@@ -367,7 +367,7 @@
     },
     {
       "id": 8,
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "pos": [
         4390,
         3660
@@ -405,7 +405,7 @@
       ],
       "title": "RECOVERY • Assemble Final Video",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainAssemble"
+        "Node name for S&R": "MiniMaxH3ChainAssemble|MieH3"
       },
       "widgets_values": [
         "plan",
@@ -559,7 +559,7 @@
     },
     {
       "id": 11,
-      "type": "MiniMaxH3ChainContext",
+      "type": "MiniMaxH3ChainContext|MieH3",
       "pos": [
         5080,
         180
@@ -648,7 +648,7 @@
       ],
       "title": "Apply Scene Context",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainContext"
+        "Node name for S&R": "MiniMaxH3ChainContext|MieH3"
       },
       "widgets_values": []
     },
@@ -929,7 +929,7 @@
     },
     {
       "id": 18,
-      "type": "MiniMaxH3LoopTrim",
+      "type": "MiniMaxH3LoopTrim|MieH3",
       "pos": [
         6160,
         180
@@ -998,7 +998,7 @@
       ],
       "title": "Trim Carried Overlap",
       "properties": {
-        "Node name for S&R": "MiniMaxH3LoopTrim"
+        "Node name for S&R": "MiniMaxH3LoopTrim|MieH3"
       },
       "widgets_values": [
         0,
@@ -1009,7 +1009,7 @@
     },
     {
       "id": 19,
-      "type": "MiniMaxH3ChainSegmentSave",
+      "type": "MiniMaxH3ChainSegmentSave|MieH3",
       "pos": [
         6160,
         530
@@ -1069,13 +1069,13 @@
       ],
       "title": "Save Segment + Checkpoint",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainSegmentSave"
+        "Node name for S&R": "MiniMaxH3ChainSegmentSave|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 20,
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "pos": [
         7680,
         180
@@ -1113,7 +1113,7 @@
       ],
       "title": "Assemble Final Video",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainAssemble"
+        "Node name for S&R": "MiniMaxH3ChainAssemble|MieH3"
       },
       "widgets_values": [
         "plan",
@@ -1168,7 +1168,7 @@
     },
     {
       "id": 22,
-      "type": "MiniMaxH3ChainRichScenePromptEditor",
+      "type": "MiniMaxH3ChainRichScenePromptEditor|MieH3",
       "pos": [
         2400,
         180
@@ -1196,13 +1196,13 @@
       ],
       "title": "Scene Prompts + References",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainRichScenePromptEditor"
+        "Node name for S&R": "MiniMaxH3ChainRichScenePromptEditor|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 23,
-      "type": "MiniMaxH3ChainPlanModern",
+      "type": "MiniMaxH3ChainPlanModern|MieH3",
       "pos": [
         80,
         862
@@ -1267,7 +1267,7 @@
       ],
       "title": "Production Plan",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainPlanModern"
+        "Node name for S&R": "MiniMaxH3ChainPlanModern|MieH3"
       },
       "widgets_values": [
         "{\n  \"defaults\": {\n    \"length\": 175,\n    \"steps\": 20\n  },\n  \"shots\": [\n    {\n      \"id\": \"source_inpaint_a\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] Edit the supplied wildlife source video in place. Preserve the original camera trajectory, cloudy coastal lighting, sand, water, distant shoreline, depth of field, motion timing, and every pixel outside the white mask. Inside the masked lower-central beach region only, replace the moving soldier crabs with small polished red metal crab sculptures that occupy the corresponding positions and follow the original animals' grounded lateral motion. Maintain correct perspective, contact shadows, sand interaction, occlusion, scale, and motion blur at the mask boundary. Do not alter the duration, frame rate, camera, background, or unmasked crabs.\\n\\noverall_soundscape:\\nPreserve the source audio exactly, including coastal wind, distant surf, water movement, and all location ambience. Generate no replacement sound.\\n\\nnon_diegetic_music:\\nN/A\",\n      \"length\": 175,\n      \"steps\": 20,\n      \"seed\": \"24051521\"\n    },\n    {\n      \"id\": \"source_inpaint_b\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] Edit the supplied wildlife source video in place. Preserve the original camera trajectory, cloudy coastal lighting, sand, water, distant shoreline, depth of field, motion timing, and every pixel outside the white mask. Inside the masked lower-central beach region only, replace the moving soldier crabs with small polished red metal crab sculptures that occupy the corresponding positions and follow the original animals' grounded lateral motion. Maintain correct perspective, contact shadows, sand interaction, occlusion, scale, and motion blur at the mask boundary. Do not alter the duration, frame rate, camera, background, or unmasked crabs.\\n\\noverall_soundscape:\\nPreserve the source audio exactly, including coastal wind, distant surf, water movement, and all location ambience. Generate no replacement sound.\\n\\nnon_diegetic_music:\\nN/A\",\n      \"length\": 175,\n      \"steps\": 20,\n      \"seed\": \"24051522\"\n    }\n  ]\n}",
@@ -1286,7 +1286,7 @@
     },
     {
       "id": 24,
-      "type": "MiniMaxH3ChainPlanStudio",
+      "type": "MiniMaxH3ChainPlanStudio|MieH3",
       "pos": [
         1200,
         180
@@ -1384,7 +1384,7 @@
       ],
       "title": "Plan Studio",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainPlanStudio"
+        "Node name for S&R": "MiniMaxH3ChainPlanStudio|MieH3"
       },
       "widgets_values": [
         1,
@@ -1413,7 +1413,7 @@
     },
     {
       "id": 25,
-      "type": "MiniMaxH3ChainManifestLoad",
+      "type": "MiniMaxH3ChainManifestLoad|MieH3",
       "pos": [
         3820,
         3660
@@ -1463,13 +1463,13 @@
       ],
       "title": "RECOVERY • Load Saved Clips",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainManifestLoad"
+        "Node name for S&R": "MiniMaxH3ChainManifestLoad|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 26,
-      "type": "MiniMaxH3ChainLoopEnd",
+      "type": "MiniMaxH3ChainLoopEnd|MieH3",
       "pos": [
         6770,
         1160
@@ -1534,7 +1534,7 @@
       ],
       "title": "Loop End",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainLoopEnd"
+        "Node name for S&R": "MiniMaxH3ChainLoopEnd|MieH3"
       },
       "widgets_values": [
         "off",
@@ -1543,7 +1543,7 @@
     },
     {
       "id": 27,
-      "type": "MiniMaxH3ChainReview",
+      "type": "MiniMaxH3ChainReview|MieH3",
       "pos": [
         6770,
         180
@@ -1593,7 +1593,7 @@
       ],
       "title": "Review Candidates",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainReview"
+        "Node name for S&R": "MiniMaxH3ChainReview|MieH3"
       },
       "widgets_values": [
         true,
@@ -1700,7 +1700,7 @@
     },
     {
       "id": 30,
-      "type": "MiniMaxH3ContexLoopSourceAVTarget",
+      "type": "MiniMaxH3ContexLoopSourceAVTarget|MieH3",
       "pos": [
         4430,
         1768
@@ -1782,7 +1782,7 @@
       ],
       "title": "Context Loop Source AVTarget",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ContexLoopSourceAVTarget"
+        "Node name for S&R": "MiniMaxH3ContexLoopSourceAVTarget|MieH3"
       },
       "widgets_values": [
         24,
@@ -1791,7 +1791,7 @@
     },
     {
       "id": 31,
-      "type": "MiniMaxH3ContexMaskedTarget",
+      "type": "MiniMaxH3ContexMaskedTarget|MieH3",
       "pos": [
         5080,
         1416
@@ -1836,7 +1836,7 @@
       ],
       "title": "Context Masked Target",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ContexMaskedTarget"
+        "Node name for S&R": "MiniMaxH3ContexMaskedTarget|MieH3"
       },
       "widgets_values": [
         "white = generate",
@@ -1879,7 +1879,7 @@
     },
     {
       "id": 33,
-      "type": "MiniMaxH3ContexMaskGridPreview",
+      "type": "MiniMaxH3ContexMaskGridPreview|MieH3",
       "pos": [
         5080,
         540
@@ -1926,7 +1926,7 @@
       ],
       "title": "Context Mask Grid Preview",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ContexMaskGridPreview"
+        "Node name for S&R": "MiniMaxH3ContexMaskGridPreview|MieH3"
       },
       "widgets_values": [
         "runtime exact (latent max)",
@@ -2008,7 +2008,7 @@
     },
     {
       "id": 36,
-      "type": "MiniMaxH3ContexLoopMaskSlice",
+      "type": "MiniMaxH3ContexLoopMaskSlice|MieH3",
       "pos": [
         4430,
         1244
@@ -2053,7 +2053,7 @@
       ],
       "title": "Context Loop Mask Slice",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ContexLoopMaskSlice"
+        "Node name for S&R": "MiniMaxH3ContexLoopMaskSlice|MieH3"
       },
       "widgets_values": [
         24
@@ -2061,7 +2061,7 @@
     },
     {
       "id": 37,
-      "type": "MiniMaxH3GenerationProfile",
+      "type": "MiniMaxH3GenerationProfile|MieH3",
       "pos": [
         80,
         610
@@ -2096,7 +2096,7 @@
       ],
       "title": "Generation Profile",
       "properties": {
-        "Node name for S&R": "MiniMaxH3GenerationProfile"
+        "Node name for S&R": "MiniMaxH3GenerationProfile|MieH3"
       },
       "widgets_values": [
         "Hard picture + protected audio",
@@ -2105,7 +2105,7 @@
     },
     {
       "id": 38,
-      "type": "MiniMaxH3ProjectAssetManager",
+      "type": "MiniMaxH3ProjectAssetManager|MieH3",
       "pos": [
         1200,
         1252
@@ -2163,7 +2163,7 @@
       ],
       "title": "Project Asset Carousel",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ProjectAssetManager"
+        "Node name for S&R": "MiniMaxH3ProjectAssetManager|MieH3"
       },
       "widgets_values": [
         "masked_video_inpaint_minimax_h3_0_6_json",
@@ -2176,7 +2176,7 @@
     },
     {
       "id": 39,
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "pos": [
         2400,
         1220
@@ -2204,7 +2204,7 @@
       ],
       "title": "Checkpoint Manager",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainCheckpointManager"
+        "Node name for S&R": "MiniMaxH3ChainCheckpointManager|MieH3"
       },
       "widgets_values": [
         ""

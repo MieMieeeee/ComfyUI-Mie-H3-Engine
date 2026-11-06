@@ -24,7 +24,7 @@ protect = 'MiniMaxH3PixelContinuityPrepare'
 finish = 'MiniMaxH3PixelContinuityFinish'
 conditioning = 'CATH3UpscaleVideoConditioning'
 refine = 'UltimateSDUpscaleNoUpscaleGuiderVideo'
-assert nodes['MiniMaxH3ChainCheckpointManager']['widgets_values'] == ['']
+assert nodes['MiniMaxH3ChainCheckpointManager|MieH3']['widgets_values'] == ['']
 capture = 'MiniMaxH3PixelBoundaryCapture'
 options = 'MiniMaxH3PixelBoundarySettings'
 export = 'MiniMaxH3PixelBoundaryExport'
@@ -33,13 +33,13 @@ assert origin(capture,'video') == ('CATDLSS5EnhanceVideo','video')
 assert origin(capture,'state') == (current,'state')
 assert origin(capture,'options') == (options,'options')
 assert nodes[options]['widgets_values'][:4] == [False,17,0.2,3]
-assert origin('MiniMaxH3ChainUpscaleAdapter','recipe_json') == (options,'recipe_json')
-assert origin(export,'video_path') == ('MiniMaxH3ChainAssemble','video_path')
+assert origin('MiniMaxH3ChainUpscaleAdapter|MieH3','recipe_json') == (options,'recipe_json')
+assert origin(export,'video_path') == ('MiniMaxH3ChainAssemble|MieH3','video_path')
 assert origin(export,'manifest') == ('CATH3UpscaleVideoLoopEnd','manifest')
 assert origin(export,'options') == (options,'options')
 assert origin(export,'model') == ('LoraLoaderModelOnly','MODEL')
-assert origin(export,'prompt_override') == ('MiniMaxH3UpscaleReferencePromptOverride','prompt_override')
-assert origin(export,'tagged_references') == ('MiniMaxH3UpscaleReferencePromptOverride','references')
+assert origin(export,'prompt_override') == ('MiniMaxH3UpscaleReferencePromptOverride|MieH3','prompt_override')
+assert origin(export,'tagged_references') == ('MiniMaxH3UpscaleReferencePromptOverride|MieH3','references')
 assert origin(protect,'state') == (current,'state')
 assert origin(conditioning,'video') == (protect,'video')
 assert origin(refine,'video') == (conditioning,'video')
@@ -55,8 +55,8 @@ for target in ('CATH3UpscaleVideoSegmentSave','CATH3UpscaleVideoLoopEnd'):
     assert origin(target,'state') == (current,'state')
     assert origin(target,'upscaled_latent') is None
 assert origin('CATH3UpscaleVideoSegmentSave','recovered_audio') is None
-assert origin('MiniMaxH3ChainAssemble','manifest') == ('CATH3UpscaleVideoLoopEnd','manifest')
-assert origin('CATH3UpscaleVideoLoopEnd','flow') == ('MiniMaxH3ChainUpscaleAdapter','flow')
+assert origin('MiniMaxH3ChainAssemble|MieH3','manifest') == ('CATH3UpscaleVideoLoopEnd','manifest')
+assert origin('CATH3UpscaleVideoLoopEnd','flow') == ('MiniMaxH3ChainUpscaleAdapter|MieH3','flow')
 assert not any('ContextAnchoredVideoRefine' in typ for typ in nodes), 'transport only; no CAT refinement'
 for i,a in enumerate(wf['nodes']):
     ax,ay=a['pos']; aw,ah=a['size']

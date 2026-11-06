@@ -363,7 +363,7 @@
     },
     {
       "id": 9,
-      "type": "MiniMaxH3ContexMaskedAVBridge",
+      "type": "MiniMaxH3ContexMaskedAVBridge|MieH3",
       "pos": [
         2970,
         180
@@ -433,7 +433,7 @@
       ],
       "title": "Context Masked AVBridge",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ContexMaskedAVBridge"
+        "Node name for S&R": "MiniMaxH3ContexMaskedAVBridge|MieH3"
       },
       "widgets_values": [
         24,
@@ -1085,7 +1085,7 @@
     },
     {
       "id": 25,
-      "type": "MiniMaxH3ReferenceVideoPrepare",
+      "type": "MiniMaxH3ReferenceVideoPrepare|MieH3",
       "pos": [
         1300,
         2756
@@ -1142,7 +1142,7 @@
       ],
       "title": "Reference Video Prepare",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ReferenceVideoPrepare"
+        "Node name for S&R": "MiniMaxH3ReferenceVideoPrepare|MieH3"
       },
       "widgets_values": [
         311,

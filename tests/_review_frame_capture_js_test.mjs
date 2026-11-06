@@ -17,12 +17,12 @@ function connect(parent, child) {
     (child.inputs ??= []).push({link: id});
 }
 function carousel(project) {
-    return {type: "MiniMaxH3ProjectAssetManager", project, refreshed: 0,
+    return {type: "MiniMaxH3ProjectAssetManager|MieH3", project, refreshed: 0,
         _h3ProjectAssetCurrentProject() { return this.project; },
         async _h3ProjectAssetRefresh() { this.refreshed++; }};
 }
 const reviewA = {}, reviewB = {}, a = carousel("A"), b = carousel("B");
-b.type = "MiniMaxH3ProjectAssetTree";
+b.type = "MiniMaxH3ProjectAssetTree|MieH3";
 const canvas = graph([b, reviewA, a, reviewB]); // Wrong project is first on canvas.
 connect(a, reviewA); connect(b, reviewB);
 assert.equal(captureTargetProject(reviewA), "A");
@@ -35,7 +35,7 @@ connect(b, reviewA);
 assert.equal(captureTargetProject(reviewA), "", "ambiguous upstream projects require a choice");
 reviewA.inputs = [];
 assert.equal(captureTargetProject(reviewA), "", "never select an unrelated Carousel");
-const plan = {type: "MiniMaxH3ChainPlanModern", widgets: [{name: "run_name", value: "Plan"}]};
+const plan = {type: "MiniMaxH3ChainPlanModern|MieH3", widgets: [{name: "run_name", value: "Plan"}]};
 const c = carousel("");
 graph([plan, reviewA, c]); connect(plan, reviewA);
 assert.equal(captureTargetProject(reviewA), "Plan");

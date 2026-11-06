@@ -64,7 +64,7 @@ const server = http.createServer(async (req,res) => {
                 host.style.cssText='width:620px;height:760px';host.append(root);document.body.append(host);return {};
             }
         }
-        extension.beforeRegisterNodeDef(TestNode,{name:'MiniMaxH3ReviewRelay'});
+        extension.beforeRegisterNodeDef(TestNode,{name:'MiniMaxH3ReviewRelay|MieH3'});
         window.testNode=new TestNode();testNode.onNodeCreated();
     </script></body></html>`);
 });

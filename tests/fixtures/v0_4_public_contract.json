@@ -44,7 +44,7 @@
     }
   },
   "positional_outputs": {
-    "MiniMaxH3ChainPlan": [
+    "MiniMaxH3ChainPlan|MieH3": [
       "plan",
       "summary",
       "clip_count",
@@ -52,8 +52,8 @@
       "height",
       "video_blend_frames"
     ],
-    "MiniMaxH3ChainLoopStart": ["flow", "state", "status"],
-    "MiniMaxH3ChainCurrent": [
+    "MiniMaxH3ChainLoopStart|MieH3": ["flow", "state", "status"],
+    "MiniMaxH3ChainCurrent|MieH3": [
       "state",
       "clip_index",
       "clip_count",
@@ -69,20 +69,20 @@
       "source_audio_slice",
       "status"
     ],
-    "MiniMaxH3ChainContext": [
+    "MiniMaxH3ChainContext|MieH3": [
       "conditioning",
       "trim_frames",
       "is_continuation",
       "latent"
     ],
-    "MiniMaxH3ChainLoopEnd": [
+    "MiniMaxH3ChainLoopEnd|MieH3": [
       "manifest",
       "manifest_json",
       "last_context_frames",
       "last_context_latent"
     ],
-    "MiniMaxH3ChainManifestLoad": ["manifest", "manifest_json", "status"],
-    "MiniMaxH3ChainAssemble": ["video_path"]
+    "MiniMaxH3ChainManifestLoad|MieH3": ["manifest", "manifest_json", "status"],
+    "MiniMaxH3ChainAssemble|MieH3": ["video_path"]
   },
   "checkpoint_formats": [
     "h3_chain_plan_archive_v1",

@@ -60,6 +60,8 @@ import logging
 import numpy as np
 
 from .nodes import _pixel_frames, _streams_from_latent
+from .fork_identity import add_suffix
+
 
 _LOG = logging.getLogger("h3_motion_context")
 
@@ -442,6 +444,8 @@ class MiniMaxH3ContexLoopSeamProbe:
 NODE_CLASS_MAPPINGS = {
     "MiniMaxH3ContexLoopSeamProbe": MiniMaxH3ContexLoopSeamProbe,
 }
+NODE_CLASS_MAPPINGS = {add_suffix(name): value for name, value in NODE_CLASS_MAPPINGS.items()}
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3ContexLoopSeamProbe": "MiniMax H3 Context Loop Seam Probe",
 }
+NODE_DISPLAY_NAME_MAPPINGS = {add_suffix(name): value for name, value in NODE_DISPLAY_NAME_MAPPINGS.items()}

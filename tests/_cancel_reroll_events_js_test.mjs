@@ -16,7 +16,7 @@ const source = fs.readFileSync(
 // Execute the real extension event handlers and cancellation flow. Only the
 // browser shell, transport and editor refresh are stubbed; no live job is run.
 function harness(currentType, {enabled = true, nested = false,
-                              planType = "MiniMaxH3ChainPlanModern"} = {}) {
+                              planType = "MiniMaxH3ChainPlanModern|MieH3"} = {}) {
     const calls = [];
     const listeners = new Map();
     const plan = {id: 1, type: planType, inputs: [], widgets: [
@@ -27,11 +27,11 @@ function harness(currentType, {enabled = true, nested = false,
             {id: "three", prompt: ["Third."], seed: "3"},
         ]})},
     ]};
-    const studio = {id: 2, type: "MiniMaxH3ChainPlanStudio", inputs: [{link: 1}]};
-    const start = {id: 3, type: "MiniMaxH3ChainLoopStart", inputs: [{link: 2}],
+    const studio = {id: 2, type: "MiniMaxH3ChainPlanStudio|MieH3", inputs: [{link: 1}]};
+    const start = {id: 3, type: "MiniMaxH3ChainLoopStart|MieH3", inputs: [{link: 2}],
         widgets: [{name: "start_clip", value: 1}, {name: "scene_range", value: "1:2"}]};
     const current = {id: 4, comfyClass: currentType, inputs: [{link: 3}]};
-    const save = {id: 5, type: "MiniMaxH3ChainSegmentSave", inputs: []};
+    const save = {id: 5, type: "MiniMaxH3ChainSegmentSave|MieH3", inputs: []};
     const nodes = [plan, studio, start, current, save];
     const graph = {links: {1: {origin_id: 1}, 2: {origin_id: 2}, 3: {origin_id: 3}},
         getNodeById: id => nodes.find(node => node.id === id), setDirtyCanvas() {}};
@@ -85,9 +85,9 @@ function harness(currentType, {enabled = true, nested = false,
     return fixture;
 }
 
-for (const currentType of ["MiniMaxH3ChainCurrent", "MiniMaxH3CurrentTaggedReferenceScene"]) {
+for (const currentType of ["MiniMaxH3ChainCurrent|MieH3", "MiniMaxH3CurrentTaggedReferenceScene|MieH3"]) {
     for (const nested of [false, true]) {
-        for (const planType of ["MiniMaxH3ChainPlan", "MiniMaxH3ChainPlanModern"]) {
+        for (const planType of ["MiniMaxH3ChainPlan|MieH3", "MiniMaxH3ChainPlanModern|MieH3"]) {
             const h = harness(currentType, {nested, planType});
             h.scene();
             assert.equal(h.control.root.hidden, false, `${currentType} must show the control`);

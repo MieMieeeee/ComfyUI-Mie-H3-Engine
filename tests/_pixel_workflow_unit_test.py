@@ -21,13 +21,13 @@ def origin(target_type, input_name):
     return by_id[source]["type"], by_id[source]["outputs"][slot]["name"]
 
 
-conditioning = "MiniMaxH3ChainUpscalePixelConditioning"
-current = "MiniMaxH3ChainUpscalePixelCurrent"
+conditioning = "MiniMaxH3ChainUpscalePixelConditioning|MieH3"
+current = "MiniMaxH3ChainUpscalePixelCurrent|MieH3"
 refiner = "UltimateSDUpscaleNoUpscaleGuider"
-assert nodes["MiniMaxH3ChainCheckpointManager"]["widgets_values"] == [""]
-assert nodes["MiniMaxH3ChainUpscaleAdapter"]["widgets_values"][1] == "pixel"
-assert nodes["MiniMaxH3ChainUpscaleAdapter"]["widgets_values"][5] is False
-assert not {"H3ConditioningSyncFromLatents", "MiniMaxH3ChainPass2Prepare",
+assert nodes["MiniMaxH3ChainCheckpointManager|MieH3"]["widgets_values"] == [""]
+assert nodes["MiniMaxH3ChainUpscaleAdapter|MieH3"]["widgets_values"][1] == "pixel"
+assert nodes["MiniMaxH3ChainUpscaleAdapter|MieH3"]["widgets_values"][5] is False
+assert not {"H3ConditioningSyncFromLatents|MieH3", "MiniMaxH3ChainPass2Prepare|MieH3",
             "VAEDecodeAudio", "VAEDecode"}.intersection(nodes)
 assert origin(conditioning, "images") == ("DLSS5EnhanceImages", "images")
 assert origin("DLSS5EnhanceImages", "images") == (current, "images")
@@ -39,14 +39,14 @@ assert origin(refiner, "seed") == (current, "seed")
 seed = next(s for s in nodes[refiner]["inputs"] if s["name"] == "seed")
 assert seed["widget"] == {"name": "seed"}
 assert nodes[refiner]["widgets_values"][-1] is False, "anchor_context is BOOLEAN, not a stale mode string"
-for typ in ("MiniMaxH3ChainUpscaleSegmentSave", "MiniMaxH3ChainUpscaleLoopEnd"):
+for typ in ("MiniMaxH3ChainUpscaleSegmentSave|MieH3", "MiniMaxH3ChainUpscaleLoopEnd|MieH3"):
     assert origin(typ, "images") == (refiner, "IMAGE")
     assert origin(typ, "state") == (current, "state")
     assert origin(typ, "upscaled_latent") is None
-assert origin("MiniMaxH3ChainUpscaleSegmentSave", "recovered_audio") is None
-assert origin("MiniMaxH3ChainAssemble", "source_timeline") is None
-assert origin("MiniMaxH3ChainAssemble", "manifest") == ("MiniMaxH3ChainUpscaleLoopEnd", "manifest")
-assert origin("MiniMaxH3ChainUpscaleLoopEnd", "flow") == ("MiniMaxH3ChainUpscaleAdapter", "flow")
+assert origin("MiniMaxH3ChainUpscaleSegmentSave|MieH3", "recovered_audio") is None
+assert origin("MiniMaxH3ChainAssemble|MieH3", "source_timeline") is None
+assert origin("MiniMaxH3ChainAssemble|MieH3", "manifest") == ("MiniMaxH3ChainUpscaleLoopEnd|MieH3", "manifest")
+assert origin("MiniMaxH3ChainUpscaleLoopEnd|MieH3", "flow") == ("MiniMaxH3ChainUpscaleAdapter|MieH3", "flow")
 assert all(n["mode"] == 0 for n in wf["nodes"])
 for i, a in enumerate(wf["nodes"]):
     ax, ay = a["pos"]; aw, ah = a["size"]

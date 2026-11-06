@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory(prefix="h3-step-regression-") as temporary:
         recipe = json.loads((root / "tools" / "v06" / "recipes" /
                             (name + " - MiniMax H3 0.6.json")).read_text())
         author = next(n for n in recipe["nodes"]
-                      if n["type"] == "MiniMaxH3ChainPlanModern")
+                      if n["type"] == "MiniMaxH3ChainPlanModern|MieH3")
         parsed = json.loads(author["settings"]["plan_json"])
         assert all(s["steps"] == 8 for s in build(parsed, 8)["shots"]), name
 print("Step counts: actual Current Scene outputs, changed queues, saved overrides, and four recipes pass")

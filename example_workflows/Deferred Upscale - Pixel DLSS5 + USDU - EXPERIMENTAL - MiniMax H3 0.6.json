@@ -6,7 +6,7 @@
   "nodes": [
     {
       "id": 1,
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "pos": [
         80,
         610
@@ -36,7 +36,7 @@
       ],
       "title": "Checkpoint Manager",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainCheckpointManager"
+        "Node name for S&R": "MiniMaxH3ChainCheckpointManager|MieH3"
       },
       "widgets_values": [
         ""
@@ -44,7 +44,7 @@
     },
     {
       "id": 2,
-      "type": "MiniMaxH3ChainUpscaleAdapter",
+      "type": "MiniMaxH3ChainUpscaleAdapter|MieH3",
       "pos": [
         1500,
         180
@@ -91,7 +91,7 @@
       ],
       "title": "Chain Upscale Adapter",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainUpscaleAdapter"
+        "Node name for S&R": "MiniMaxH3ChainUpscaleAdapter|MieH3"
       },
       "widgets_values": [
         "h3_pixel_dlss5",
@@ -140,7 +140,7 @@
     },
     {
       "id": 4,
-      "type": "MiniMaxH3ChainUpscalePixelCurrent",
+      "type": "MiniMaxH3ChainUpscalePixelCurrent|MieH3",
       "pos": [
         1500,
         2668
@@ -221,7 +221,7 @@
       ],
       "title": "Pixel Current Scene • Experimental",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainUpscalePixelCurrent"
+        "Node name for S&R": "MiniMaxH3ChainUpscalePixelCurrent|MieH3"
       },
       "widgets_values": []
     },
@@ -421,7 +421,7 @@
     },
     {
       "id": 10,
-      "type": "MiniMaxH3UpscaleReferencePromptOverride",
+      "type": "MiniMaxH3UpscaleReferencePromptOverride|MieH3",
       "pos": [
         1500,
         1988
@@ -468,7 +468,7 @@
       ],
       "title": "Upscale Reference Prompt Override",
       "properties": {
-        "Node name for S&R": "MiniMaxH3UpscaleReferencePromptOverride"
+        "Node name for S&R": "MiniMaxH3UpscaleReferencePromptOverride|MieH3"
       },
       "widgets_values": [
         "",
@@ -477,7 +477,7 @@
     },
     {
       "id": 11,
-      "type": "MiniMaxH3ChainUpscalePixelConditioning",
+      "type": "MiniMaxH3ChainUpscalePixelConditioning|MieH3",
       "pos": [
         2150,
         664
@@ -572,7 +572,7 @@
       ],
       "title": "Pixel Conditioning • Actual Image Size",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainUpscalePixelConditioning"
+        "Node name for S&R": "MiniMaxH3ChainUpscalePixelConditioning|MieH3"
       },
       "widgets_values": [
         "text_only",
@@ -789,7 +789,7 @@
     },
     {
       "id": 16,
-      "type": "MiniMaxH3ChainUpscaleSegmentSave",
+      "type": "MiniMaxH3ChainUpscaleSegmentSave|MieH3",
       "pos": [
         3550,
         180
@@ -839,13 +839,13 @@
       ],
       "title": "Chain Upscale Segment Save",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainUpscaleSegmentSave"
+        "Node name for S&R": "MiniMaxH3ChainUpscaleSegmentSave|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 17,
-      "type": "MiniMaxH3ChainUpscaleLoopEnd",
+      "type": "MiniMaxH3ChainUpscaleLoopEnd|MieH3",
       "pos": [
         3550,
         424
@@ -910,13 +910,13 @@
       ],
       "title": "Chain Upscale Loop End",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainUpscaleLoopEnd"
+        "Node name for S&R": "MiniMaxH3ChainUpscaleLoopEnd|MieH3"
       },
       "widgets_values": []
     },
     {
       "id": 18,
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "pos": [
         4060,
         180
@@ -954,7 +954,7 @@
       ],
       "title": "Assemble Final Video",
       "properties": {
-        "Node name for S&R": "MiniMaxH3ChainAssemble"
+        "Node name for S&R": "MiniMaxH3ChainAssemble|MieH3"
       },
       "widgets_values": [
         "plan",

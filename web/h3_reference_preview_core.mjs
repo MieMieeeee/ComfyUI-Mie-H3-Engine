@@ -1,23 +1,23 @@
-export const TAGGED_REF2VA_TYPE = "MiniMaxH3TaggedReferenceToVideo";
+export const TAGGED_REF2VA_TYPE = "MiniMaxH3TaggedReferenceToVideo|MieH3";
 export const CURRENT_TAGGED_REF2VA_TYPE =
-    "MiniMaxH3CurrentTaggedReferenceScene";
+    "MiniMaxH3CurrentTaggedReferenceScene|MieH3";
 export const CORE_REF2VA_TYPE = "MiniMaxH3ReferenceToVideo";
 export const IMAGE_TO_VIDEO_TYPE = "MiniMaxH3ImageToVideo";
-export const FIRST_SCENE_IMAGE_TYPE = "MiniMaxH3ChainFirstSceneImage";
-export const FRAME_INDEX_SWITCH_TYPE = "MiniMaxH3ChainFrameIndexSwitch";
-export const TAGGED_PICTURE_REF_TYPE = "MiniMaxH3TaggedPictureReference";
-export const TAGGED_VIDEO_REF_TYPE = "MiniMaxH3TaggedVideoReference";
-export const TAGGED_MOTION_REF_TYPE = "MiniMaxH3TaggedMotionReference";
+export const FIRST_SCENE_IMAGE_TYPE = "MiniMaxH3ChainFirstSceneImage|MieH3";
+export const FRAME_INDEX_SWITCH_TYPE = "MiniMaxH3ChainFrameIndexSwitch|MieH3";
+export const TAGGED_PICTURE_REF_TYPE = "MiniMaxH3TaggedPictureReference|MieH3";
+export const TAGGED_VIDEO_REF_TYPE = "MiniMaxH3TaggedVideoReference|MieH3";
+export const TAGGED_MOTION_REF_TYPE = "MiniMaxH3TaggedMotionReference|MieH3";
 export const TAGGED_MOTION_PATH_REF_TYPE =
-    "MiniMaxH3TaggedMotionReferencePath";
+    "MiniMaxH3TaggedMotionReferencePath|MieH3";
 export const TAGGED_MOTION_TIMELINE_REF_TYPE =
-    "MiniMaxH3TaggedMotionReferenceTimeline";
-export const TAGGED_AUDIO_REF_TYPE = "MiniMaxH3TaggedAudioReference";
-export const SEMANTIC_ANCHOR_BUNDLE_TYPE = "MiniMaxH3SemanticAnchorBundle";
-export const SEMANTIC_PICTURE_ANCHOR_TYPE = "MiniMaxH3SemanticPictureAnchor";
-export const PROJECT_ASSET_MANAGER_TYPE = "MiniMaxH3ProjectAssetManager";
+    "MiniMaxH3TaggedMotionReferenceTimeline|MieH3";
+export const TAGGED_AUDIO_REF_TYPE = "MiniMaxH3TaggedAudioReference|MieH3";
+export const SEMANTIC_ANCHOR_BUNDLE_TYPE = "MiniMaxH3SemanticAnchorBundle|MieH3";
+export const SEMANTIC_PICTURE_ANCHOR_TYPE = "MiniMaxH3SemanticPictureAnchor|MieH3";
+export const PROJECT_ASSET_MANAGER_TYPE = "MiniMaxH3ProjectAssetManager|MieH3";
 export const PROJECT_ASSET_MANAGER_TYPES = new Set([
-    PROJECT_ASSET_MANAGER_TYPE, "MiniMaxH3ProjectAssetTree",
+    PROJECT_ASSET_MANAGER_TYPE, "MiniMaxH3ProjectAssetTree|MieH3",
 ]);
 
 const TAGGED_TYPES = new Set([

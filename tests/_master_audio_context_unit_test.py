@@ -329,7 +329,7 @@ def main():
     assert torch.all(softened_mask == 0.25)
 
     assert (
-        "MiniMaxH3ContexMasterAudioMaskedAV"
+        "MiniMaxH3ContexMasterAudioMaskedAV|MieH3"
         in audio_context.NODE_CLASS_MAPPINGS)
     assert (
         "MiniMaxH3ContexSongMaskedAVContext"

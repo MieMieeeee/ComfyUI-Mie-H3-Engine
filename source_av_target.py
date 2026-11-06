@@ -17,6 +17,8 @@ import torch
 from .masked_context import _validate_target_streams
 from .masking_ops import normalize_comfy_mask
 from .nodes import AUDIO_HZ, FPS, _resize
+from .fork_identity import add_suffix
+
 
 
 try:
@@ -362,6 +364,7 @@ NODE_CLASS_MAPPINGS = {
     "MiniMaxH3ContexLoopSourceAVTarget": MiniMaxH3ContexLoopSourceAVTarget,
     "MiniMaxH3ContexLoopMaskSlice": MiniMaxH3ContexLoopMaskSlice,
 }
+NODE_CLASS_MAPPINGS = {add_suffix(name): value for name, value in NODE_CLASS_MAPPINGS.items()}
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3ContexLoopSourceAVTarget": (
@@ -369,3 +372,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3ContexLoopMaskSlice": (
         "MiniMax H3 Masking · Loop Mask Slice"),
 }
+NODE_DISPLAY_NAME_MAPPINGS = {add_suffix(name): value for name, value in NODE_DISPLAY_NAME_MAPPINGS.items()}

@@ -68,7 +68,7 @@
     },
     {
       "key": "n10",
-      "type": "MiniMaxH3ChainLoopStart",
+      "type": "MiniMaxH3ChainLoopStart|MieH3",
       "settings": {
         "start_clip": 1,
         "scene_range": "",
@@ -84,7 +84,7 @@
     },
     {
       "key": "n13",
-      "type": "MiniMaxH3ChainCurrent",
+      "type": "MiniMaxH3ChainCurrent|MieH3",
       "settings": {
         "align_audio_reference": false
       },
@@ -98,7 +98,7 @@
     },
     {
       "key": "n14",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "t2v_studio_recovered_%date:yyyy-MM-dd%",
@@ -174,7 +174,7 @@
     },
     {
       "key": "n18",
-      "type": "MiniMaxH3ChainContext",
+      "type": "MiniMaxH3ChainContext|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -308,7 +308,7 @@
     },
     {
       "key": "n27",
-      "type": "MiniMaxH3LoopTrim",
+      "type": "MiniMaxH3LoopTrim|MieH3",
       "settings": {
         "trim_frames": 0,
         "fps": 24,
@@ -337,7 +337,7 @@
     },
     {
       "key": "n28",
-      "type": "MiniMaxH3ChainSegmentSave",
+      "type": "MiniMaxH3ChainSegmentSave|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -365,7 +365,7 @@
     },
     {
       "key": "n29",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "t2v_studio_%date:yyyy-MM-dd%",
@@ -402,7 +402,7 @@
     },
     {
       "key": "n31",
-      "type": "MiniMaxH3ChainRichScenePromptEditor",
+      "type": "MiniMaxH3ChainRichScenePromptEditor|MieH3",
       "settings": {},
       "inputs": {
         "plan": [
@@ -413,7 +413,7 @@
     },
     {
       "key": "n32",
-      "type": "MiniMaxH3ChainPlanModern",
+      "type": "MiniMaxH3ChainPlanModern|MieH3",
       "settings": {
         "plan_json": "{\n  \"defaults\": {\n    \"steps\": 20\n  },\n  \"shots\": [\n    {\n      \"id\": \"tram_stop_arrival\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] A grounded cinematic wide shot at a rain-darkened neighborhood tram stop just before dawn. One elderly watchmaker in a navy wool coat waits beneath the shelter, holding a small paper parcel with both hands. Sodium streetlights glow in wet pavement while an empty tram approaches from deep background. The camera makes a slow, steady push toward him. He hears the rails sing, looks up, and takes one deliberate step toward the curb. Keep exactly one person, natural body mechanics, restrained contrast, fine rain, and realistic lens breathing. End with the tram entering frame and his step still in progress.\\n\\noverall_soundscape:\\nFine rain on glass, distant tires on wet road, a low electrical rail hum, the approaching tram bell, coat fabric, and one measured footstep. Preserve a quiet predawn acoustic space.\\n\\nnon_diegetic_music:\\nNo non-diegetic music.\",\n      \"length\": 243,\n      \"steps\": 20,\n      \"seed\": \"6101\"\n    },\n    {\n      \"id\": \"tram_boarding\",\n      \"prompt\": \"integrated_multimodal_description:\\n[Shot 1] Continue the same unbroken predawn tram-stop moment from the incoming H3 Motion Context. The carried opening overlap already contains the watchmaker's step and the tram entering frame; begin new action only after that overlap. Preserve his identity, navy coat, parcel, lighting direction, rain density, camera height, lens, and left-to-right tram motion. He completes the step, the doors align beside him and open, and warm interior light reaches across the wet pavement. He gives the parcel a protective glance and boards in one calm motion while the camera settles outside. No cut, no extra pedestrian, no reset of the carried movement.\\n\\noverall_soundscape:\\nContinue the same rain and rail hum through the boundary. Add braking metal, a soft pneumatic door release, one final pavement step, two hollow tram-floor steps, and subdued interior ventilation without restarting the ambience.\\n\\nnon_diegetic_music:\\nNo non-diegetic music.\",\n      \"length\": 243,\n      \"steps\": 20,\n      \"seed\": \"6102\"\n    }\n  ]\n}",
         "run_name": "t2v_studio_minimax_h3_0_6_json",
@@ -442,7 +442,7 @@
     },
     {
       "key": "n33",
-      "type": "MiniMaxH3ChainPlanStudio",
+      "type": "MiniMaxH3ChainPlanStudio|MieH3",
       "settings": {
         "start_clip": 1,
         "scene_range": "",
@@ -485,7 +485,7 @@
     },
     {
       "key": "n34",
-      "type": "MiniMaxH3ChainManifestLoad",
+      "type": "MiniMaxH3ChainManifestLoad|MieH3",
       "settings": {},
       "inputs": {
         "plan": [
@@ -507,7 +507,7 @@
     },
     {
       "key": "n36",
-      "type": "MiniMaxH3ChainLoopEnd",
+      "type": "MiniMaxH3ChainLoopEnd|MieH3",
       "settings": {
         "between_scene_cleanup": "off",
         "execution_mode": "recursive"
@@ -538,7 +538,7 @@
     },
     {
       "key": "n37",
-      "type": "MiniMaxH3ChainReview",
+      "type": "MiniMaxH3ChainReview|MieH3",
       "settings": {
         "enabled": true,
         "play_notification_sound": false,
@@ -576,7 +576,7 @@
     },
     {
       "key": "n39",
-      "type": "MiniMaxH3GenerationProfile",
+      "type": "MiniMaxH3GenerationProfile|MieH3",
       "settings": {
         "scene_continuity": "Visual continuity",
         "audio_profile": "Generate audio"
@@ -586,7 +586,7 @@
     },
     {
       "key": "n40",
-      "type": "MiniMaxH3ProjectAssetManager",
+      "type": "MiniMaxH3ProjectAssetManager|MieH3",
       "settings": {
         "run_name": "t2v_studio_minimax_h3_0_6_json",
         "catalog_json": "",
@@ -600,7 +600,7 @@
     },
     {
       "key": "n41",
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "settings": {
         "selection_json": ""
       },

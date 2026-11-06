@@ -73,7 +73,7 @@ existing.graph = graph;
 existing.widgets.push({name: "existing", width: 180});
 graph._nodes.push(existing);
 
-const host = new FakeNode("MiniMaxH3ChainPlan");
+const host = new FakeNode("MiniMaxH3ChainPlan|MieH3");
 host.graph = graph;
 graph._nodes.push(host);
 controller.addHost(host);
@@ -216,12 +216,12 @@ extension.init();
 assert.equal(registeredSetting.defaultValue, true);
 
 class IntegrationHost extends IntegrationNode {}
-extension.beforeRegisterNodeDef(IntegrationHost, {name: "MiniMaxH3ChainPlan"});
+extension.beforeRegisterNodeDef(IntegrationHost, {name: "MiniMaxH3ChainPlan|MieH3"});
 const integrationExisting = new IntegrationNode();
 integrationExisting.graph = integrationGraph;
 integrationExisting.widgets.push({name: "existing", width: 190});
 integrationGraph._nodes.push(integrationExisting);
-const integrationHost = new IntegrationHost("MiniMaxH3ChainPlan");
+const integrationHost = new IntegrationHost("MiniMaxH3ChainPlan|MieH3");
 integrationHost.graph = integrationGraph;
 integrationGraph._nodes.push(integrationHost);
 integrationHost.onAdded();
@@ -281,10 +281,10 @@ assert.equal(integrationExisting.widgets[0].width, 450);
 
 class StandaloneCheckpointManager extends IntegrationNode {}
 extension.beforeRegisterNodeDef(StandaloneCheckpointManager, {
-    name: "MiniMaxH3ChainCheckpointManager",
+    name: "MiniMaxH3ChainCheckpointManager|MieH3",
 });
 const checkpointManager = new StandaloneCheckpointManager(
-    "MiniMaxH3ChainCheckpointManager",
+    "MiniMaxH3ChainCheckpointManager|MieH3",
 );
 checkpointManager.graph = integrationGraph;
 integrationGraph._nodes.push(checkpointManager);

@@ -154,14 +154,14 @@ class RecoveryTests(unittest.TestCase):
 
     def test_linked_and_modern_saved_max_rebuilt_with_native_geometry(self):
         self.large_picture()
-        for kind in ("MiniMaxH3TaggedReferenceToVideo", "MiniMaxH3ScheduledReferenceToVideo",
-                     "MiniMaxH3CurrentTaggedReferenceScene"):
+        for kind in ("MiniMaxH3TaggedReferenceToVideo|MieH3", "MiniMaxH3ScheduledReferenceToVideo",
+                     "MiniMaxH3CurrentTaggedReferenceScene|MieH3"):
             with self.subTest(kind=kind):
                 self.recipe({
                     "1": {"class_type": kind, "inputs": (
                         {"options": ["options", 0]} if kind.endswith("ReferenceScene")
                         else {"ref_image_size": ["sizing", 0]})},
-                    "options": {"class_type": "MiniMaxH3TaggedSceneOptions",
+                    "options": {"class_type": "MiniMaxH3TaggedSceneOptions|MieH3",
                                 "inputs": {"ref_image_size": ["sizing", 0]}},
                     "sizing": {"class_type": "Reroute", "inputs": {"value": ["max", 0]}},
                     "max": {"class_type": "PrimitiveString", "inputs": {"value": "max"}},
@@ -182,22 +182,22 @@ class RecoveryTests(unittest.TestCase):
         ):
             with self.subTest(value=value, producer=producer):
                 prompt = {
-                    "1": {"class_type": "MiniMaxH3TaggedReferenceToVideo", "inputs": {"ref_image_size": value}},
+                    "1": {"class_type": "MiniMaxH3TaggedReferenceToVideo|MieH3", "inputs": {"ref_image_size": value}},
                     "2": producer,
-                    "3": {"class_type": "MiniMaxH3TaggedReferenceToVideo", "inputs": {"ref_image_size": "max"}},
+                    "3": {"class_type": "MiniMaxH3TaggedReferenceToVideo|MieH3", "inputs": {"ref_image_size": "max"}},
                 }
                 self.assertNotIn("ref_image_size", recovery._recipe_settings(prompt, defaults))
         self.assertEqual(recovery._recipe_settings({
-            "1": {"class_type": "MiniMaxH3CurrentTaggedReferenceScene", "inputs": {}},
-            "unused": {"class_type": "MiniMaxH3TaggedSceneOptions", "inputs": {"ref_image_size": "max"}},
+            "1": {"class_type": "MiniMaxH3CurrentTaggedReferenceScene|MieH3", "inputs": {}},
+            "unused": {"class_type": "MiniMaxH3TaggedSceneOptions|MieH3", "inputs": {"ref_image_size": "max"}},
         }, defaults), defaults)
 
     def test_linked_options_restore_anchor_settings_too(self):
         self.entries[1].update(semantic_anchor_size="inherit", semantic_anchor_mode="inherit")
         self.set_lineage()
         self.recipe({
-            "1": {"class_type": "MiniMaxH3CurrentTaggedReferenceScene", "inputs": {"options": ["2", 0]}},
-            "2": {"class_type": "MiniMaxH3TaggedSceneOptions", "inputs": {
+            "1": {"class_type": "MiniMaxH3CurrentTaggedReferenceScene|MieH3", "inputs": {"options": ["2", 0]}},
+            "2": {"class_type": "MiniMaxH3TaggedSceneOptions|MieH3", "inputs": {
                 "ref_image_size": "max", "semantic_anchor_size": ["3", 0],
                 "semantic_anchor_mode": "picture_storyboard"}},
             "3": {"class_type": "PrimitiveStringMultiline", "inputs": {"value": "1024"}},
@@ -210,9 +210,9 @@ class RecoveryTests(unittest.TestCase):
     def test_fixed_recipe_does_not_reuse_old_default_match_rebuild(self):
         self.large_picture()
         self.condition(override_ref_image_size="match")
-        self.recipe({"1": {"class_type": "MiniMaxH3CurrentTaggedReferenceScene",
+        self.recipe({"1": {"class_type": "MiniMaxH3CurrentTaggedReferenceScene|MieH3",
                             "inputs": {"options": ["2", 0]}},
-                     "2": {"class_type": "MiniMaxH3TaggedSceneOptions", "inputs": {"ref_image_size": "max"}}})
+                     "2": {"class_type": "MiniMaxH3TaggedSceneOptions|MieH3", "inputs": {"ref_image_size": "max"}}})
         result = self.condition()
         self.assertIn("policy=max", result[-1])
         self.assertIn("rebuilt references from verified saved media", result[-1])
@@ -265,7 +265,7 @@ class RecoveryTests(unittest.TestCase):
         self.assertFalse(result[0][0][1]["_h3_upscale_picture_refs_target_sized"])
 
     def test_live_override_inherit_uses_immutable_policy_if_cache_missing(self):
-        self.recipe({"1": {"class_type": "MiniMaxH3TaggedReferenceToVideo", "inputs": {"ref_image_size": "max"}}})
+        self.recipe({"1": {"class_type": "MiniMaxH3TaggedReferenceToVideo|MieH3", "inputs": {"ref_image_size": "max"}}})
         with patch.object(upscale, "_conditioning_from_tagged_upscale_override", return_value=([], "", "")) as build:
             self.condition(tagged_references={})
         self.assertEqual(build.call_args.args[6], "max")
@@ -413,7 +413,7 @@ class RecoveryTests(unittest.TestCase):
     def test_exact_cache_policy_wins_over_recipe_when_rebuilding_missing_tensors(self):
         self.condition(override_ref_image_size="max")
         cached = self.pin_rebuilt_cache()
-        self.recipe({"1": {"class_type": "MiniMaxH3TaggedReferenceToVideo", "inputs": {"ref_image_size": "match"}}})
+        self.recipe({"1": {"class_type": "MiniMaxH3TaggedReferenceToVideo|MieH3", "inputs": {"ref_image_size": "match"}}})
         (self.root / cached["tensor_objects"]["block_000_latent"]["tensors"]).unlink()
         result = self.condition()
         self.assertIn("policy=max", result[-1])
@@ -454,7 +454,7 @@ class RecoveryTests(unittest.TestCase):
 
     def test_inherit_reconstruction_preserves_saved_recipe_match(self):
         self.large_picture()
-        self.recipe({"1": {"class_type": "MiniMaxH3TaggedReferenceToVideo",
+        self.recipe({"1": {"class_type": "MiniMaxH3TaggedReferenceToVideo|MieH3",
                             "inputs": {"ref_image_size": "match"}}})
         result = self.condition()
         self.assertIn("policy=match", result[-1])
@@ -464,7 +464,7 @@ class RecoveryTests(unittest.TestCase):
     def test_inherit_reconstruction_preserves_saved_options_default(self):
         # An immutable scene recipe without Options records the generation
         # node's known Match default, not an unknown historical policy.
-        self.recipe({"1": {"class_type": "MiniMaxH3CurrentTaggedReferenceScene", "inputs": {}}})
+        self.recipe({"1": {"class_type": "MiniMaxH3CurrentTaggedReferenceScene|MieH3", "inputs": {}}})
         settings, defaults = recovery.saved_reference_settings(chain, self.source, self.state["source_manifest"])
         self.assertEqual(settings["ref_image_size"], "match")
         self.assertNotIn("ref_image_size", defaults)
@@ -586,7 +586,7 @@ class RecoveryTests(unittest.TestCase):
     def test_immutable_recipe_restores_max_policy_and_anchor_size(self):
         path = self.run / "recovery_archives" / self.source["revision"] / "api_prompt.json"
         self.source["archives"] = {"api_prompt": str(path.relative_to(self.root))}
-        chain._atomic_json(str(path), {"1": {"class_type": "MiniMaxH3TaggedReferenceToVideo", "inputs": {
+        chain._atomic_json(str(path), {"1": {"class_type": "MiniMaxH3TaggedReferenceToVideo|MieH3", "inputs": {
             "ref_image_size": "max", "semantic_anchor_size": "1024", "semantic_anchor_mode": "timestamped_video"}}})
         self.entries[1].update(semantic_anchor_mode="inherit", semantic_anchor_size="inherit")
         self.set_lineage()

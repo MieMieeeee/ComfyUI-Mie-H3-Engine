@@ -2,6 +2,7 @@
 
 import torch
 
+from .fork_identity import add_suffix
 from .masked_context import _existing_mask_streams
 from .nodes import _streams_from_latent
 
@@ -141,6 +142,8 @@ class MiniMaxH3ChainAudioRefineSampler:
 NODE_CLASS_MAPPINGS = {
     "MiniMaxH3ChainAudioRefineSampler": MiniMaxH3ChainAudioRefineSampler,
 }
+NODE_CLASS_MAPPINGS = {add_suffix(name): value for name, value in NODE_CLASS_MAPPINGS.items()}
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3ChainAudioRefineSampler": "MiniMax H3 Chain Audio Refine Sampler",
 }
+NODE_DISPLAY_NAME_MAPPINGS = {add_suffix(name): value for name, value in NODE_DISPLAY_NAME_MAPPINGS.items()}

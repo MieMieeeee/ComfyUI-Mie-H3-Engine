@@ -653,10 +653,10 @@ assert.equal(authoringSignature(reordered),authoringSignature(authoring('2')));
         widget:(node,name)=>node.widgets?.find(w=>w.name===name)});
     vm.runInContext(handler,context);
     assert.equal(JSON.parse(context.captureBranchAuthoring().plan_json).shots[0].prompt,live.shots[0].prompt);
-    const policy={id:2,type:'MiniMaxH3GenerationProfile',inputs:[],widgets:[
+    const policy={id:2,type:'MiniMaxH3GenerationProfile|MieH3',inputs:[],widgets:[
         {name:'scene_continuity',value:'Hard picture + smooth audio'},
         {name:'audio_profile',value:'Generate audio'}]};
-    Object.assign(node,{type:'MiniMaxH3ChainPlan',inputs:[{name:'chain_policy',link:1}],
+    Object.assign(node,{type:'MiniMaxH3ChainPlan|MieH3',inputs:[{name:'chain_policy',link:1}],
         widgets:[{name:'audio_context_length',value:22}],
         graph:{links:{1:{origin_id:2}},getNodeById:()=>policy}});
     policy.graph=node.graph;

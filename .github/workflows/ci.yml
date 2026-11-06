@@ -48,6 +48,15 @@ jobs:
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install numpy av safetensors pillow
 
+      - name: Check the node-type rename map is current
+        shell: bash
+        run: |
+          # The map is generated from the registered node types. If a node
+          # is added or renamed without regenerating it, this fails: a stale
+          # map means a type name that is registered under one spelling and
+          # looked up under another.
+          python tools/gen_rename_map.py --check
+
       - name: Run the suite through the baseline gate
         shell: bash
         run: |

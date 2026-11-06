@@ -228,6 +228,8 @@ class MiniMaxH3ChainSelfLiftSampler:
 
 
 from .selflift_hunt import MiniMaxH3SelfLiftSeedHunt, register_routes
+from .fork_identity import add_suffix
+
 
 register_routes()
 
@@ -237,9 +239,11 @@ NODE_CLASS_MAPPINGS = {
     "MiniMaxH3ChainSelfLiftSampler": MiniMaxH3ChainSelfLiftSampler,
     "MiniMaxH3SelfLiftSeedHunt": MiniMaxH3SelfLiftSeedHunt,
 }
+NODE_CLASS_MAPPINGS = {add_suffix(name): value for name, value in NODE_CLASS_MAPPINGS.items()}
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3SelfLiftTiling": "MiniMax H3 SelfLift Tiling — Experimental",
     "MiniMaxH3SelfLiftProject": "MiniMax H3 SelfLift Project — Experimental",
     "MiniMaxH3ChainSelfLiftSampler": "MiniMax H3 Chain SelfLift Sampler — Experimental",
     "MiniMaxH3SelfLiftSeedHunt": "MiniMax H3 SelfLift Seed Hunt — Experimental",
 }
+NODE_DISPLAY_NAME_MAPPINGS = {add_suffix(name): value for name, value in NODE_DISPLAY_NAME_MAPPINGS.items()}

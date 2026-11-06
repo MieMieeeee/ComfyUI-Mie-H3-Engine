@@ -21,9 +21,9 @@ import {projectMutationOptions} from "./h3_project_ownership.mjs?v=0.7.6";
 import {inputSource as resolvedInputSource} from "./h3_reference_preview_core.mjs?v=0.7.27";
 import {syncManagedPlanRunName} from "./h3_project_asset_sync_core.mjs?v=0.7.3";
 
-const NODE_NAME = "MiniMaxH3ChainRunManager";
-const PLAN_NAME = "MiniMaxH3ChainPlan";
-const PLAN_NAMES = new Set([PLAN_NAME, "MiniMaxH3ChainPlanModern"]);
+const NODE_NAME = "MiniMaxH3ChainRunManager|MieH3";
+const PLAN_NAME = "MiniMaxH3ChainPlan|MieH3";
+const PLAN_NAMES = new Set([PLAN_NAME, "MiniMaxH3ChainPlanModern|MieH3"]);
 const ASSET_WIDGETS = [
     "archive_images", "archive_audio", "archive_video", "asset_bindings_json",
 ];

@@ -80,7 +80,7 @@ assert.equal(executionModeFromValue("banana"), LEGACY_MODE);
 assert.equal(isRequeueMode("top_level_requeue"), true);
 assert.equal(isRequeueMode("recursive_legacy"), false);
 assert.equal(isRequeueMode("recursive"), false);
-const oldEnd = {type:"MiniMaxH3ChainLoopEnd",widgets:[{name:"execution_mode",value:"recursive_legacy"}]};
+const oldEnd = {type:"MiniMaxH3ChainLoopEnd|MieH3",widgets:[{name:"execution_mode",value:"recursive_legacy"}]};
 migrateRecursiveExecutionMode(oldEnd);
 assert.equal(oldEnd.widgets[0].value,"recursive");
 for (const value of ["recursive", "top_level_requeue", "unknown"]) {
@@ -242,9 +242,9 @@ async function exerciseProcessRequeue({submission, transitionOk = true, cancelAf
     let enabled=true, registeredExtension;
     const serializeStarted=gate(), queueStarted=gate();
     const response = (ok=true, body={}) => ({ok,status:ok?200:500,json:async()=>body});
-    const start={id:1,comfyClass:"MiniMaxH3ChainLoopStart",widgets:[{name:"start_clip",value:1},{name:"scene_range",value:""}]};
-    const plan={id:2,comfyClass:"MiniMaxH3ChainPlan",widgets:[{name:"run_name",value:"run-a"}]};
-    const current={id:3,comfyClass:"MiniMaxH3ChainCurrent",inputs:[{link:1},{link:2}]};
+    const start={id:1,comfyClass:"MiniMaxH3ChainLoopStart|MieH3",widgets:[{name:"start_clip",value:1},{name:"scene_range",value:""}]};
+    const plan={id:2,comfyClass:"MiniMaxH3ChainPlan|MieH3",widgets:[{name:"run_name",value:"run-a"}]};
+    const current={id:3,comfyClass:"MiniMaxH3ChainCurrent|MieH3",inputs:[{link:1},{link:2}]};
     const graph={nodes:[start,plan,current],links:{1:{origin_id:1},2:{origin_id:2}},getNodeById:id=>({1:start,2:plan,3:current})[id]};
     for (const node of graph.nodes) node.graph=graph;
     globalThis.__h3App={graph,graphToPrompt:async()=>{calls.serialize++; serializeStarted.resolve(); if(serializeGate) await serializeGate.promise; return {};},extensionManager:{setting:{get:id=>id.includes("Cleanup")?0:enabled},workflow:{activeWorkflow:null}},registerExtension:extension=>{registeredExtension=extension;}};
@@ -281,10 +281,10 @@ async function exerciseProcessRequeue({submission, transitionOk = true, cancelAf
     const setting=registeredExtension?.settings?.filter(item=>item.id === "MiniMaxH3ContextLoop.topLevelRequeue");
     assert.equal(registeredExtension?.name,"minimax_h3_context_loop.top_level_requeue"); assert.equal(setting?.length,1); assert.equal(typeof setting[0].onChange,"function");
     class LoopEnd {
-        constructor() {this.type="MiniMaxH3ChainLoopEnd";this.widgets=[{name:"execution_mode",value:"recursive_legacy"}];}
+        constructor() {this.type="MiniMaxH3ChainLoopEnd|MieH3";this.widgets=[{name:"execution_mode",value:"recursive_legacy"}];}
         onConfigure(value) {this.widgets[0].value=value;return "configured";}
     }
-    registeredExtension.beforeRegisterNodeDef(LoopEnd,{name:"MiniMaxH3ChainLoopEnd"});
+    registeredExtension.beforeRegisterNodeDef(LoopEnd,{name:"MiniMaxH3ChainLoopEnd|MieH3"});
     const loopEnd=new LoopEnd();registeredExtension.nodeCreated(loopEnd);
     assert.equal(loopEnd.widgets[0].value,"recursive");
     assert.equal(loopEnd.onConfigure("recursive_legacy"),"configured");

@@ -5,6 +5,8 @@ project is rewritten. All large intermediates stay on disk; masks are views.
 """
 from fractions import Fraction
 import importlib
+from .fork_identity import add_suffix
+
 
 
 def original_segment(segment):
@@ -239,3 +241,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MiniMaxH3PixelContinuityPrepare": "MiniMax H3 Pixel Continuity • Protect Tail",
     "MiniMaxH3PixelContinuityFinish": "MiniMax H3 Pixel Continuity • Finish",
 }
+NODE_DISPLAY_NAME_MAPPINGS = {add_suffix(name): value for name, value in NODE_DISPLAY_NAME_MAPPINGS.items()}

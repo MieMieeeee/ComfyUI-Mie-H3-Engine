@@ -59,7 +59,7 @@
     },
     {
       "key": "n9",
-      "type": "MiniMaxH3ChainLoopStart",
+      "type": "MiniMaxH3ChainLoopStart|MieH3",
       "settings": {
         "start_clip": 1,
         "scene_range": "",
@@ -83,7 +83,7 @@
     },
     {
       "key": "n12",
-      "type": "MiniMaxH3ChainCurrent",
+      "type": "MiniMaxH3ChainCurrent|MieH3",
       "settings": {
         "align_audio_reference": false
       },
@@ -97,7 +97,7 @@
     },
     {
       "key": "n13",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "cc0_soldier_crabs_ref2va_extension_recovered_%date:yyyy-MM-dd%",
@@ -136,7 +136,7 @@
     },
     {
       "key": "n16",
-      "type": "MiniMaxH3TaggedReferenceToVideo",
+      "type": "MiniMaxH3TaggedReferenceToVideo|MieH3",
       "settings": {
         "clip_index": 1,
         "clip_count": 2,
@@ -197,7 +197,7 @@
     },
     {
       "key": "n17",
-      "type": "MiniMaxH3ChainContext",
+      "type": "MiniMaxH3ChainContext|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -335,7 +335,7 @@
     },
     {
       "key": "n26",
-      "type": "MiniMaxH3LoopTrim",
+      "type": "MiniMaxH3LoopTrim|MieH3",
       "settings": {
         "trim_frames": 0,
         "fps": 24,
@@ -364,7 +364,7 @@
     },
     {
       "key": "n27",
-      "type": "MiniMaxH3ChainSegmentSave",
+      "type": "MiniMaxH3ChainSegmentSave|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -392,7 +392,7 @@
     },
     {
       "key": "n28",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "cc0_soldier_crabs_ref2va_extension_%date:yyyy-MM-dd%",
@@ -429,7 +429,7 @@
     },
     {
       "key": "n30",
-      "type": "MiniMaxH3ChainManifestLoad",
+      "type": "MiniMaxH3ChainManifestLoad|MieH3",
       "settings": {},
       "inputs": {
         "plan": [
@@ -460,7 +460,7 @@
     },
     {
       "key": "n33",
-      "type": "MiniMaxH3ChainReview",
+      "type": "MiniMaxH3ChainReview|MieH3",
       "settings": {
         "enabled": true,
         "play_notification_sound": false,
@@ -489,7 +489,7 @@
     },
     {
       "key": "n34",
-      "type": "MiniMaxH3ChainLoopEnd",
+      "type": "MiniMaxH3ChainLoopEnd|MieH3",
       "settings": {
         "between_scene_cleanup": "off",
         "execution_mode": "recursive"
@@ -529,7 +529,7 @@
     },
     {
       "key": "n36",
-      "type": "MiniMaxH3ChainPlanStudio",
+      "type": "MiniMaxH3ChainPlanStudio|MieH3",
       "settings": {
         "start_clip": 1,
         "scene_range": "",
@@ -572,7 +572,7 @@
     },
     {
       "key": "n37",
-      "type": "MiniMaxH3ChainRichScenePromptEditor",
+      "type": "MiniMaxH3ChainRichScenePromptEditor|MieH3",
       "settings": {},
       "inputs": {
         "plan": [
@@ -583,7 +583,7 @@
     },
     {
       "key": "n38",
-      "type": "MiniMaxH3ChainPlanModern",
+      "type": "MiniMaxH3ChainPlanModern|MieH3",
       "settings": {
         "plan_json": "{\n  \"prompt_prefix\": \"\",\n  \"shots\": [\n    {\n      \"id\": \"tidal_edge\",\n      \"prompt\": \"subject_definitions:\\n@crabs is the reference image for <Subject 1>, defining the real light-blue soldier crabs, blue-grey carapaces, tan jointed legs, dark eye stalks, natural scale, damp beach sand, low camera height, cloudy coastal light, distant shoreline, and photographic wildlife-documentary realism.\\n<Subject 1> is the same colony of light-blue soldier crabs established by @crabs and the incoming protected audiovisual prefix.\\n\\nsummary:\\n[video continuation + reference generation] The target continues the imported soldier-crab footage as one uninterrupted low-angle documentary shot, using @crabs only to stabilize species appearance while the incoming protected prefix controls current pose, motion, camera, light, environment, and timing.\\n\\nretention_analysis:\\n<Subject 1> (appears in [Shot 1]): fully_preserved - retain the colony's real anatomy, blue-grey shells, tan legs, eye stalks, scale variation, natural gait, and separation between individual crabs.\\n@crabs: fully_preserved - retain its species appearance, sand-level viewpoint, cloudy coastal palette, shallow depth of field, and naturalistic photographic texture without pulling the moving crabs back to the still pose.\\n\\ndetailed_description:\\n[Shot 1] Continue directly from the protected ending of the imported source video with no cut, reset, repeated action, or re-establishment. The same <Subject 1> crabs already crossing the damp sand complete their current steps at the same speed. The camera remains only a few centimeters above the beach and continues its gentle rightward drift. Foreground crabs pass close to the lens while smaller animals remain readable in the middle distance; preserve correct occlusion and never merge or duplicate bodies.\\n\\nThe densest part of the colony gradually turns toward a narrow reflective strip of wet sand. One foreground crab pauses, raises its carapace slightly, then sidesteps around another animal as the rest continue flowing behind it. A shallow ripple approaches from frame left, darkening the sand without becoming a dramatic wave. The crabs react independently with quick lateral adjustments, then resume their forward movement. Keep the shoreline buildings and heavy cloud layer stable in the distance. End with the camera and colony still moving right so the next extension inherits active motion rather than a held pose.\\n\\noverall_soundscape:\\nContinue the source beach ambience without a seam: steady coastal wind, soft distant surf, faint water movement, and subtle leg clicks and sand scratches close to the microphone.\\n\\nnon_diegetic_music:\\nN/A\",\n      \"length\": 192,\n      \"steps\": 20,\n      \"seed\": \"24051511\"\n    },\n    {\n      \"id\": \"channel_crossing\",\n      \"prompt\": \"subject_definitions:\\n@crabs is the continuity image for <Subject 1>, preserving the real light-blue soldier-crab anatomy, blue-grey shells, tan legs, eye stalks, natural scale, damp sand, low wildlife-camera viewpoint, cloudy coastal light, and documentary texture.\\n<Subject 1> is the same moving colony inherited from the protected audiovisual prefix and stabilized by @crabs.\\n\\nsummary:\\n[video continuation + reference generation] The uninterrupted sand-level shot follows <Subject 1> as the colony reorganizes around a shallow tidal channel while retaining the incoming movement and sound.\\n\\nretention_analysis:\\n<Subject 1> (appears in [Shot 1]): fully_preserved - preserve identity as a natural colony, correct crab anatomy, individual trajectories, gait phase, scale, and spatial separation across the continuation.\\n@crabs: fully_preserved - preserve species detail, beach palette, natural lens character, and low composition without copying its static arrangement.\\n\\ndetailed_description:\\n[Shot 1] Continue the exact motion already in progress from the protected H3 prefix. Do not restart the crabs from rest or reset the camera. The low camera keeps drifting right as <Subject 1> reaches the reflective tidal strip established at the end of the previous scene. The leading crabs descend the slight sand lip one by one, their legs touching the thin water layer and making small circular ripples. Animals behind them fan into two natural streams around a raised patch of sand.\\n\\nThe camera makes a slow, shallow push forward while maintaining its sand-level height. Focus transfers gradually from one large foreground crab to the moving cluster beyond it; the foreground animal crosses out of frame rather than vanishing. A breeze presses faint patterns into the shallow water. Several crabs briefly align in lateral motion, then separate naturally as they climb the opposite lip. Preserve the distant buildings, cloud direction, soft daylight, and realistic motion blur. End while the rear group is still entering the water and the leading group is climbing, leaving both near and far motion available to the next extension.\\n\\noverall_soundscape:\\nCarry the same wind and surf continuously. Add only synchronized delicate water taps, tiny splashes, shell clicks, and wet sand scratches caused by the visible crossing.\\n\\nnon_diegetic_music:\\nN/A\",\n      \"length\": 192,\n      \"steps\": 20,\n      \"seed\": \"24051512\"\n    },\n    {\n      \"id\": \"firm_sand\",\n      \"prompt\": \"subject_definitions:\\n@crabs is the continuity image for <Subject 1>, defining the real soldier-crab species, blue-grey shells, tan articulated legs, dark eye stalks, beach scale, cloudy natural light, low camera placement, and wildlife-documentary realism.\\n<Subject 1> is the same colony continuing from the protected audiovisual prefix, with no replacement animals or stylized redesign.\\n\\nsummary:\\n[video continuation + reference generation] The continuous documentary shot completes the tidal crossing and follows <Subject 1> onto firm sand, where their lateral paths form a brief natural visual rhythm before dispersing.\\n\\nretention_analysis:\\n<Subject 1> (appears in [Shot 1]): fully_preserved - retain correct anatomy, shell color, gait, individual continuity, scale, and non-anthropomorphic behavior.\\n@crabs: fully_preserved - retain the source species, beach environment, cloudy palette, shallow focus, and photographic realism while allowing new movement.\\n\\ndetailed_description:\\n[Shot 1] Continue immediately from the protected prefix with the leading <Subject 1> crabs already climbing out of the shallow tidal strip and the rear group still crossing. Preserve every visible action phase, the low rightward camera drift, focus distance, light direction, shoreline geography, and damp-sand texture. The camera eases backward slightly to reveal a broader section of the colony without jumping or cutting.\\n\\nAs the crabs reach firmer sand, several parallel paths create a short wave of coordinated lateral movement across the frame. The rhythm remains entirely natural: no upright dancing, human gestures, impossible jumps, or synchronized cloning. One large crab passes close to the lens, briefly filling the lower-right foreground before revealing dozens of smaller moving silhouettes behind it. Wind ruffles a thin film of water and a brighter break in the clouds gives the shells a restrained blue sheen. The colony gradually disperses across the beach while the camera slows but does not freeze. End on a stable wide low-angle composition with multiple crabs still moving and the original beach ambience intact.\\n\\noverall_soundscape:\\nContinue the coastal wind, distant surf, shallow-water movement, small shell clicks, and layered sand scratches at consistent level and perspective. No speech or abrupt synthetic sound.\\n\\nnon_diegetic_music:\\nN/A\",\n      \"length\": 192,\n      \"steps\": 20,\n      \"seed\": \"24051513\"\n    }\n  ]\n}",
         "run_name": "masked_av_extension_chain_reference_image_minimax_h3_0_6_json",
@@ -621,7 +621,7 @@
     },
     {
       "key": "n40",
-      "type": "MiniMaxH3ChainExternalVideo",
+      "type": "MiniMaxH3ChainExternalVideo|MieH3",
       "settings": {
         "source_fps": 24,
         "prepend_original": true
@@ -640,7 +640,7 @@
     },
     {
       "key": "n41",
-      "type": "MiniMaxH3GenerationProfile",
+      "type": "MiniMaxH3GenerationProfile|MieH3",
       "settings": {
         "scene_continuity": "Hard picture + smooth audio",
         "audio_profile": "Generate audio"
@@ -650,7 +650,7 @@
     },
     {
       "key": "n42",
-      "type": "MiniMaxH3ProjectAssetManager",
+      "type": "MiniMaxH3ProjectAssetManager|MieH3",
       "settings": {
         "run_name": "masked_av_extension_chain_reference_image_minimax_h3_0_6_json",
         "catalog_json": "",
@@ -664,7 +664,7 @@
     },
     {
       "key": "n43",
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "settings": {
         "selection_json": ""
       },

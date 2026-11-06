@@ -112,12 +112,12 @@ function rerollFixture(selectedBranch = branchId, scene = branchScene) {
             id: `scene_${index + 1}`, prompt: `Prompt ${index + 1}`, seed: "1",
         })),
     })};
-    const planNode = {id: 1, type: "MiniMaxH3ChainPlanModern", widgets: [
+    const planNode = {id: 1, type: "MiniMaxH3ChainPlanModern|MieH3", widgets: [
         {name: "run_name", value: "project"}, planWidget,
     ]};
-    const startNode = {id: 2, type: "MiniMaxH3ChainLoopStart", inputs: [{link: 1}],
+    const startNode = {id: 2, type: "MiniMaxH3ChainLoopStart|MieH3", inputs: [{link: 1}],
         widgets: [{name: "start_clip", value: 1}, {name: "scene_range", value: ""}]};
-    const currentNode = {id: 3, type: "MiniMaxH3ChainCurrent", inputs: [{link: 2}]};
+    const currentNode = {id: 3, type: "MiniMaxH3ChainCurrent|MieH3", inputs: [{link: 2}]};
     const nodes = [planNode, startNode, currentNode];
     const graph = {links: {1: {origin_id: 1}, 2: {origin_id: 2}},
         getNodeById: (id) => nodes.find((node) => node.id === id)};

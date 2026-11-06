@@ -204,7 +204,7 @@ with tempfile.TemporaryDirectory() as temporary:
     adapted = chain._source_timeline_from_lazy_motion_descriptor(lazy)
     assert adapted["fingerprints"] == timeline["fingerprints"]
     assert chain.CHAIN_NODE_CLASS_MAPPINGS[
-        "MiniMaxH3SourceTimeline"] is chain.MiniMaxH3SourceTimeline
+        "MiniMaxH3SourceTimeline|MieH3"] is chain.MiniMaxH3SourceTimeline
     assert node.RETURN_TYPES == (chain.SOURCE_TIMELINE_TYPE, "STRING")
 
 print(

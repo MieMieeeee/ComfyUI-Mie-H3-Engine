@@ -111,14 +111,14 @@ async function browserChecks() {
             default_duration_seconds:5, default_steps:8, base_seed:1,
             encode_mode:"video", crop:"disabled", segment_crf:18, video_blend_frames:0,
             plan_json:JSON.stringify({shots:[{id:"one", prompt:["Keep this prompt."], length:123, seed:"1"}]})};
-        class Plan extends BaseNode { constructor() { super("MiniMaxH3ChainPlanModern", settings); } }
-        class Manager extends BaseNode { constructor() { super("MiniMaxH3ChainRunManager", {
+        class Plan extends BaseNode { constructor() { super("MiniMaxH3ChainPlanModern|MieH3", settings); } }
+        class Manager extends BaseNode { constructor() { super("MiniMaxH3ChainRunManager|MieH3", {
             archive_images:true, archive_audio:true, archive_video:false, asset_bindings_json:"[]"}); } }
         for (const extension of extensions) {
-            await extension.beforeRegisterNodeDef?.(Plan, {name:"MiniMaxH3ChainPlanModern"});
-            await extension.beforeRegisterNodeDef?.(Manager, {name:"MiniMaxH3ChainRunManager"});
+            await extension.beforeRegisterNodeDef?.(Plan, {name:"MiniMaxH3ChainPlanModern|MieH3"});
+            await extension.beforeRegisterNodeDef?.(Manager, {name:"MiniMaxH3ChainRunManager|MieH3"});
         }
-        const carousel = new BaseNode("MiniMaxH3ProjectAssetManager", {run_name:"bob"});
+        const carousel = new BaseNode("MiniMaxH3ProjectAssetManager|MieH3", {run_name:"bob"});
         const plan = new Plan(), manager = new Manager(), unrelated = new Plan();
         widget(unrelated, "run_name").value = "unrelated";
         connect(carousel, plan, "project_assets"); connect(plan, manager, "plan");
@@ -143,7 +143,7 @@ async function browserChecks() {
         for (let i = 0; i < 3; i++) syncProjectAssetPlanRun(carousel, "alice");
         await wait(200);
         check(runField(plan) === renderedField, "Unchanged catalog does not rebuild Modern Plan");
-        const second = new BaseNode("MiniMaxH3ProjectAssetTree", {run_name:"other_project"});
+        const second = new BaseNode("MiniMaxH3ProjectAssetTree|MieH3", {run_name:"other_project"});
         connect(second, plan, "project_assets"); plan.onConnectionsChange();
         await waitFor(() => runField(plan)?.value === "other_project" && activeLabel() === "Active Plan: other_project");
         check(widget(plan, "run_name").value === "other_project", "Reconnection follows the new source");

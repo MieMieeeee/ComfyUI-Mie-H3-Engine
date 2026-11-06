@@ -58,7 +58,7 @@ class Node {
     addDOMWidget(name,type,root,options) { this.root=root; this.options=options; return {}; }
     setSize(value) { this.size=value; }
 }
-extension.beforeRegisterNodeDef(Node,{name:"MiniMaxH3ReviewRelay"});
+extension.beforeRegisterNodeDef(Node,{name:"MiniMaxH3ReviewRelay|MieH3"});
 const node = new Node(); node.onNodeCreated();
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const tick = async () => {

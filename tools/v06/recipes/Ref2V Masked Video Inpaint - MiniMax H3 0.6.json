@@ -76,7 +76,7 @@
     },
     {
       "key": "n10",
-      "type": "MiniMaxH3ChainLoopStart",
+      "type": "MiniMaxH3ChainLoopStart|MieH3",
       "settings": {
         "start_clip": 1,
         "scene_range": "",
@@ -92,7 +92,7 @@
     },
     {
       "key": "n13",
-      "type": "MiniMaxH3ChainCurrent",
+      "type": "MiniMaxH3ChainCurrent|MieH3",
       "settings": {
         "align_audio_reference": false
       },
@@ -106,7 +106,7 @@
     },
     {
       "key": "n14",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "cc0_soldier_crabs_ref2v_inpaint_recovered_%date:yyyy-MM-dd%",
@@ -191,7 +191,7 @@
     },
     {
       "key": "n18",
-      "type": "MiniMaxH3ChainContext",
+      "type": "MiniMaxH3ChainContext|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -329,7 +329,7 @@
     },
     {
       "key": "n27",
-      "type": "MiniMaxH3LoopTrim",
+      "type": "MiniMaxH3LoopTrim|MieH3",
       "settings": {
         "trim_frames": 0,
         "fps": 24,
@@ -358,7 +358,7 @@
     },
     {
       "key": "n28",
-      "type": "MiniMaxH3ChainSegmentSave",
+      "type": "MiniMaxH3ChainSegmentSave|MieH3",
       "settings": {},
       "inputs": {
         "state": [
@@ -386,7 +386,7 @@
     },
     {
       "key": "n29",
-      "type": "MiniMaxH3ChainAssemble",
+      "type": "MiniMaxH3ChainAssemble|MieH3",
       "settings": {
         "audio_source": "plan",
         "filename": "cc0_soldier_crabs_ref2v_inpaint_%date:yyyy-MM-dd%",
@@ -423,7 +423,7 @@
     },
     {
       "key": "n31",
-      "type": "MiniMaxH3ChainRichScenePromptEditor",
+      "type": "MiniMaxH3ChainRichScenePromptEditor|MieH3",
       "settings": {},
       "inputs": {
         "plan": [
@@ -434,7 +434,7 @@
     },
     {
       "key": "n32",
-      "type": "MiniMaxH3ChainPlanModern",
+      "type": "MiniMaxH3ChainPlanModern|MieH3",
       "settings": {
         "plan_json": "{\n  \"defaults\": {\n    \"length\": 175,\n    \"steps\": 20\n  },\n  \"shots\": [\n    {\n      \"id\": \"ref2v_masked_inpaint_a\",\n      \"prompt\": \"subject_definitions:\\n<Subject 1> is the adult light-blue soldier crab appearance defined by <Picture 1>: a glossy deep cobalt-blue oval carapace, pale sand-tan jointed legs, paired raised claws, small black eye stalks, realistic wet-shell highlights, and natural animal proportions.\\n\\nsummary:\\n[reference generation + video editing + audio reuse] The target video is a spatially masked edit of the supplied source target. Only the crabs inside the editable lower-central beach region are rebuilt as clear, photorealistic instances of <Subject 1>; the protected source picture, performance, environment, and camera remain unchanged, and the synchronized source soundtrack is reused in full.\\n\\nretention_analysis:\\n<Subject 1> (appears in [Shot 1]): fully_preserved - retain the referenced cobalt-blue carapace, sand-tan legs, raised claws, black eye stalks, wet-shell texture, realistic scale, and natural soldier-crab anatomy wherever the masked replacement is visible.\\n\\ndetailed_description:\\nThe target remains live-action natural-history footage with the same cloudy coastal daylight, documentary optics, and realistic color response as the protected source.\\n[Shot 1] Treat the supplied source target as the authoritative edit plate. Preserve its original camera trajectory, lens behavior, framing, cloudy lighting, sand, shallow water, distant shoreline, depth of field, source motion timing, and every protected pixel. Inside the editable lower-central beach region only, rebuild the visible moving crabs as coherent instances of <Subject 1> from <Picture 1>. The source frames supply each selected crab's position, grounded lateral movement, action phase, speed, perspective, scale, occlusion timing, and motion blur; <Picture 1> supplies the visible species anatomy, shell color, leg color, claw shape, eyes, and wet surface detail. Keep feet in contact with the sand and water, reproduce plausible contact shadows and tiny reflections, and maintain stable anatomy from frame to frame. Blend the generated animals cleanly into the protected plate without a halo, border flicker, duplicated limbs, or changes to nearby unmasked crabs. Do not introduce sculptures, stylization, text, a new camera move, a new background, or a cut.\\n\\noverall_soundscape:\\nReuse the protected synchronized source soundtrack exactly as the complete final soundtrack. Generate no replacement sound.\\n\\nnon_diegetic_music:\\nN/A\",\n      \"length\": 175,\n      \"steps\": 20,\n      \"seed\": \"24051621\"\n    },\n    {\n      \"id\": \"ref2v_masked_inpaint_b\",\n      \"prompt\": \"subject_definitions:\\n<Subject 1> is the same adult light-blue soldier crab appearance defined by <Picture 1> and established in the protected incoming overlap: a glossy deep cobalt-blue oval carapace, pale sand-tan jointed legs, paired raised claws, small black eye stalks, realistic wet-shell highlights, and natural animal proportions.\\n\\nsummary:\\n[reference generation + video editing + audio reuse] The target video continues the spatially masked edit of the supplied source target directly from the protected incoming overlap. Keep the same <Subject 1> identity inside the editable lower-central beach region while the protected source picture, performance, environment, and camera remain unchanged, and the synchronized source soundtrack is reused in full.\\n\\nretention_analysis:\\n<Subject 1> (appears in [Shot 1]): fully_preserved - carry forward the exact crab anatomy, cobalt-blue shell, sand-tan legs, claws, eyes, wet texture, scale, and frame-to-frame identity already visible at the incoming boundary.\\n\\ndetailed_description:\\nThe target continues the same live-action natural-history shot without a cut or visual reset.\\n[Shot 1] Begin from the protected incoming overlap exactly as supplied. Do not alter its crab identities, action phase, camera position, lens behavior, framing, cloudy coastal light, sand, water, shoreline, depth of field, or motion blur. As the supplied source target advances, edit only the lower-central masked region. Continue rendering every selected moving crab as the same coherent <Subject 1> established from <Picture 1> and the incoming frames. The corresponding source frames remain authoritative for position, grounded lateral motion, speed, pose, perspective, scale, occlusion timing, sand contact, and interaction with shallow water. Preserve the referenced cobalt-blue carapace, sand-tan legs, raised claws, black eye stalks, realistic shell highlights, and stable anatomy throughout the new frames. Maintain clean contact shadows and reflections and cross the end of the protected overlap with no identity jump, brightness pulse, outline flicker, duplicated limb, temporal stall, or camera change. Preserve every protected pixel and every unmasked crab. Do not introduce a new background, stylization, text, or a cut.\\n\\noverall_soundscape:\\nReuse the protected synchronized source soundtrack exactly as the complete final soundtrack. Generate no replacement sound.\\n\\nnon_diegetic_music:\\nN/A\",\n      \"length\": 175,\n      \"steps\": 20,\n      \"seed\": \"24051622\"\n    }\n  ]\n}",
         "run_name": "ref2v_masked_video_inpaint_minimax_h3_0_6_json",
@@ -463,7 +463,7 @@
     },
     {
       "key": "n33",
-      "type": "MiniMaxH3ChainPlanStudio",
+      "type": "MiniMaxH3ChainPlanStudio|MieH3",
       "settings": {
         "start_clip": 1,
         "scene_range": "",
@@ -506,7 +506,7 @@
     },
     {
       "key": "n34",
-      "type": "MiniMaxH3ChainManifestLoad",
+      "type": "MiniMaxH3ChainManifestLoad|MieH3",
       "settings": {},
       "inputs": {
         "plan": [
@@ -528,7 +528,7 @@
     },
     {
       "key": "n36",
-      "type": "MiniMaxH3ChainLoopEnd",
+      "type": "MiniMaxH3ChainLoopEnd|MieH3",
       "settings": {
         "between_scene_cleanup": "off",
         "execution_mode": "recursive"
@@ -559,7 +559,7 @@
     },
     {
       "key": "n37",
-      "type": "MiniMaxH3ChainReview",
+      "type": "MiniMaxH3ChainReview|MieH3",
       "settings": {
         "enabled": true,
         "play_notification_sound": false,
@@ -617,7 +617,7 @@
     },
     {
       "key": "n40",
-      "type": "MiniMaxH3ContexLoopSourceAVTarget",
+      "type": "MiniMaxH3ContexLoopSourceAVTarget|MieH3",
       "settings": {
         "source_fps": 24,
         "crop": "center"
@@ -656,7 +656,7 @@
     },
     {
       "key": "n41",
-      "type": "MiniMaxH3ContexMaskedTarget",
+      "type": "MiniMaxH3ContexMaskedTarget|MieH3",
       "settings": {
         "mask_meaning": "white = generate",
         "audio_mode": "preserve source audio",
@@ -686,7 +686,7 @@
     },
     {
       "key": "n43",
-      "type": "MiniMaxH3ContexMaskGridPreview",
+      "type": "MiniMaxH3ContexMaskGridPreview|MieH3",
       "settings": {
         "cell_selection": "runtime exact (latent max)",
         "cell_adjust": 0,
@@ -734,7 +734,7 @@
     },
     {
       "key": "n46",
-      "type": "MiniMaxH3ContexLoopMaskSlice",
+      "type": "MiniMaxH3ContexLoopMaskSlice|MieH3",
       "settings": {
         "source_fps": 24
       },
@@ -761,7 +761,7 @@
     },
     {
       "key": "n48",
-      "type": "MiniMaxH3GenerationProfile",
+      "type": "MiniMaxH3GenerationProfile|MieH3",
       "settings": {
         "scene_continuity": "Hard picture + protected audio",
         "audio_profile": "Generate audio"
@@ -771,7 +771,7 @@
     },
     {
       "key": "n49",
-      "type": "MiniMaxH3ProjectAssetManager",
+      "type": "MiniMaxH3ProjectAssetManager|MieH3",
       "settings": {
         "run_name": "ref2v_masked_video_inpaint_minimax_h3_0_6_json",
         "catalog_json": "",
@@ -785,7 +785,7 @@
     },
     {
       "key": "n50",
-      "type": "MiniMaxH3ChainCheckpointManager",
+      "type": "MiniMaxH3ChainCheckpointManager|MieH3",
       "settings": {
         "selection_json": ""
       },

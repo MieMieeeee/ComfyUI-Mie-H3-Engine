@@ -51,7 +51,7 @@ function lane(scheduler, route, loaderId) {
 }
 
 const root = graph();
-const plan = node(root, 1, "MiniMaxH3ChainPlan");
+const plan = node(root, 1, "MiniMaxH3ChainPlan|MieH3");
 const current = node(root, 2, "MiniMaxH3ChainCurrentShot");
 connect(root, plan.id, current, "state");
 const outer = pack(root, 10);
@@ -67,7 +67,7 @@ const originalLinks = scheduler.inputs.map(input => input.link);
 assert.deepEqual(core.availableLoRARoutes(root, [plan]), ["base", "b", "z"],
     "Plan discovers lanes through two nested state-input rails");
 
-const otherPlan = node(root, 20, "MiniMaxH3ChainPlan");
+const otherPlan = node(root, 20, "MiniMaxH3ChainPlan|MieH3");
 const otherCurrent = node(root, 21, "MiniMaxH3ChainCurrentShot");
 connect(root, otherPlan.id, otherCurrent, "state");
 const otherPack = pack(root, 22);
@@ -82,7 +82,7 @@ assert.deepEqual(core.availableLoRARoutes(root, [otherPlan]), ["base", "c"],
 // A Plan/Current pair can itself be packed, with state passed out to a
 // scheduler in the parent graph. Traverse the selected output rail, too.
 const statePack = pack(root, 30);
-const packedPlan = node(statePack.subgraph, 1, "MiniMaxH3ChainPlan");
+const packedPlan = node(statePack.subgraph, 1, "MiniMaxH3ChainPlan|MieH3");
 const packedCurrent = node(statePack.subgraph, 2, "MiniMaxH3ChainCurrentShot");
 connect(statePack.subgraph, packedPlan.id, packedCurrent, "state");
 railOutput(statePack, packedCurrent);

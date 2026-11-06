@@ -16,10 +16,25 @@ from workflow_schema import DATA, ROOT, fields, is_widget, widget_fields, valida
 EXAMPLES = ROOT / 'example_workflows'
 NAMESPACE = uuid.UUID('aedf0e28-4e77-4ec8-98d8-7662561e4cf4')
 TITLE_HEIGHT, GAP = 30, 70
-AUTHOR = {'MiniMaxH3ChainPlanModern', 'MiniMaxH3GenerationProfile', 'MiniMaxH3ChainPlanStudio',
-          'MiniMaxH3ProjectAssetManager', 'MiniMaxH3ChainScenePromptEditor',
-          'MiniMaxH3ChainRichScenePromptEditor', 'MiniMaxH3ChainCheckpointManager',
-          'MiniMaxH3SelfLiftProject'}
+# The author markers are recognised by node type. Both this pack's type
+# names and the upstream ones are accepted, because a recipe written
+# before the rename carries the upstream name.
+_AUTHOR_TYPES = ('MiniMaxH3ChainPlanModern', 'MiniMaxH3GenerationProfile',
+                 'MiniMaxH3ChainPlanStudio', 'MiniMaxH3ProjectAssetManager',
+                 'MiniMaxH3ChainScenePromptEditor',
+                 'MiniMaxH3ChainRichScenePromptEditor',
+                 'MiniMaxH3ChainCheckpointManager', 'MiniMaxH3SelfLiftProject')
+AUTHOR = {_t for _name in _AUTHOR_TYPES for _t in
+          ((_name + '|MieH3'), _name)}
+def _base(name):
+    """The upstream type name, without this fork's suffix.
+
+    The recipes carry the suffixed name; this tool's own tables and
+    comparisons are written against the upstream names.
+    """
+    return str(name).split('|', 1)[0]
+
+
 SIZES = {
     'MiniMaxH3ChainPlanModern': (1000,900), 'MiniMaxH3ChainPlanStudio': (1080,940),
     'MiniMaxH3ProjectAssetManager': (1080,880), 'MiniMaxH3ChainCheckpointManager': (1200,900),
@@ -96,10 +111,15 @@ def make_node(recipe, schema, number):
             value={'name':name,'type':socket_type(spec),'link':None}
             if is_widget(spec): value['widget']={'name':name}
             inputs.append(value)
-    label=LABELS.get(typ) or re.sub(r'(?<=[a-z])(?=[A-Z])',' ',typ.replace('MiniMaxH3','').replace('Contex','Context'))
-    if typ=='VAELoader': label='Audio VAE' if 'audio' in settings['vae_name'] else 'Video VAE'
-    if typ in ('LoadImage','LoadVideo','LoadImageMask'):
-        label={'LoadImage':'Reference Image','LoadVideo':'Source Video','LoadImageMask':'Edit Mask'}[typ]
+    # The recipe carries this fork's suffixed type name. This tool's
+    # own tables (labels, sizes) are keyed by the upstream name, so
+    # look them up by the base name and strip the suffix from the
+    # derived label - but keep the suffixed name on the node itself.
+    base=typ.split('|',1)[0]
+    label=LABELS.get(base) or re.sub(r'(?<=[a-z])(?=[A-Z])',' ',base.replace('MiniMaxH3','').replace('Contex','Context'))
+    if base=='VAELoader': label='Audio VAE' if 'audio' in settings['vae_name'] else 'Video VAE'
+    if base in ('LoadImage','LoadVideo','LoadImageMask'):
+        label={'LoadImage':'Reference Image','LoadVideo':'Source Video','LoadImageMask':'Edit Mask'}[base]
     if recipe.get('mode')==2:label='RECOVERY • '+label
     elif recipe.get('mode')==4:label='OPTIONAL • '+label
     outputs=[dict(name=name,type=kind,links=None) for name,kind in zip(schema['output_name'],schema['output'])]
@@ -108,7 +128,7 @@ def make_node(recipe, schema, number):
     width=max(360,len(label)*8+48,input_width+output_width+80)
     height=64+max(len(inputs),len(outputs))*20+len(controls)*24
     if any(options(spec).get('multiline') for _,spec in controls):height+=180
-    explicit=SIZES.get(typ,(width,height))
+    explicit=SIZES.get(base,(width,height))
     width,height=max(width,explicit[0]),max(height,explicit[1])
     if typ=='VHS_LoadVideo':values=copy.deepcopy(settings)  # VHS uses a named serializer.
     return dict(id=number,type=typ,pos=[0,0],size=[width,height],flags={},order=number-1,
@@ -134,14 +154,14 @@ def stack(nodes,x,y):
 def layout(nodes,links):
     groups=[]
     author=[n for n in nodes if n['type'] in AUTHOR or n['type']=='Note']
-    studio=any(n['type']=='MiniMaxH3ChainPlanStudio' for n in author)
+    studio=any(_base(n['type'])=='MiniMaxH3ChainPlanStudio' for n in author)
     columns=[[],[],[]] if studio else [[],[]]
     priority={'Note':0,'MiniMaxH3GenerationProfile':1,'MiniMaxH3ChainPlanModern':2,
               'MiniMaxH3ChainPlanStudio':3,'MiniMaxH3ChainScenePromptEditor':3,
               'MiniMaxH3ChainRichScenePromptEditor':3,'MiniMaxH3ProjectAssetManager':4,
               'MiniMaxH3ChainCheckpointManager':5}
-    for n in sorted(author,key=lambda n:priority.get(n['type'],9)):
-        t=n['type']; col=0
+    for n in sorted(author,key=lambda n:priority.get(_base(n['type']),9)):
+        t=_base(n['type']); col=0
         if studio:
             if t in ('MiniMaxH3ChainPlanStudio','MiniMaxH3ProjectAssetManager'):col=1
             elif t in ('MiniMaxH3ChainRichScenePromptEditor','MiniMaxH3ChainCheckpointManager'):col=2
@@ -155,7 +175,7 @@ def layout(nodes,links):
     x+=100
     runtime=[n for n in nodes if n not in author and n['mode']!=2]
     recovery=sorted([n for n in nodes if n not in author and n['mode']==2],
-                    key=lambda n:n['type']!='MiniMaxH3ChainManifestLoad')
+                    key=lambda n:_base(n['type'])!='MiniMaxH3ChainManifestLoad')
     runtime_ids={n['id'] for n in runtime}
     predecessors={n['id']:set() for n in runtime}
     for _,source,_,target,_,_ in links:
@@ -171,7 +191,7 @@ def layout(nodes,links):
     for index,layer in enumerate(column_numbers):
         col=sorted([n for n in runtime if depths[n['id']]//2==layer],key=lambda n:(depths[n['id']],n['id']))
         stack(col,x,180)
-        types={n['type'] for n in col}; heading='PREPARE SCENE'
+        types={_base(n['type']) for n in col}; heading='PREPARE SCENE'
         if index==0:heading='MODELS & INPUTS'
         if types & {'SamplerCustomAdvanced', 'MMH3SplitUpscale', 'MiniMaxH3ChainSelfLiftSampler'}:heading='SAMPLE & DECODE'
         if types & {'MiniMaxH3ChainSegmentSave','MiniMaxH3ChainUpscaleSegmentSave'}:heading='SAVE & REVIEW'
@@ -195,9 +215,9 @@ def build(recipe,filename,schemas):
     recipe=copy.deepcopy(recipe)
     guides=[n['settings']['text'] for n in recipe['nodes'] if n['type']=='Note']
     records=[n for n in recipe['nodes'] if n['type']!='Note']
-    plans=[n for n in records if n['type']=='MiniMaxH3ChainPlanModern']
+    plans=[n for n in records if _base(n['type'])=='MiniMaxH3ChainPlanModern']
     for n in records:
-        if n['type']=='MiniMaxH3ChainPlanStudio' and plans:
+        if _base(n['type'])=='MiniMaxH3ChainPlanStudio' and plans:
             n['settings'].update({k:v for k,v in plans[0]['settings'].items() if k in n['settings']})
     nodes=[make_node(n,schemas[n['type']],i+1) for i,n in enumerate(records)]
     by_key={r['key']:n for r,n in zip(records,nodes)}

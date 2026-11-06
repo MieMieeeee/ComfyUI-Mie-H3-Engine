@@ -88,13 +88,13 @@ class MigrationTests(unittest.TestCase):
 
     def graph(self, sampler="SamplerCustomAdvanced", passthrough=False):
         return DynamicPrompt({
-            "cond": {"class_type": "MiniMaxH3ChainUpscalePixelConditioning", "inputs": {}},
+            "cond": {"class_type": "MiniMaxH3ChainUpscalePixelConditioning|MieH3", "inputs": {}},
             "other": {"class_type": "CLIPTextEncode", "inputs": {}},
             "guider": {"class_type": "BasicGuider", "inputs": {
                 "positive": ["other" if passthrough else "cond", 0]}},
             "sample": {"class_type": sampler, "inputs": {"guider": ["guider", 0], "images": ["cond", 1]}},
             "decode": {"class_type": "VAEDecode", "inputs": {"samples": ["sample", 0]}},
-            "save": {"class_type": "MiniMaxH3ChainUpscaleSegmentSave", "inputs": {"images": ["decode", 0]}},
+            "save": {"class_type": "MiniMaxH3ChainUpscaleSegmentSave|MieH3", "inputs": {"images": ["decode", 0]}},
         })
 
     def test_dry_run_cli_and_resumable_lossless_conversion(self):
