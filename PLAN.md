@@ -973,7 +973,7 @@ def _chapter_manifest_digest(manifest):
 | 测试套件 | **193 passed / 56 failed** | 改动前基线 **189 / 58** ⇒ **零新增失败**；56 个与上游克隆同机失败数一致，全是既有失败（Windows 环境类 + Node 24 harness 类）。**注意 56 这个数字有环境成分，见 §8.6.2** |
 | 节点名冲突 | **已实测** | 两包同装：148 而非 296、**零告警** ⇒ 静默覆盖确认。**且胜者由 `os.listdir` 目录序决定**（实测上游赢了）⇒ **Phase 2 的改名是必须项**，见 §4.1.1 |
 | Phase 1 / P0-b | ✅ **已做**（三处各按自己的规则改） | ① 遗留恢复：多份 ⇒ **拒绝猜测并保留全部文件**（单份行为不变）；② 封印清单：改按**内容里的 `sealed_at`** 排序；③ reference cache：**描述符的 signature 必须与文件名一致**，上游已测的歧义守卫**原样保留**。<br>**逐项负对照**：上游原实现三条**全红**，我们的实现三条**全绿**（`tests/_mie_mtime_selection_unit_test.py`） |
-| Phase 1 / P0-c…P0-f | ⬜ 未做 | P0-c（size 分层）/ P0-d（39 处四类排查）/ P0-e（文件系统识别）/ P0-f（write-once） |
+| Phase 1 / P0-c…P0-f | ✅ **已做** | **P0-c** size 分层（<64MB 一律直接哈希）；**P0-d** 36 处 / 13 文件四类排查（①缓存跳过 2、②身份等值比较 13、③最新者胜 6、④年龄清理+报告 15）—— 真正危险的两类共 8 处**全部处理完毕**；**P0-e** `checkpoint_identity.py`（`GetVolumeInformationW` 识别 FAT/exFAT、映射盘、ino=0 ⇒ 信号不可信就不用）；**P0-f** 已发布修订产物 write-once + 恢复路径显式豁免。**排查中另发现两处此前未列入清单的**：第二个缓存守卫（导出 PNG/WAV，`chain_nodes.py:24923`）与第五处"最新者胜"（`run_manager.py:447`） |
 | Phase 2 改名 | ✅ **已做** | 86 个类型加 `\|MieH3`；模块级施加（全仓一个名字空间）；新增 `fork_identity.py`、`tools/gen_rename_map.py`（自动生成 + `--check`）、`tools/apply_rename.py`、`tools/migrate_workflows.py`；**本机实测：两包同装，148（上游）+ 86（我们）= 234，零冲突** ✓ |
 | Q-F′ | ✅ **已裁定** | 本仓未来 **public** ⇒ CI 上云。落地：§10.3 的基线闸门（`ubuntu-latest` + `windows-latest`）。**发布到 Comfy Registry 仍暂缓**（Q-E） |
 

@@ -99,6 +99,13 @@ from .nodes import (
     _resize,
     _streams_from_latent,
 )
+from .checkpoint_identity import (
+    SMALL_FILE_BYTES,
+    bytes_digest,
+    file_digest,
+    identity_signal,
+    publish_once,
+)
 from .fork_identity import add_suffix, type_alias_set, type_aliases
 from .motion_context_upstream import apply_motion_context
 
@@ -10343,10 +10350,26 @@ def _available_run_archives(plan: dict[str, Any]) -> dict[str, str]:
                     modified_ns = os.stat(path).st_mtime_ns
                 except OSError:
                     continue
+                # The pointer records when its segment was created, inside
+                # the file. That timestamp travels with the content, so a
+                # restore or a mirror that preserves file metadata cannot
+                # make an older pointer look the newest. The file mtime is
+                # only the fallback for a pointer that predates it.
+                created_at = ""
+                try:
+                    pointer = _read_json(path)
+                    segment = (pointer.get("segment")
+                               if isinstance(pointer, dict) else None)
+                    created_at = (str(segment.get("created_at") or "")
+                                  if isinstance(segment, dict) else "")
+                except (OSError, TypeError, ValueError,
+                        json.JSONDecodeError):
+                    created_at = ""
                 active.append((
+                    1 if created_at else 0, created_at,
                     modified_ns, int(match.group(1)), filename))
         if active:
-            _modified_ns, _scene, filename = max(active)
+            _has, _created, _modified_ns, _scene, filename = max(active)
             metadata = _read_json(os.path.join(checkpoint_dir, filename))
             exact = _checkpoint_run_archives(plan, metadata)
             if exact:
@@ -19714,7 +19737,10 @@ class MiniMaxH3ChainSegmentSave:
                     {"waveform": tensors["delivered_audio"],
                      "sample_rate": sample_rate},
                     published_audio)
-            _atomic_text(published_prompt, shot["prompt"])
+            publish_once(
+                published_prompt,
+                lambda: _atomic_text(published_prompt, shot["prompt"]),
+                bytes_digest(str(shot["prompt"]).encode("utf-8")))
             _st_save(tensors, checkpoint_tmp, metadata={
                 "format": "h3_chain_checkpoint_v3",
                 "index": str(index),
@@ -19743,7 +19769,10 @@ class MiniMaxH3ChainSegmentSave:
                 **({"audio_trim_mode": audio_trim_mode}
                    if audio_trim_mode != "sync_with_video" else {}),
             })
-            os.replace(checkpoint_tmp, published_checkpoint)
+            publish_once(
+                published_checkpoint,
+                lambda: os.replace(checkpoint_tmp, published_checkpoint),
+                file_digest(checkpoint_tmp) or "")
 
             segment = {
                 "index": index,
@@ -20065,7 +20094,10 @@ class MiniMaxH3ChainSegmentSave:
                 # immutable candidate artifacts if the proof was superseded.
                 _require_plan_write(plan, "publish a scene checkpoint")
                 _require_chapter_resolution_locks(plan)
-                _atomic_json(published_metadata, metadata)
+                publish_once(
+                    published_metadata,
+                    lambda: _atomic_json(published_metadata, metadata),
+                    bytes_digest(_canonical_json(metadata).encode("utf-8")))
                 if alternate_take is None and not selflift_secondary:
                     _atomic_json(paths["metadata"], metadata)
                     # The canonical pointer is the durable commit point. From
@@ -24755,12 +24787,26 @@ def _verify_png_export_checkpoint(
     key = _png_export_checkpoint_cache_key(checkpoint)
     entry = (cache.get("entries") or {}).get(key)
     cache_matches = False
-    if mode == "cached" and isinstance(entry, dict):
+    # The identity cache only earns its keep on large files: hashing a few
+    # megabytes costs milliseconds, so a small checkpoint is simply hashed
+    # every time. And the cache is only usable when the file carries a
+    # trustworthy identity signal - on a network share, on FAT/exFAT, or
+    # wherever the operator pinned the path, there is none, so the file
+    # is hashed.
+    # The identity signal is recorded on every verification, so a later
+    # check can compare it. The size threshold only decides whether the
+    # identity cache is allowed to short-circuit the hash.
+    signal = identity_signal(checkpoint, stat)
+    if (mode == "cached" and isinstance(entry, dict)
+            and int(stat.st_size) >= SMALL_FILE_BYTES
+            and signal is not None):
         try:
             cache_matches = (
                 str(entry.get("sha256") or "").lower() == expected
                 and int(entry.get("size", -1)) == int(stat.st_size)
-                and int(entry.get("mtime_ns", -1)) == int(stat.st_mtime_ns))
+                and int(entry.get("mtime_ns", -1)) == int(stat.st_mtime_ns)
+                and int(entry.get("dev", -1)) == signal[0]
+                and int(entry.get("ino", -1)) == signal[1])
         except (TypeError, ValueError):
             cache_matches = False
     if cache_matches:
@@ -24770,11 +24816,15 @@ def _verify_png_export_checkpoint(
         raise ValueError(
             "H3 PNG export checkpoint failed its SHA-256 integrity check: %s" %
             checkpoint)
-    cache.setdefault("entries", {})[key] = {
+    record = {
         "sha256": actual.lower(),
         "size": int(stat.st_size),
         "mtime_ns": int(stat.st_mtime_ns),
     }
+    if signal is not None:
+        record["dev"] = signal[0]
+        record["ino"] = signal[1]
+    cache.setdefault("entries", {})[key] = record
     return "verified SHA-256", True
 
 
@@ -24835,8 +24885,13 @@ def _chapter_png_export_lock(manifest: dict[str, Any], export_name: str):
 
 def _png_export_file_record(path: str) -> dict[str, Any]:
     stat = os.stat(path)
-    return {"file": os.path.basename(path), "size": stat.st_size,
-            "mtime_ns": stat.st_mtime_ns, "sha256": _file_sha256(path)}
+    record = {"file": os.path.basename(path), "size": stat.st_size,
+              "mtime_ns": stat.st_mtime_ns, "sha256": _file_sha256(path)}
+    signal = identity_signal(path, stat)
+    if signal is not None:
+        record["dev"] = signal[0]
+        record["ino"] = signal[1]
+    return record
 
 
 def _png_export_file_unchanged(
@@ -24856,7 +24911,18 @@ def _png_export_file_unchanged(
     # Timestamps are a cache hint, not content identity: network copies can
     # change them without changing any bytes. A cache miss must verify the
     # saved digest, while strict mode always hashes regardless of timestamps.
-    if verification == "cached" and stat.st_mtime_ns == record.get("mtime_ns"):
+    #
+    # The hint is only usable when the file is big enough for hashing to
+    # matter AND it carries a trustworthy identity signal, because an
+    # in-place overwrite preserves both the timestamp and - on FAT/exFAT
+    # and on network shares - the file index. A small file, which is what
+    # an exported PNG or WAV usually is, is simply hashed every time.
+    signal = identity_signal(path, stat)
+    if (verification == "cached" and signal is not None
+            and int(stat.st_size) >= SMALL_FILE_BYTES
+            and stat.st_mtime_ns == record.get("mtime_ns")
+            and int(record.get("dev", -1)) == signal[0]
+            and int(record.get("ino", -1)) == signal[1]):
         return True
     return _file_sha256(path) == record.get("sha256")
 
@@ -28490,9 +28556,17 @@ def _recover_checkpoint_pointer_transactions(run_name: Any) -> int:
                         temporary = os.path.join(
                             checkpoint_dir, temporary_name)
                         if os.path.isfile(temporary):
-                            os.replace(
-                                temporary,
-                                os.path.join(checkpoint_dir, canonical_name))
+                            # Restoring an interrupted pointer is by
+                            # definition a replacement of an existing file,
+                            # and it selects its source by content rather
+                            # than by timestamp - so the write-once rule is
+                            # explicitly exempt here.
+                            publish_once(
+                                os.path.join(checkpoint_dir, canonical_name),
+                                lambda: os.replace(
+                                    temporary,
+                                    os.path.join(checkpoint_dir, canonical_name)),
+                                "", exempt=True)
                 else:
                     for item in retired:
                         temporary_name = str(item.get("temporary") or "")

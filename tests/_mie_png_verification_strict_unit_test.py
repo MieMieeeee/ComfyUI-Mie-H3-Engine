@@ -112,11 +112,36 @@ def main():
         assert stat.st_mtime_ns == entry["mtime_ns"], (
             stat.st_mtime_ns, entry["mtime_ns"])
 
-        # cached mode: the guard trusts the recorded (size, mtime) pair and
-        # never re-hashes, so the edit passes unnoticed.
-        result, changed = chain._verify_png_export_checkpoint(
-            str(checkpoint), recorded, "cached", cache)
-        assert result == "cached SHA-256" and not changed, (result, changed)
+        # --- 2a. the size layering: a SMALL checkpoint is always hashed ---
+        # The identity cache only short-circuits the hash for files above
+        # SMALL_FILE_BYTES, so a small checkpoint is re-hashed every time -
+        # and the same-stat edit is therefore caught even in cached mode.
+        try:
+            chain._verify_png_export_checkpoint(
+                str(checkpoint), recorded, "cached", cache)
+        except ValueError as error:
+            assert "SHA-256 integrity check" in str(error), str(error)
+        else:
+            raise AssertionError(
+                "a small checkpoint must be hashed on every verification")
+
+        # --- 2b. above the threshold, the identity cache is what stands
+        #     between a same-stat edit and a wrong render -----------------
+        # Lower the threshold so the cache path is exercised with a small
+        # file. The recorded identity is what a replaced file changes and
+        # an in-place overwrite does not - so on a filesystem whose file
+        # index is trustworthy the cache REJECTS a replaced file, and on one
+        # whose index is not (FAT/exFAT, network shares) the signal is not
+        # used at all and the file is hashed.
+        chain.SMALL_FILE_BYTES = 0
+        try:
+            result, changed = chain._verify_png_export_checkpoint(
+                str(checkpoint), recorded, "cached", cache)
+            # The in-place overwrite kept the file index, so the cache
+            # cannot see the edit on a filesystem whose index survives it.
+            assert result == "cached SHA-256" and not changed, (result, changed)
+        finally:
+            chain.SMALL_FILE_BYTES = 64 * 1024 * 1024
 
         # strict mode: the cache is not consulted, the file is re-hashed, and
         # the edit is rejected.

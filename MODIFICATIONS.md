@@ -65,6 +65,12 @@
 | **2.6** | **Phase 2** | **`tools/migrate_workflows.py`**：改写保存的工作流里的类型名 | 用户存量工作流要能迁移 | `tools/migrate_workflows.py`（新增） | ✅ 已做 |
 | **2.7** | **Phase 2** | **上游的 Registry 发布工作流改成只手动触发** | 它在"push 到 main 且改动 `pyproject.toml`"时**自动**发布到 Comfy Registry；我们 Phase 0 正好改了那个文件 ⇒ 第一次 push 就会触发 | `.github/workflows/publish_action.yml` | ✅ 已做 |
 | **2.8** | **Phase 2** | **CI 增加"映射表是当前"的断言** | 映射表过期 = 有个节点类型注册用一种拼写、查找用另一种 | `.github/workflows/ci.yml` | ✅ 已做 |
+| **1.6** | **Phase 1** | **P0-c：size 分层** —— 小于 `SMALL_FILE_BYTES`（64MB）的产物**一律直接哈希**，身份缓存只对大文件有意义 | 小文件哈希只要毫秒级，缓存省不下什么，却让"内容变了但 size/mtime 没变"漏检；分层后**暴露面缩到只剩大文件** | `checkpoint_identity.py`、`chain_nodes.py` | ✅ 已做 |
+| **1.7** | **Phase 1** | **P0-e：文件系统识别** —— 新模块 `checkpoint_identity.py`，用 `GetVolumeInformationW` 识别卷类型，`GetDriveTypeW` 识别映射盘；**信号不可信就不用** | **FAT/exFAT 的 file index 来自目录项位置，原地覆写不变** —— 恰好防不住我们要防的场景；UNC/SMB 可能报 0。降级规则是**自校准**的：拿不到可靠信号就不放行 | `checkpoint_identity.py`（新增） | ✅ 已做 |
+| **1.8** | **Phase 1** | **P0-f：write-once** —— 已发布的修订产物**只写一次**：同名不同内容 ⇒ 拒绝并报错；同名同内容 ⇒ 允许（幂等）。恢复路径**显式豁免** | 把"checkpoint 不可变"从未强制的不变量变成被强制的事实。发布路径按修订 uuid 命名 ⇒ write-once 是天然语义 | `checkpoint_identity.py`、`chain_nodes.py` | ✅ 已做 |
+| **1.9** | **Phase 1** | **两个守卫都接入身份信号**：checkpoint 守卫与**导出 PNG/WAV 守卫**（此前未列入清单） | 第二处守的是**用户最终看到的画面文件**，上游自己的注释已说"mtime 不是内容身份"却仍在用 | `chain_nodes.py` | ✅ 已做 |
+| **1.10** | **Phase 1** | **两处"最新者胜"改按内容时间戳** —— 活跃 checkpoint 指针改按 `segment.created_at`（`chain_nodes.py:10350`、`run_manager.py:447`） | 指针里的 `created_at` 是**内容里的**时间戳，robocopy /COPYALL 会连它一起拷走，**不受文件系统 mtime 影响** | `chain_nodes.py`、`run_manager.py` | ✅ 已做 |
+| **1.11** | **Phase 1** | **新增 `tests/_mie_checkpoint_identity_unit_test.py`** | 钉住降级规则：网络共享 / FAT / exFAT / ino=0 / 被 pin 的目录 ⇒ 一律退回哈希；普通本地 NTFS ⇒ 保留信号。**该测试当场抓出一个真 bug**（`"exFAT"` 与 `"EXFAT"` 大小写不一致导致 exFAT 分支失效） | `tests/_mie_checkpoint_identity_unit_test.py`（新增） | ✅ 已做 |
 | **1.5** | **Phase 1** | **新增 `tests/_mie_mtime_selection_unit_test.py`** | 把上面三条钉成可执行事实。**逐项负对照已做**：用上游原实现跑，三条**全部报红**（"an ambiguous legacy pointer must not be promoted" / "the snapshot with the newer sealed_at must win" / "a descriptor that does not match its file name must be rejected"）；用我们的实现跑，三条**全部通过** | `tests/_mie_mtime_selection_unit_test.py` | ✅ 已做 |
 | **1.2** | **Phase 1** | **P0-b：三处"按 mtime 选源"改按各自规则选源** | 外部覆写（robocopy /COPYALL 保留 mtime）能把旧文件推成正式产物 | `chain_nodes.py` `:28453-28458` / `:22055` / `:4940` | ⬜ 未做（规则见 PLAN §8.6.1） |
 | **1.3** | **Phase 1** | **P0-c：`<64MB` 一律直接哈希** | 把 P0 暴露面缩到只剩大文件 | `chain_nodes.py` `:24681` 附近 | ⬜ 未做 |
@@ -160,6 +166,74 @@
    —— pidfile 没记到那个进程。必须按 PID 结束（`netstat -ano | grep :8188`）。
    启动器自己拉起的进程则能正常 stop/restart（返回真实 pid）。
 2. **ComfyUI 的 "Import times" 一节是按耗时排序的**，不能当作导入顺序读。
+
+---
+
+## P0-d 排查报告：36 处 mtime 参与点（2026-11-06）
+
+用 AST 精确扫描（排除文档串里的假阳性），生产代码里 **36 处** `st_mtime_ns` /
+`getmtime` 参与点，分布在 **13 个文件**。按计划的四类逐处定类：
+
+| 类 | 含义 | 处数 | 判定 |
+|---|---|---|---|
+| **① 缓存跳过** | 拿 mtime 当"内容没变"的凭据，于是跳过哈希 | **2** | **两处已修**（P0-c + P0-e） |
+| **② 身份等值比较** | 拿 (dev, ino, size, mtime) 元组当内容身份 | **13** | 全部**良性**（见下） |
+| **③ 最新者胜** | 拿 mtime 挑"最新的那个"当正式产物 | **6** | **五处已修**，一处良性 |
+| **④ 年龄清理 + 报告** | 记录时间戳、算年龄、列清单 | **15** | 全部**良性** |
+
+### ① 缓存跳过 —— 两处，都已修
+
+| 位置 | 作用 | 修法 |
+|---|---|---|
+| `chain_nodes.py:24807` | **checkpoint 守卫**：拿 (sha256, size, mtime) 比对，命中就跳过哈希 | P0-c（<64MB 一律直接哈希）+ P0-e（身份信号不可信时不用缓存；可信时把 dev/ino 一起比对） |
+| `chain_nodes.py:24923` | **导出 PNG/WAV 守卫**：同样的形状 | 同上 |
+
+第二处此前**没人注意过**：它守的是**导出的画面文件**——那正是用户最终看到的东西，
+而上游自己的注释已经写着 *"Timestamps are a cache hint, not content identity"*，
+却在 cached 分支里照样拿它当等值依据。
+
+### ② 身份等值比较 —— 十三处，全部良性，但有一处必须写清楚
+
+| 位置 | 用途 | 为什么良性 |
+|---|---|---|
+| `storage_inventory.py:212-213`、`:371-372` | 扫描期的 before/after 竞态检测 | **上游自己写着** *"This is not an atomic snapshot and does not detect same-stat byte edits"* ⇒ 它是**竞态检测**，不是内容身份。**这条注释恰恰加强了我们的论据**：连上游都承认这个元组抓不到"stat 不变但字节变了" |
+| `storage_inventory.py:380` | 目录那一半的 mtime-only 比较 | 同上，是目录的竞态检测 |
+| `png_video_export.py:131`、`processing_checkpoint_delete.py:271`、`chapter_snapshot_retirement.py:80`、`assembly_checkpoint_cleanup.py:29`、`working_branch_cleanup.py:69` | 删除/清理**记账**用的身份元组 | 只用来记录"删的是哪个文件"，不判定内容 |
+| `chain_layout_conversion.py:52`、`:61` | **搬迁**校验：移动后 size/mtime 必须一致 | 搬迁不改变内容，mtime 不变是**应该**的 |
+| `chain_nodes.py:8720`、`:8515`、`:8529`、`storage_inventory.py:149`、`:186` | 清单/报告里记录的时间戳 | 纯记录 |
+| `chain_nodes.py:24935` | 导出增量身份：size + mtime **旁边就有 sha256** | 内容判据在哈希上 |
+
+### ③ 最新者胜 —— 六处，五处已修
+
+| 位置 | 挑什么 | 修法 |
+|---|---|---|
+| `chain_nodes.py:4972` | reference cache 候选 | P0-b：**描述符的签名必须与文件名一致**，不符即跳过 |
+| `chain_nodes.py:22128` | 封印 Chapter 清单 | P0-b：改按**内容里的 `sealed_at`** 排序 |
+| `chain_nodes.py:10350` | 活跃 checkpoint 指针 | 本轮：改按**内容里的 `segment.created_at`** 排序 |
+| `run_manager.py:447` | 活跃 checkpoint 指针（第二处） | 本轮：同上 |
+| `chain_nodes.py:28453`（遗留恢复） | 恢复用的临时指针 | P0-b：**多份 ⇒ 拒绝猜测**并保留全部文件 |
+| `chain_nodes.py:27987` | 审阅预览 `*.review.mp4` | **良性**：文件名前缀已含 `video_hash`，过滤后剩下的都是同一份内容，mtime 只是挑个代表 |
+
+### ④ 年龄清理 + 报告 —— 十五处，全部良性
+
+`checkpoint_manager.py:307/1063/1147`（时间戳的记录与格式化）、`handoff_state.py:335`
+（按年龄判 stale，这是它本来的用途）、`png_export_transaction.py:90`、
+`chain_nodes.py:13034/13040/13306`（`IS_CHANGED` 的输入指纹——**用途正是"输入变没变"**，
+不是内容完整性）、以及各类清单记录。
+
+> 一处**残留**要写明：`IS_CHANGED` 用的 (path, size, mtime) 指纹**抓不到同 stat 的改写**
+> ⇒ 源媒体被原地改写时，节点不会重跑。后果是"用旧的条件"，不是"渲染出错的文件"，
+> 且它本来就是 ComfyUI 的缓存失效机制 ⇒ 不在 P0 范围内。
+
+### 结论
+
+**真正会让错内容进成片的，只有 ① 和 ③ 两类，共 8 处 —— 现在全部处理完毕。**
+② 和 ④ 的 28 处要么是竞态检测，要么是记账/报告/年龄计算，**没有一处被当成内容完整性判据**。
+
+排查过程中还发现**两处此前未列入清单的"最新者胜"**（`run_manager.py:447` 与
+`chain_nodes.py:24923`）——前者是同一类问题的第二个副本，后者是**第二个缓存守卫**。
+这说明 36 处这个数字本身是会变的：**每次上游改动都要重扫**，
+所以 `tools/` 里留了扫描方法的说明，CI 的基线闸门会在新增失败时报警。
 
 ---
 

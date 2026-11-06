@@ -250,10 +250,15 @@ def main():
 
         cache_path, cache = chain._load_png_export_hash_cache(manifest)
         assert pathlib.Path(cache_path).is_file()
+        # This fork hashes a small checkpoint on every export rather than
+        # trusting the identity cache (see checkpoint_identity.SMALL_FILE_BYTES),
+        # so lower the threshold here to exercise the cache path itself.
+        chain.SMALL_FILE_BYTES = 0
         result_name, changed = chain._verify_png_export_checkpoint(
             str(checkpoint), manifest["segments"][0]["checkpoint_sha256"],
             "cached", cache)
         assert result_name == "cached SHA-256" and not changed
+        chain.SMALL_FILE_BYTES = 64 * 1024 * 1024
 
         audio_only_vae = FakeAudioVAE()
         audio_only = chain.MiniMaxH3ChainExportPNG().export(

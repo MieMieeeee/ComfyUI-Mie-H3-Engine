@@ -447,11 +447,27 @@ class RunArchiveManager:
                     modified_ns = os.stat(path).st_mtime_ns
                 except OSError:
                     continue
+                # The pointer records when its segment was created, inside
+                # the file. That timestamp travels with the content, so a
+                # restore or a mirror that preserves file metadata cannot
+                # make an older pointer look the newest. The file mtime is
+                # only the fallback for a pointer that predates it.
+                created_at = ""
+                try:
+                    pointer = _read_json(path)
+                    segment = (pointer.get("segment")
+                               if isinstance(pointer, dict) else None)
+                    created_at = (str(segment.get("created_at") or "")
+                                  if isinstance(segment, dict) else "")
+                except (OSError, TypeError, ValueError,
+                        json.JSONDecodeError):
+                    created_at = ""
                 pointers.append((
+                    1 if created_at else 0, created_at,
                     modified_ns, int(match.group(1)), filename))
         if not pointers:
             return None
-        _modified_ns, _scene, filename = max(pointers)
+        _has, _created, _modified_ns, _scene, filename = max(pointers)
         try:
             metadata = _read_json(os.path.join(checkpoint_dir, filename))
         except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
