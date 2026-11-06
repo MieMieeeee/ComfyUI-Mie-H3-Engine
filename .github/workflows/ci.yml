@@ -66,10 +66,14 @@ jobs:
         if: always()
         shell: bash
         run: |
-          # The gate writes the baseline when there is none. Upload it so a
+          # The gate writes the baseline when there is none. Keep it so a
           # drift in the known failures is visible instead of silent.
           mkdir -p baseline
-          cp "tools/known_failures/$(python -c 'import sys; sys.path.insert(0,"tools"); import ci_gate; print(ci_gate.discover_platform())').txt"             baseline/ 2>/dev/null || true
+          label=$(python -c "import sys; sys.path.insert(0, 'tools'); import ci_gate; print(ci_gate.discover_platform())")
+          cp "tools/known_failures/$label.txt" baseline/ 2>/dev/null || true
+
+      - name: Upload the computed baseline
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: known-failures-${{ matrix.os }}
