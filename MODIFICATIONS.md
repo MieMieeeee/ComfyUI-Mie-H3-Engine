@@ -64,6 +64,8 @@
 | **2.5** | **Phase 2** | **`tools/apply_rename.py`**：把映射表应用到 `web/`、`tests/`、工作流 JSON 等 | 改名要覆盖前端 —— 上游前端用**字符串字面量**比对类型名 | `tools/apply_rename.py`（新增） | ✅ 已做 |
 | **2.6** | **Phase 2** | **`tools/migrate_workflows.py`**：改写保存的工作流里的类型名 | 用户存量工作流要能迁移 | `tools/migrate_workflows.py`（新增） | ✅ 已做 |
 | **2.7** | **Phase 2** | **上游的 Registry 发布工作流改成只手动触发** | 它在"push 到 main 且改动 `pyproject.toml`"时**自动**发布到 Comfy Registry；我们 Phase 0 正好改了那个文件 ⇒ 第一次 push 就会触发 | `.github/workflows/publish_action.yml` | ✅ 已做 |
+| **4.1** | **Phase 4** | **新增 `mie_nodes.py`：三个薄壳节点** —— `MieH3LoadScriptAsset` / `MieH3ScriptToPlan` / `MieH3LoadAssetRoster` | 逻辑全在 `ComfyUI-Mie-Core`，这里只有 ComfyUI 的壳。`MieH3ScriptToPlan` 用的是**同一个零 LLM 组装器**，所以引擎出的 plan 与 MieNodes 出的 plan 逐字节相同；资产 roster 插槽类型也来自 Core ⇒ 两个包的 plan 可以互相接线 | `mie_nodes.py`（新增）、`__init__.py` | ✅ 已做 |
+| **4.2** | **Phase 4** | **引擎包依赖 `ComfyUI-Mie-Core`**（`pip install -e`） | 计划 D12：Core 是纯 pip 包。**实测**：只装到系统 python 时，引擎包在本机 ComfyUI 里 IMPORT FAILED（日志一行、无异常栈）⇒ 必须装进 ComfyUI 自己的 python | `__init__.py`、`mie_nodes.py` | ✅ 已做 |
 | **2.8** | **Phase 2** | **CI 增加"映射表是当前"的断言** | 映射表过期 = 有个节点类型注册用一种拼写、查找用另一种 | `.github/workflows/ci.yml` | ✅ 已做 |
 | **1.6** | **Phase 1** | **P0-c：size 分层** —— 小于 `SMALL_FILE_BYTES`（64MB）的产物**一律直接哈希**，身份缓存只对大文件有意义 | 小文件哈希只要毫秒级，缓存省不下什么，却让"内容变了但 size/mtime 没变"漏检；分层后**暴露面缩到只剩大文件** | `checkpoint_identity.py`、`chain_nodes.py` | ✅ 已做 |
 | **1.7** | **Phase 1** | **P0-e：文件系统识别** —— 新模块 `checkpoint_identity.py`，用 `GetVolumeInformationW` 识别卷类型，`GetDriveTypeW` 识别映射盘；**信号不可信就不用** | **FAT/exFAT 的 file index 来自目录项位置，原地覆写不变** —— 恰好防不住我们要防的场景；UNC/SMB 可能报 0。降级规则是**自校准**的：拿不到可靠信号就不放行 | `checkpoint_identity.py`（新增） | ✅ 已做 |
