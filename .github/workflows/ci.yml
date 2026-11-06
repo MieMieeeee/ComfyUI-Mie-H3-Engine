@@ -62,6 +62,19 @@ jobs:
         run: |
           python tools/ci_gate.py --comfy-root "$COMFYUI_PATH" --jobs 4 --timeout 240
 
+      - name: Keep the computed baseline
+        if: always()
+        shell: bash
+        run: |
+          # The gate writes the baseline when there is none. Upload it so a
+          # drift in the known failures is visible instead of silent.
+          mkdir -p baseline
+          cp "tools/known_failures/$(python -c 'import sys; sys.path.insert(0,"tools"); import ci_gate; print(ci_gate.discover_platform())').txt"             baseline/ 2>/dev/null || true
+        uses: actions/upload-artifact@v4
+        with:
+          name: known-failures-${{ matrix.os }}
+          path: baseline/
+
   # NOT IN CI - these need the real machines:
   #   * Windows volume types (FAT / exFAT): a hosted runner has one disk.
   #   * Mapped drives (GetDriveTypeW == DRIVE_REMOTE): the character assets

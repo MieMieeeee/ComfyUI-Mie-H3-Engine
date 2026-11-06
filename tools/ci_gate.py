@@ -82,11 +82,24 @@ def rerun_failures_serially(failures, comfy_root: pathlib.Path,
 
 
 def discover_platform() -> str:
+    """The name of the baseline file for this environment.
+
+    A CI runner and a workstation are not the same machine: the runner's
+    Windows image has different privileges, a different filesystem and a
+    different set of failures. They therefore get different baselines, and a
+    workstation must not overwrite the runner's.
+    """
+    if os.environ.get("CI"):
+        if os.name == "nt":
+            return "windows-latest"
+        if sys.platform == "darwin":
+            return "macos-latest"
+        return "ubuntu-latest"
     if os.name == "nt":
-        return "windows-latest"
+        return "windows-local"
     if sys.platform == "darwin":
-        return "macos-latest"
-    return "ubuntu-latest"
+        return "macos-local"
+    return "linux-local"
 
 
 def run_suite(comfy_root: pathlib.Path, jobs: int, timeout: int):
