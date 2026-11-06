@@ -48,7 +48,11 @@ class MieH3LoadScriptAsset:
             },
         }
 
-    RETURN_TYPES = ("MIE_SCRIPT_ASSET", "STRING", "STRING")
+    # MIE_STORYBOARD, not MIE_SCRIPT_ASSET: the plan assembler's
+    # ``storyboard`` input is that type, and a socket has to match by name
+    # for ComfyUI to let the two connect. The MieNodes pack's own
+    # Load Storyboard Asset says the same thing.
+    RETURN_TYPES = ("MIE_STORYBOARD", "STRING", "STRING")
     RETURN_NAMES = ("storyboard", "status", "text")
     FUNCTION = "load"
     OUTPUT_NODE = True
