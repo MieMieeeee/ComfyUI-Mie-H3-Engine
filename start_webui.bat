@@ -2,120 +2,89 @@
 setlocal enableextensions enabledelayedexpansion
 
 REM ============================================================
-REM  ComfyUI-Mie 短剧工作台 启动脚本（与 ComfyUI 解耦）
-REM  - 先清理占用 8199 端口的旧进程
-REM  - 首次运行自动 pip install -r requirements.txt
-REM  - 启动 Flask WebUI (8199) 并打开浏览器
-REM  - ComfyUI 由启动器另行起停（见 F:\Mie-Skills\AGENTS.md），本脚本不管它
-REM  - 资产库与 LLM 密钥都在 MieNodes 插件目录里，用 MIE_PLUGIN_ROOT 指过去
-REM  - 网页端本身在 webapp\ 目录，用 ComfyUI 的 embedded python 跑
+REM  ComfyUI-Mie 短剧工作台 —— 独立启动（不经过 ComfyUI）
+REM
+REM  网页端随 H3 engine 插件发布，在 webapp\ 目录里。它跑在 ComfyUI
+REM  自己的 embedded python 上 —— 和插件节点同一个解释器、同一套依赖、
+REM  同一份资产库与 mie_llm_keys.json。
+REM
+REM  所以：
+REM    - 不建 venv，也不装依赖（依赖是 ComfyUI 装插件 requirements.txt
+REM      时装进 embedded python 的）
+REM    - ComfyUI 不开也能用：资产、剧本、LLM 设置全是本地操作。
+REM      只有「渲染」要 ComfyUI。
+REM
+REM  要在 ComfyUI 里起，用 MieH3StartWebUI 节点。
 REM ============================================================
 
 cd /d "%~dp0"
 
 set "WEBUI_PORT=8199"
-REM 用 127.0.0.1 打开浏览器。localhost 会先解析到 IPv6 ::1，但 Flask 只监听
-REM IPv4 (0.0.0.0)，浏览器要等 ~2 秒超时再回退 127.0.0.1。
 set "DISPLAY_HOST=127.0.0.1"
 
-REM 资产库与 mie_llm_keys.json 都在 ComfyUI 插件目录里。
-if "%MIE_PLUGIN_ROOT%"=="" (
-    set "MIE_PLUGIN_ROOT=C:\PP\V9\V9-Large\ComfyUI_Mie_2026_V9.0_Large\ComfyUI\custom_nodes\comfyui_mienodes"
-)
-
-echo ============================================================
-echo   ComfyUI-Mie 短剧工作台
-echo ============================================================
-echo.
-
-REM --- 0. 清理占用 WEBUI_PORT 的旧进程（避免端口冲突）---
-echo [清理] 检查端口 %WEBUI_PORT% 是否被占用...
+REM --- 0. 清理占用端口的旧进程 ---
+echo [1/4] 检查端口 %WEBUI_PORT% ...
 set "KILLED=0"
 for /f "tokens=5" %%P in ('netstat -ano -p tcp ^| findstr ":%WEBUI_PORT% " ^| findstr "LISTENING"') do (
-    echo       发现占用进程 PID=%%P，正在结束...
+    echo       结束占用进程 PID=%%P ...
     taskkill /F /PID %%P >nul 2>&1
     set "KILLED=1"
 )
-if "!KILLED!"=="0" (
-    echo       端口 %WEBUI_PORT% 空闲。
-) else (
-    echo       已清理旧进程，等待 1 秒释放端口...
-    ping -n 2 127.0.0.1 >nul
-)
-echo.
+if "!KILLED!"=="0" (echo       端口空闲。) else (ping -n 2 127.0.0.1 >nul)
 
-REM --- 1. 定位 Python: 优先 .venv, 不存在就创建 ---
-set "VENV_PY=%~dp0.venv\Scripts\python.exe"
-if exist "%VENV_PY%" (
-    set "PYCMD=%VENV_PY%"
-    echo [1/4] 使用项目 .venv: %VENV_PY%
-) else (
-    echo [1/4] 未找到 .venv, 正在创建...
-    where py >nul 2>&1 && set "SYSPY=py" || set "SYSPY=python"
-    %SYSPY% --version >nul 2>&1
-    if errorlevel 1 (
-        echo [错误] 找不到 Python。请先安装 Python 3.10+ 并加入 PATH。
-        pause
-        exit /b 1
+REM --- 1. 找 ComfyUI 的 embedded python ---
+echo [2/4] 找 ComfyUI 的 embedded python ...
+set "PYCMD="
+REM 插件装在 <ComfyUI>\custom_nodes\ 下，所以上两级就是 ComfyUI 根。
+if exist "%~dp0..\..\python_embeded\python.exe" set "PYCMD=%~dp0..\..\python_embeded\python.exe"
+if not defined PYCMD (
+    for %%P in (C D E F) do (
+        if exist "%%P:\PP\V9\V9-Large\ComfyUI_Mie_2026_V9.0_Large\python_embeded\python.exe" (
+            set "PYCMD=%%P:\PP\V9\V9-Large\ComfyUI_Mie_2026_V9.0_Large\python_embeded\python.exe"
+        )
     )
-    %SYSPY% -m venv "%~dp0.venv"
-    if errorlevel 1 (
-        echo [错误] 创建 .venv 失败。
-        pause
-        exit /b 1
-    )
-    set "PYCMD=%VENV_PY%"
-    echo       .venv 创建完成.
 )
+if not defined PYCMD (
+    echo [错误] 找不到 ComfyUI 的 embedded python。
+    echo        把这个插件装进 ComfyUI 的 custom_nodes 目录，或手动指定 python.exe。
+    pause
+    exit /b 1
+)
+echo       用 %PYCMD%
 
-REM --- 2. 检查依赖 (装到 .venv, 首次自动) ---
-echo [2/4] 检查依赖...
-"%PYCMD%" -c "import flask, mie_llm, mie_craft" >nul 2>&1
+REM --- 2. 依赖预检 ---
+echo [3/4] 检查依赖 ...
+"%PYCMD%" -c "import flask, mie_llm, mie_craft, soundfile" >nul 2>&1
 if errorlevel 1 (
-    echo       缺少依赖，正在安装 requirements.txt 到 .venv ...
-    "%PYCMD%" -m pip install -r requirements.txt
-    if errorlevel 1 (
-        echo [错误] 依赖安装失败。请手动运行: "%PYCMD%" -m pip install -r requirements.txt
-        pause
-        exit /b 1
-    )
-    echo       依赖安装完成。
-) else (
-    echo       依赖已就绪。
+    echo       缺依赖。装一次：ComfyUI 启动时会读本插件的 requirements.txt，
+    echo       或者手动： "%PYCMD%" -m pip install -r "%~dp0requirements.txt"
+    pause
+    exit /b 1
 )
+echo       依赖就绪。
 
-REM --- 3. 预检：资产库、密钥文件、ComfyUI 在不在 ---
+REM --- 3. 预检：资产库在不在、ComfyUI 在不在 ---
+REM r'%~dp0.' 末尾补一个点：%~dp0 自带反斜杠，直接插进引号会转义掉引号。
+"%PYCMD%" -c "import sys; sys.path.insert(0, r'%~dp0.'); from webapp import config; from webapp.services import library; print('       资产库  :', library.library_dir()); print('       密钥文件:', config.LLM_KEYS_FILE)" 2>nul
+"%PYCMD%" -c "import sys; sys.path.insert(0, r'%~dp0.'); from webapp.services import comfy; s=comfy.status(); print('       ComfyUI :', ('在线 '+(s.get('comfyui_version') or '')) if s.get('online') else '不在线（渲染要用它，其余功能不受影响）')" 2>nul
+
+REM --- 4. 启动 ---
 echo.
-echo [3/4] 预检...
-"%PYCMD%" -c "import sys; sys.path.insert(0,'.'); from app import config; from app.services import library; print('       插件根  :', config.PLUGIN_ROOT); print('       资产库  :', library.library_dir()); print('       密钥文件:', config.LLM_KEYS_FILE)" 2>nul
-
-REM ComfyUI 是另一个进程，由启动器管。这里只报状态，不替它起。
-"%PYCMD%" -c "import sys; sys.path.insert(0,'.'); from app.services import comfy; s = comfy.status(); print('       ComfyUI :', ('在线 ' + (s.get('comfyui_version') or '')) if s.get('online') else ('不在线 - ' + (s.get('error') or '')[:60]))" 2>nul
-"%PYCMD%" -c "import sys; sys.path.insert(0,'.'); from app import config; import urllib.request, json; url = config.COMFYUI_URL.rstrip('/') + '/system_stats'; d = json.loads(urllib.request.urlopen(url, timeout=5).read()); print('       设备    :', ', '.join((x.get('name') or '') for x in (d.get('devices') or [])))" 2>nul
-if errorlevel 1 (
-    echo       ComfyUI 没连上。网页端照样能开（资产与剧本都能用），
-    echo       但渲染要它。要起它用：
-    echo         cmd /c "C:\PP\V9\V9-Large\ComfyUI_Mie_2026_V9.0_Large\ComfyUI启动器-CLI.cmd" start --timeout 600
-)
-
-REM --- 4. 启动 Flask WebUI ---
-echo.
-echo [4/4] 启动 Flask WebUI...
+echo [4/4] 启动短剧工作台...
 echo       地址: http://%DISPLAY_HOST%:%WEBUI_PORT%
-echo       局域网浏览器可用 http://<本机IP>:%WEBUI_PORT%
+echo       局域网: http://本机IP:%WEBUI_PORT%  （换成你这台机器的局域网地址）
 echo       按 Ctrl+C 停止。
 echo ============================================================
 echo.
 
-REM 启动后延迟打开浏览器
-start "" cmd /c "timeout /t 4 /nobreak >nul && start http://%DISPLAY_HOST%:%WEBUI_PORT%"
+REM 没有关联浏览器时 start 会报一句"系统找不到指定的文件"，那是无关噪音。
+start "" cmd /c "timeout /t 3 /nobreak >nul && start http://%DISPLAY_HOST%:%WEBUI_PORT% 2>nul"
 
-REM 单进程，不开 --reload：第二个进程会跟渲染队列抢活。
-set "FLASK_PORT=%WEBUI_PORT%"
-set "FLASK_HOST=0.0.0.0"
+REM 跑文件，不是 -m webapp：embedded python 是隔离模式（._pth 固定了
+REM sys.path），-m 找不到包。webapp\__main__.py 自己会把包的父目录放回去。
 set "MIE_WEB_PORT=%WEBUI_PORT%"
 set "MIE_WEB_HOST=0.0.0.0"
-"%PYCMD%" webapp\__main__.py
+"%PYCMD%" "%~dp0webapp\__main__.py"
 if errorlevel 1 (
     echo.
     echo [错误] WebUI 退出码 %errorlevel%。

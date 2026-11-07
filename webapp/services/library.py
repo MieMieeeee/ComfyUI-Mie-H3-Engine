@@ -160,13 +160,27 @@ def to_wav_bytes(raw: bytes) -> bytes:
     return buf.getvalue()
 
 
-def save_character(name: str, description: str, voice: str,
+def save_character(name: str, description: str = None, voice: str = None,
                    image_raw: bytes = None, audio_raw: bytes = None) -> dict:
     """Create or update a character.
 
     ``image_raw`` / ``audio_raw`` of None mean "keep what is on disk", so
     editing the description never drops the portrait.
+
+    ``description`` / ``voice`` of None mean the same thing: keep what is
+    on disk. The library requires both to be non-empty, so a caller that
+    only wants to change one of them would otherwise have to read the
+    asset first and send both back.
     """
+    if description is None or voice is None:
+        try:
+            current = _library.load_character(library_dir(), name, **_library_kwargs())
+        except (FileNotFoundError, ValueError):
+            current = {}
+        if description is None:
+            description = current.get("description", "")
+        if voice is None:
+            voice = current.get("voice", "")
     png_bytes = None
     if image_raw is not None:
         png_bytes = [to_png_bytes(image_raw)]

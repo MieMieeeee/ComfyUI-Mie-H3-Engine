@@ -168,20 +168,22 @@ def create_app() -> Flask:
         data = request.get_json(silent=True) or {}
         form = request.form
         name = str(data.get("name") or form.get("name") or "")
-        description = str(data.get("description") or form.get("description") or "")
+        # A field the caller did not send is None, and None means "keep
+        # what is on disk". An empty string is a real value: the caller
+        # said so.
+        description = _field(data, form, "description")
+        voice = _field(data, form, "voice")
         image_raw = _uploaded("image")
         audio_raw = _uploaded("audio")
         try:
             if kind == "character":
                 result = library.save_character(
-                    name, description,
-                    str(data.get("voice") or form.get("voice") or ""),
+                    name, description, voice,
                     image_raw=image_raw, audio_raw=audio_raw)
             elif kind == "scene":
-                ambience = data.get("ambience", form.get("ambience"))
+                ambience = _field(data, form, "ambience")
                 result = library.save_scene(
-                    name, description,
-                    ambience=None if ambience is None else str(ambience),
+                    name, description, ambience=ambience,
                     image_raw=image_raw)
             else:
                 abort(404)
@@ -315,6 +317,19 @@ def create_app() -> Flask:
         return send_from_directory(root, relpath)
 
     return app
+
+
+def _field(data: dict, form, name: str):
+    """One text field, from the JSON body or the form.
+
+    None when the caller did not send it - which the service layer reads
+    as "keep what is on disk".
+    """
+    if name in data:
+        return data[name]
+    if name in form:
+        return form[name]
+    return None
 
 
 def _uploaded(field: str) -> bytes | None:

@@ -171,4 +171,36 @@ def test_the_launcher_script_is_in_the_codepage_cmd_reads():
         raw.decode("utf-8")
     text = raw.decode("gbk")
     assert "webapp" in text
-    assert "MIE_PLUGIN_ROOT" in text
+    # The script must use ComfyUI's own interpreter and must run the
+    # web app as a FILE: the embedded python is in isolated mode, where
+    # "-m webapp" cannot find the package.
+    assert "python_embeded" in text
+    assert "__main__.py" in text
+    # Only the lines that actually run matter: the comment that explains
+    # why "-m webapp" does not work mentions it too.
+    commands = "\n".join(
+        line for line in text.splitlines()
+        if not line.strip().startswith("REM"))
+    assert " -m webapp" not in commands
+
+
+def test_editing_only_the_description_keeps_the_voice(client):
+    """A partial update must not wipe the fields the caller did not send.
+
+    The library requires a non-empty voice, so sending an empty one
+    instead of "keep what is on disk" turned an edit into a 400.
+    """
+    created = client.post(
+        "/api/assets/character",
+        data={"name": "部分更新", "description": "第一版", "voice": "male voice",
+              "image": (io.BytesIO(PNG_1x1), "portrait.png")},
+        content_type="multipart/form-data")
+    assert created.status_code == 200, created.get_json()
+
+    edited = client.post("/api/assets/character",
+                         json={"name": "部分更新", "description": "第二版"})
+    assert edited.status_code == 200, edited.get_json()
+    data = client.get("/api/assets/character/部分更新").get_json()
+    assert data["description"] == "第二版"
+    assert data["voice"] == "male voice", "the voice must survive a text-only edit"
+    assert data["image_count"] == 1, "the portrait must survive too"
