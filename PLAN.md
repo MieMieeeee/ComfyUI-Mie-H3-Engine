@@ -121,6 +121,7 @@ GitHub API   pushed_at = 2026-10-14T11:08:20Z      (距今 22 天)
 | D1 | 引擎 = **独立包** `ComfyUI-Mie-H3-Engine` | §3.1 |
 | D2 | 产品层 = **独立进程**（2026-11-06 实现为 Flask，见 §6.1） | §6 |
 | **D27** | **产品层 = Flask，复刻 ComfyUIWebToRunWorkflow 的主题；不引入 nodejs** | §6.1 |
+| **D28** | **网页端随引擎插件发布，跑在 ComfyUI 的 embedded python 上，由节点启动** | §6.1 |
 | D3 | 分镜资产**对接 Scene Prompts 做预览**；Plan Studio 不参与修改 | §5 |
 | D4 | 节点类型名**一律加我们的后缀** | §4 |
 | D5 | 共享核心包 **`ComfyUI-Mie-LLM` / `ComfyUI-Mie-Prompt` / `ComfyUI-Mie-Craft`** | §3.4 |
@@ -463,11 +464,18 @@ node.mieH3PlanProvider = () => ({
 ### 6.1 进程模型、导入机制与部署拓扑
 
 - 独立进程，**不挂在 ComfyUI 的 PromptServer 上**（D2）。
-  **2026-11-06 实现改为 Flask**（`F:\ComfyUI-Mie-Web`）：用户要求"复刻
+  **2026-11-06 实现改为 Flask**（引擎仓的 `webapp/` 目录）：用户要求"复刻
   `F:\ComfyUIWebToRunWorkflow` 的主题、不要引入 nodejs"，而那个项目就是
   Flask + Jinja + vendored Alpine（无构建步骤）。主题的 `tokens.css` /
   `themes.json` 因此可以**直接复用**，而不是另写一套。
   ⇒ D2 的**进程边界、端口、单进程**三条不变，**只有 Web 框架从 FastAPI 换成了 Flask**。
+- **网页端是引擎插件的一部分**（D28），不是独立的包，也不另起一个仓：
+  它住在引擎仓的 `webapp/` 目录里，跑在 **ComfyUI 自己的 embedded python**
+  上，由 `MieH3StartWebUI` 节点启动 ⇒ 网页端与节点**共用一个解释器、
+  一套依赖、一份资产库、一份 `mie_llm_keys.json`**。
+  ⚠️ **embedded python 是隔离模式**（`._pth` 固定 sys.path）⇒
+  `python -m webapp` 找不到包；节点跑的是 **文件** `webapp/__main__.py`，
+  由它自己把包的父目录放回 sys.path。
 - **端口**：ComfyUI 继续占 **8188** 不动；产品层挑空闲口 **8199**，绑 `0.0.0.0` 供局域网浏览器用。
   **无冲突可言。**
 - **单进程**（D24）——多 worker 会破坏渲染队列串行化（坑 4 的前提）
@@ -498,9 +506,9 @@ node.mieH3PlanProvider = () => ({
 
 ### 6.2 路由清单（首版）
 
-> **2026-11-06 已实现**（`F:\ComfyUI-Mie-Web`）：四个页面
+> **2026-11-06 已实现**（引擎仓的 `webapp/`）：四个页面
 > `/llm` `/assets` `/scripts` `/video`，各自一套 `/api/*`。
-> 页面与路由的实现在那个仓，不在本文件；本清单继续作为**首版意图**的记录。
+> 页面与路由在引擎仓的 `webapp/`，不在本文件；本清单继续作为**首版意图**的记录。
 
 
 | 方法 | 路径 | 作用 |
