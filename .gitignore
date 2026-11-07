@@ -34,3 +34,6 @@ _tmp*/
 *.swp
 .DS_Store
 Thumbs.db
+
+# The web front end's runtime log (the node writes it next to the plugin)
+webui.log
