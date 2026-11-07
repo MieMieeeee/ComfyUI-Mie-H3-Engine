@@ -101,6 +101,10 @@ from .mie_nodes import (
     MieH3LoadScriptAsset,
     MieH3ScriptToPlan,
 )
+from .webui_node import (
+    MieH3StartWebUI,
+    MieH3WebUIStatus,
+)
 
 NODE_CLASS_MAPPINGS = dict(_CONTEXT_NODE_CLASS_MAPPINGS)
 NODE_CLASS_MAPPINGS.update(CHAIN_NODE_CLASS_MAPPINGS)
@@ -147,6 +151,10 @@ NODE_CLASS_MAPPINGS.update({
     "MieH3LoadScriptAsset": MieH3LoadScriptAsset,
     "MieH3ScriptToPlan": MieH3ScriptToPlan,
     "MieH3LoadAssetRoster": MieH3LoadAssetRoster,
+    # The web front end ships with this plugin, so it is started from
+    # here - with ComfyUI's own interpreter.
+    "MieH3StartWebUI": MieH3StartWebUI,
+    "MieH3WebUIStatus": MieH3WebUIStatus,
 })
 NODE_DISPLAY_NAME_MAPPINGS.update({
     "MieH3LoadScriptAsset": "Mie H3 Load Script Asset",

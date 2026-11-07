@@ -57,6 +57,34 @@ jobs:
           # looked up under another.
           python tools/gen_rename_map.py --check
 
+      - name: Run the web front end's suite
+        shell: bash
+        run: |
+          # The web app (webapp/) ships with this plugin, so it is tested
+          # here too. Its tests never touch the real asset library: each
+          # one gets a temporary plugin root.
+          python -m pip install flask soundfile pytest
+          python -m pip install "comfyui-mie-llm>=0.1.5" "comfyui-mie-prompt>=0.1.5" "comfyui-mie-craft>=0.1.5"
+          python -m pytest webapp_tests -q
+
+      - name: The web app starts and serves its pages
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, tempfile, pathlib
+          # An empty plugin root: the pages must serve even with no library.
+          root = pathlib.Path(tempfile.mkdtemp()) / "plugin"
+          (root / "asset_library" / "characters").mkdir(parents=True)
+          os.environ["MIE_PLUGIN_ROOT"] = str(root)
+          os.environ["MIE_WEB_SETTINGS"] = str(root / "settings.json")
+          from webapp.flask_app import create_app
+          client = create_app().test_client()
+          for path in ("/", "/llm", "/assets", "/scripts", "/video"):
+              response = client.get(path)
+              assert response.status_code == 200, (path, response.status_code)
+              print("  OK", path)
+          PY
+
       - name: Run the suite through the baseline gate
         shell: bash
         run: |

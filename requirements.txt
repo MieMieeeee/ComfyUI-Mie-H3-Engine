@@ -13,3 +13,19 @@
 #   torchaudio - the audio paths need it. ComfyUI does not ship it.
 comfyui-mie-craft>=0.1.4
 torchaudio
+
+# The web front end (webapp/), which ships with this plugin and runs on
+# this interpreter - so the pages and the nodes share one set of packages
+# and one asset library.
+#
+#   flask - the web app itself.
+#   soundfile - uploaded audio has to become WAV before the asset library
+#     will take it.
+#   comfyui-mie-llm / comfyui-mie-prompt - the platform table and the
+#     prompt assets the pages read.
+#
+# Pillow is not listed: ComfyUI ships it.
+flask>=3.0
+soundfile>=0.12
+comfyui-mie-llm>=0.1.5
+comfyui-mie-prompt>=0.1.5
