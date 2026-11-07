@@ -257,10 +257,12 @@ function assetsPage() {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || response.statusText);
-        this.message = `已保存：${data.name}（${data.status}）`;
         this.editing = false;
         await this.load();
         await this.open(data.name);
+        // After the reload, not before: open() clears the message, so a
+        // confirmation set beforehand was wiped before anyone could read it.
+        this.message = `已保存：${data.name}（${data.status}）`;
       } catch (error) {
         this.message = `保存失败：${error.message}`;
       }

@@ -65,6 +65,13 @@ jobs:
           # one gets a temporary plugin root.
           python -m pip install flask soundfile pytest
           python -m pip install "comfyui-mie-llm>=0.1.5" "comfyui-mie-prompt>=0.1.5" "comfyui-mie-craft>=0.1.5"
+          # The browser tests drive the pages: they are the only ones
+          # that can see what a person sees. Two bugs got past the API
+          # tests and were caught here - a confirmation box inside the
+          # card that saving hides, and a message cleared by the reload
+          # that followed the save.
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
           python -m pytest webapp_tests -q
 
       - name: The web app starts and serves its pages

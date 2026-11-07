@@ -99,9 +99,12 @@
           <span>音色样本（留空则保留原样）</span>
           <input class="input" type="file" accept="audio/*" @change="pickAudio($event)">
         </label>
-        <div class="result-box" x-show="message" x-text="message"></div>
       </div>
     </div>
   </div>
+
+  <!-- 回执在两张卡片之外：编辑卡片保存后会被藏起来（editing=false），
+       回执放里面就等于永远看不见。 -->
+  <div class="result-box" x-show="message" x-text="message"></div>
 </section>
 {% endblock %}
