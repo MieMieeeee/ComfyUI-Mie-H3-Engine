@@ -186,6 +186,14 @@ def test_a_scene_can_be_created_edited_and_deleted(page):
 
     row_named(page, "测试场景").click()
     page.wait_for_timeout(800)
+    # Managing it: the detail and its picture.
+    row_named(page, "测试场景").click()
+    page.wait_for_timeout(1000)
+    assert visible(page, ".card-head h3").first.inner_text().strip() == "测试场景"
+    assert page.locator(".preview-img").first.get_attribute("src").startswith(
+        "data:image/png")
+    assert "第一版描述" in visible(page, ".meta-list").inner_text()
+
     button(page, "✏️ 编辑").click()
     page.wait_for_timeout(400)
     fields = visible(page, ".card .field .input")
