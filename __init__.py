@@ -103,6 +103,7 @@ from .mie_nodes import (
 )
 from .webui_node import (
     MieH3StartWebUI,
+    MieH3StopWebUI,
     MieH3WebUIStatus,
 )
 
@@ -154,6 +155,7 @@ NODE_CLASS_MAPPINGS.update({
     # The web front end ships with this plugin, so it is started from
     # here - with ComfyUI's own interpreter.
     "MieH3StartWebUI": MieH3StartWebUI,
+    "MieH3StopWebUI": MieH3StopWebUI,
     "MieH3WebUIStatus": MieH3WebUIStatus,
 })
 NODE_DISPLAY_NAME_MAPPINGS.update({

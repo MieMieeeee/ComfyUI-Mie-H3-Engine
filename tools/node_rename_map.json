@@ -1,6 +1,7 @@
 {
   "H3ConditioningSyncFromLatents": "H3ConditioningSyncFromLatents|MieH3",
   "MieH3StartWebUI": "MieH3StartWebUI|MieH3",
+  "MieH3StopWebUI": "MieH3StopWebUI|MieH3",
   "MieH3WebUIStatus": "MieH3WebUIStatus|MieH3",
   "MiniMaxH3AdvancedPolicy": "MiniMaxH3AdvancedPolicy|MieH3",
   "MiniMaxH3AudioTracks": "MiniMaxH3AudioTracks|MieH3",

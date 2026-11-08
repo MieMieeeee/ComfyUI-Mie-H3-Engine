@@ -78,7 +78,69 @@ def _spawn(port: int) -> int:
             stdout=log, stderr=subprocess.STDOUT, **kwargs)
     finally:
         log.close()
+    # The pid goes next to the plugin so the stop node can find it again -
+    # the web app outlives the node that started it, and ComfyUI has no
+    # handle on it.
+    try:
+        with open(pid_file(), "w", encoding="utf-8") as handle:
+            handle.write(str(process.pid))
+    except OSError:
+        pass
     return process.pid
+
+
+def pid_file() -> str:
+    """Where the running web app's pid is recorded."""
+    return os.path.join(_PLUGIN_ROOT, "webui.pid")
+
+
+def _pid_on_port(port: int):
+    """The pid listening on a port, or None."""
+    if sys.platform == "win32":
+        try:
+            # The bytes are decoded leniently on purpose: netstat prints
+            # the service names in the system codepage, which is not
+            # necessarily UTF-8, and a decode error would leave us with
+            # no answer at all. The pid is ASCII, so a lossy decode is
+            # fine.
+            raw = subprocess.run(
+                ["netstat", "-ano", "-p", "tcp"], capture_output=True,
+                timeout=10).stdout
+        except (OSError, subprocess.SubprocessError):
+            return None
+        out = raw.decode("utf-8", "replace")
+        for line in out.splitlines():
+            if ":%d " % port in line and "LISTENING" in line:
+                parts = line.split()
+                if parts and parts[-1].isdigit():
+                    return int(parts[-1])
+        return None
+    try:
+        out = subprocess.run(["ss", "-lptn", "sport = :%d" % port],
+                             capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for token in out.split("pid="):
+        if "," in token:
+            digits = token.split(",")[0]
+            if digits.isdigit():
+                return int(digits)
+    return None
+
+
+def _terminate(pid: int) -> bool:
+    """Stop a process and everything it started."""
+    if sys.platform == "win32":
+        # Same reason as netstat: the output is in the system codepage.
+        result = subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                                capture_output=True, timeout=30)
+        return result.returncode == 0
+    import signal
+    try:
+        os.killpg(os.getpgid(pid), signal.SIGTERM)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
 
 
 class MieH3StartWebUI:
@@ -165,12 +227,88 @@ class MieH3WebUIStatus:
         return ("没在跑。跑一次「Start Short Drama Web UI」节点。", False)
 
 
+class MieH3StopWebUI:
+    """Stop the short-drama web front end.
+
+    The web app outlives the node that started it - it is its own process,
+    so ComfyUI closing does not close it. This is how you close it on
+    purpose.
+    """
+
+    CATEGORY = "MieNodes/web"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "port": ("INT", {"default": DEFAULT_PORT, "min": 1024, "max": 65535}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "BOOLEAN")
+    RETURN_NAMES = ("status", "stopped")
+    FUNCTION = "disable"
+    OUTPUT_NODE = True
+
+    def disable(self, port=DEFAULT_PORT):
+        port = int(port)
+        if not _probe(port):
+            message = "它本来就没在跑。"
+            print(message)
+            return (message, False)
+
+        # The pid file first: it is the process this plugin started, so
+        # nothing else can be caught by mistake.
+        pid = None
+        try:
+            with open(pid_file(), encoding="utf-8") as handle:
+                text = handle.read().strip()
+            if text.isdigit():
+                pid = int(text)
+        except OSError:
+            pid = None
+
+        if pid is None:
+            pid = _pid_on_port(port)
+
+        stopped = False
+        if pid is not None:
+            stopped = _terminate(pid)
+            if not stopped:
+                # The pid file can be stale (the app was killed by hand).
+                # Fall back to whoever holds the port.
+                other = _pid_on_port(port)
+                if other and other != pid:
+                    stopped = _terminate(other)
+
+        try:
+            os.remove(pid_file())
+        except OSError:
+            pass
+
+        # Give the socket a moment to come back.
+        for _ in range(20):
+            if not _probe(port):
+                break
+            time.sleep(0.25)
+
+        if not _probe(port):
+            message = "短剧工作台已停止（pid %s）。" % pid
+            print(message)
+            return (message, True)
+        message = "停不掉：端口 %d 上还有东西（pid %s）。" % (port, pid)
+        print(message)
+        return (message, False)
+
+
 NODE_CLASS_MAPPINGS = {
     "MieH3StartWebUI": MieH3StartWebUI,
+    "MieH3StopWebUI": MieH3StopWebUI,
     "MieH3WebUIStatus": MieH3WebUIStatus,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MieH3StartWebUI": _display_name("MieH3StartWebUI"),
+    "MieH3StopWebUI": _display_name("MieH3StopWebUI"),
     "MieH3WebUIStatus": _display_name("MieH3WebUIStatus"),
 }

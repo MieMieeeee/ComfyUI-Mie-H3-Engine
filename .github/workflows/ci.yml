@@ -74,6 +74,26 @@ jobs:
           python -m playwright install --with-deps chromium
           python -m pytest webapp_tests -q
 
+      - name: Boot ComfyUI and drive the nodes through it
+        shell: bash
+        run: |
+          # The live end-to-end: the node is submitted to a running
+          # ComfyUI's /prompt, the way a person would. The runner has no
+          # ComfyUI, so one is booted here on a port of its own.
+          #
+          # torchvision comes from the CPU index on purpose: the plain
+          # PyPI wheel is the CUDA build.
+          python -m pip install torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -r "$COMFYUI_PATH/requirements.txt"
+          python "$COMFYUI_PATH/main.py" --cpu --port 8190 --disable-auto-launch &
+          COMFY_PID=$!
+          for _ in $(seq 1 90); do
+            if curl -sf http://127.0.0.1:8190/system_stats >/dev/null; then break; fi
+            sleep 2
+          done
+          MIE_LIVE_COMFYUI=1 MIE_COMFYUI_URL=http://127.0.0.1:8190             python -m pytest webapp_tests/test_e2e_webui.py -q
+          kill $COMFY_PID 2>/dev/null || true
+
       - name: The web app starts and serves its pages
         shell: bash
         run: |
