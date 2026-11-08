@@ -215,11 +215,19 @@ def test_the_pages_manage_the_assets_while_the_node_holds_it_up(temp_plugin_root
     assert _wait_gone(), "the node must be able to stop the web app"
 
 
-@pytest.mark.skipif(not os.environ.get("MIE_LIVE_COMFYUI"),
-                    reason="set MIE_LIVE_COMFYUI=1 to drive a running ComfyUI")
 def test_the_nodes_work_through_comfyui(temp_plugin_root):
-    """Submit the node to a running ComfyUI, the way a person would."""
+    """Submit the node to a running ComfyUI, the way a person would.
+
+    The local ComfyUI is the point: this is the machine the plugin
+    lives on. Point MIE_COMFYUI_URL somewhere else to drive another one.
+    Skipped when there is no ComfyUI to talk to.
+    """
     comfy_url = os.environ.get("MIE_COMFYUI_URL", "http://127.0.0.1:8188")
+    try:
+        with urllib.request.urlopen(comfy_url + "/system_stats", timeout=5) as r:
+            r.read()
+    except Exception:
+        pytest.skip("no ComfyUI at %s" % comfy_url)
 
     def submit(graph):
         body = json.dumps({"prompt": graph, "client_id": "e2e"}).encode()
