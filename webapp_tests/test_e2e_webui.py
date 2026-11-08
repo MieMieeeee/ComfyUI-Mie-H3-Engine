@@ -226,8 +226,15 @@ def test_the_nodes_work_through_comfyui(temp_plugin_root):
         req = urllib.request.Request(
             comfy_url + "/prompt", data=body,
             headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=120) as response:
-            return json.loads(response.read())
+        try:
+            with urllib.request.urlopen(req, timeout=120) as response:
+                return json.loads(response.read())
+        except urllib.error.HTTPError as exc:
+            # ComfyUI answers a rejected prompt with the reason - most
+            # often "the node type is not registered".
+            raise AssertionError(
+                "ComfyUI rejected the prompt: %s" % exc.read().decode(
+                    "utf-8", "replace")[:400]) from exc
 
     def wait(prompt_id, timeout=120):
         deadline = time.time() + timeout

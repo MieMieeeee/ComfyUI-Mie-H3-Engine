@@ -85,6 +85,10 @@ jobs:
           # PyPI wheel is the CUDA build.
           python -m pip install torchvision --index-url https://download.pytorch.org/whl/cpu
           python -m pip install -r "$COMFYUI_PATH/requirements.txt"
+          # ComfyUI has to FIND the pack, or the node is not registered
+          # and the prompt is rejected with a 400.
+          mkdir -p "$COMFYUI_PATH/custom_nodes"
+          ln -s "$GITHUB_WORKSPACE" "$COMFYUI_PATH/custom_nodes/ComfyUI-Mie-H3-Engine"
           python "$COMFYUI_PATH/main.py" --cpu --port 8190 --disable-auto-launch &
           COMFY_PID=$!
           for _ in $(seq 1 90); do
