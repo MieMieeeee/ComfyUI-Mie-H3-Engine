@@ -848,3 +848,286 @@ def test_the_versions_of_a_script_are_kept(page, web):
     panel = page.locator(".version-list")
     assert "版本 3" in panel.inner_text(), panel.inner_text()
     assert "版本 2" in panel.inner_text(), panel.inner_text()
+
+
+# --------------------------------------------------------------------------- #
+# 从图片或文字起草（intake M1）：真实页面 + 拦截模型响应的替身
+# --------------------------------------------------------------------------- #
+
+def _stub_asset(name="起草结果"):
+    """The asset a stubbed generation returns."""
+    return {
+        "version": 2, "name": name, "language": "zh",
+        "roles": [{"id": "character_1", "name": "甲", "presence": "on_screen",
+                   "initially_visible": True, "position": "center",
+                   "voice": "male voice"}],
+        "camera": {"framing": "medium_shot", "movement": "locked",
+                   "perspective": "observer"},
+        "look": "", "setting": "", "constraints": "",
+        "target_duration_seconds": 20, "continuation_overlap_frames": 22,
+        "source_script": "甲：你好",
+        "shots": [{"id": "scene_01", "duration_seconds": 5, "events": [
+            {"id": "event_001", "type": "dialogue", "character": "character_1",
+             "text": "你好", "language": "zh"}]}],
+        "execution": {"look": "", "setting": "",
+                      "visible_state": "Character 1 stands at center.",
+                      "voices": {"character_1": "male voice"}, "directions": {}},
+        "audio_mode": "generated",
+    }
+
+
+def _stub_validate(page, asset):
+    def handler(route):
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"ok": True, "errors": [], "warnings": [],
+                                       "json": asset}))
+    page.route("**/api/scripts/validate", handler)
+
+
+def _stub_auto(page, asset, captured, hold=None):
+    """Stub the generation; captured collects the request bodies.
+
+    With ``hold`` (a dict) the reply is NOT sent when the request
+    arrives - the test decides when, which is how a late answer is
+    staged: the route lands in hold["route"] and is fulfilled later.
+    """
+    def handler(route):
+        captured.append(json.loads(route.request.post_data))
+        if hold is not None:
+            hold["route"] = route
+            hold["asset"] = asset
+            return
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"json": asset, "notes": []}))
+    page.route("**/api/scripts/auto", handler)
+
+
+def _stub_intake(page, replies, captured):
+    """Stub /api/scripts/intake; replies is popped one per call."""
+    def handler(route):
+        captured.append(json.loads(route.request.post_data))
+        body = replies.pop(0) if replies else {"code": "ok", "reading": {}}
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps(body))
+    page.route("**/api/scripts/intake", handler)
+
+
+def _open_intake(page):
+    page.goto(BASE + "/scripts", wait_until="networkidle")
+    button(page, "✨ AI 起草").click()
+    card = page.locator(".intake-card")
+    card.wait_for(state="visible", timeout=5000)
+    return card
+
+
+def test_a_text_draft_lands_pending_save_not_in_the_library(page):
+    asset = _stub_asset()
+    captured = []
+    _stub_validate(page, asset)
+    _stub_auto(page, asset, captured)
+    _open_intake(page)
+
+    page.locator(".intake-card .intake-material textarea").first.fill(
+        "外卖员发现客人养的猫会自己开门。")
+    button(page, "生成分镜草稿").click()
+    page.wait_for_timeout(900)
+
+    # 请求真的发出去了：mode 是 concept，素材在 concept 里。
+    assert captured and captured[0]["mode"] == "concept"
+    assert "猫会自己开门" in captured[0]["concept"]
+    # 编辑器干净：直接载入，工作台进入"待保存"状态。
+    assert page.locator(".card-head .badge").filter(
+        visible=True).first.inner_text().strip() == "未保存"
+    # 草稿只在编辑器里，库里还没有它（同批别的测试可能存过别的剧本）。
+    assert "起草结果" not in api_get("/api/scripts")["names"]
+
+
+def test_a_picture_is_read_and_the_confirmed_summary_shapes_the_concept(page):
+    asset = _stub_asset()
+    auto_calls, read_calls = [], []
+    _stub_validate(page, asset)
+    _stub_auto(page, asset, auto_calls)
+    _stub_intake(page, [{"code": "ok", "reading": {
+        "vision": "supported", "basis": "image",
+        "observed": [{"id": "obs_1", "text": "图中可见一名穿蓝外套的年轻人。"}],
+        "proposed": [{"id": "pro_1", "text": "他可能是刚搬来的租客。"}],
+        "conflicts": []}}], read_calls)
+    _open_intake(page)
+
+    page.locator(".intake-pick input[type=file]").set_input_files(
+        [{"name": "pic.png", "mimeType": "image/png",
+          "buffer": png_bytes(width=64, height=48)}])
+    page.wait_for_timeout(600)
+    button(page, "解读图片").click()
+    page.locator(".intake-reading").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(300)
+    assert read_calls and read_calls[0]["action"] == "read"
+    assert read_calls[0]["image"].startswith("data:image/")
+
+    # 理解是可改的：改第一条观察，删掉那条建议。
+    rows = page.locator(".intake-reading .intake-group").nth(0).locator("textarea")
+    rows.first.fill("图中可见一个穿蓝外套的年轻人蹲在厨房。")
+    rows.first.dispatch_event("change")
+    page.locator(".intake-reading .intake-group").nth(1).locator(
+        "button", has_text="删").first.click()
+    page.wait_for_timeout(300)
+
+    button(page, "生成分镜草稿").click()
+    page.wait_for_timeout(700)
+    concept = auto_calls[0]["concept"]
+    assert "蹲在厨房" in concept          # 改过的观察进了概念
+    assert "租客" not in concept          # 删掉的建议不再出现
+    assert "图中可见" in concept
+
+
+def test_conflicts_block_generation_until_each_is_resolved(page):
+    asset = _stub_asset()
+    auto_calls = []
+    _stub_validate(page, asset)
+    _stub_auto(page, asset, auto_calls)
+    _stub_intake(page, [{"code": "ok", "reading": {
+        "vision": "supported", "basis": "image", "observed": [], "proposed": [],
+        "conflicts": [
+            {"id": "cfl_1", "field": "人物", "image": "图中是两名女性",
+             "text": "原文写了一男一女"},
+            {"id": "cfl_2", "field": "地点", "image": "图中是厨房",
+             "text": "原文写的是天台"},
+        ]}}], [])
+    _open_intake(page)
+    page.locator(".intake-card .intake-material textarea").first.fill("一男一女在天台聊天。")
+    page.locator(".intake-pick input[type=file]").set_input_files(
+        [{"name": "pic.png", "mimeType": "image/png", "buffer": png_bytes()}])
+    page.wait_for_timeout(600)
+    button(page, "解读图片").click()
+    page.locator(".intake-conflict").first.wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(200)
+
+    # 两条都没处理：主按钮把话说清楚，且不可用。
+    primary = page.locator(".auto-actions .btn.primary")
+    assert primary.inner_text().strip() == "先处理上面的图文冲突"
+    assert primary.is_disabled()
+
+    # 处理第一条（以文字为准），还剩一条：仍然不许生成。
+    page.locator(".intake-conflict").nth(0).get_by_role(
+        "button", name="以文字为准").click()
+    page.wait_for_timeout(200)
+    assert primary.is_disabled()
+
+    page.locator(".intake-conflict").nth(1).get_by_role(
+        "button", name="以图片为准").click()
+    page.wait_for_timeout(200)
+    assert primary.inner_text().strip() == "生成分镜草稿"
+    assert not primary.is_disabled()
+
+    primary.click()
+    page.wait_for_timeout(700)
+    concept = auto_calls[0]["concept"]
+    assert "以作者文字为准" in concept
+    assert "以图片为准" in concept
+
+
+def test_needs_caption_falls_back_to_the_authors_words(page):
+    asset = _stub_asset()
+    read_calls = []
+    _stub_validate(page, asset)
+    _stub_auto(page, asset, [])
+    _stub_intake(page, [
+        {"code": "needs_caption", "reading": {"vision": "unsupported",
+                                              "observed": []}},
+        {"code": "ok", "reading": {
+            "vision": "unsupported", "basis": "caption",
+            "observed": [{"id": "obs_1", "text": "一个年轻人在厨房里。"}],
+            "proposed": [], "conflicts": []}},
+    ], read_calls)
+    _open_intake(page)
+    page.locator(".intake-card .intake-material textarea").first.fill("他发现了什么。")
+    page.locator(".intake-pick input[type=file]").set_input_files(
+        [{"name": "pic.png", "mimeType": "image/png", "buffer": png_bytes()}])
+    page.wait_for_timeout(600)
+    button(page, "解读图片").click()
+    # 看不了图 → 图注入口出现，回到素材步骤，素材都在。
+    page.locator(".intake-caption textarea").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(200)
+    assert "发现了什么" in page.locator(
+        ".intake-card .intake-material textarea").first.input_value()
+
+    page.locator(".intake-caption textarea").fill("傍晚的厨房，一个穿蓝外套的年轻人蹲着逗一只橘猫。")
+    page.locator(".intake-caption textarea").dispatch_event("input")
+    page.wait_for_timeout(200)
+    button(page, "按图注解读").click()
+    page.locator(".intake-reading").wait_for(state="visible", timeout=5000)
+    # 图注作为人工来源被说明，且进了第二次请求。
+    assert "人工来源" in page.locator(".intake-card").inner_text()
+    assert "橘猫" in read_calls[1]["manual_caption"]
+
+
+def test_a_late_generation_never_clobbers_edits_made_while_waiting(page):
+    asset = _stub_asset()
+    captured, hold = [], {}
+    _stub_validate(page, asset)
+    _stub_auto(page, asset, captured, hold=hold)
+    _write_a_script(page, "等待时改动", ["角色1：原文"])
+    # 剧本已打开在编辑器里；在同一页上拉起起草卡（不重载，编辑器保留）。
+    button(page, "✨ AI 起草").click()
+    page.locator(".intake-card").wait_for(state="visible", timeout=5000)
+    page.locator(".intake-card .intake-material textarea").first.fill("第一版素材。")
+
+    # 生成挂着不回。等待期间作者去编辑器改了那份已保存的稿子。
+    button(page, "生成分镜草稿").click()
+    page.wait_for_timeout(300)
+    page.locator(".editor-pane textarea.code").fill("角色1：等待时改的台词")
+    page.wait_for_timeout(600)
+
+    # 迟到的结果回来了：编辑器里有未保存的改动，不许直接盖进去。
+    hold["route"].fulfill(status=200, content_type="application/json",
+                          body=json.dumps({"json": hold["asset"], "notes": []}))
+    page.wait_for_timeout(600)
+    card_text = page.locator(".intake-card").inner_text()
+    assert "待载入" in card_text
+    assert "未保存的改动" in card_text
+    # 编辑器里还是作者等待时改的那句，不是迟到的草稿。
+    assert "等待时改的台词" in page.locator(
+        ".editor-pane textarea.code").input_value()
+
+
+def test_the_intake_session_comes_back_after_a_refresh(page):
+    asset = _stub_asset()
+    _stub_validate(page, asset)
+    _stub_intake(page, [{"code": "ok", "reading": {
+        "vision": "supported", "basis": "image",
+        "observed": [{"id": "obs_1", "text": "图中可见一只橘猫。"}],
+        "proposed": [], "conflicts": []}}], [])
+    _open_intake(page)
+    page.locator(".intake-card .intake-material textarea").first.fill("他和猫的故事。")
+    page.locator(".intake-pick input[type=file]").set_input_files(
+        [{"name": "pic.png", "mimeType": "image/png", "buffer": png_bytes()}])
+    page.wait_for_timeout(600)
+    button(page, "解读图片").click()
+    page.locator(".intake-reading").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(800)   # 暂存是异步的，等它落盘
+
+    page.reload(wait_until="networkidle")
+    banner = page.locator(".card", has_text="没写完的起草")
+    banner.wait_for(state="visible", timeout=5000)
+    button(page, "继续草稿").click()
+    page.locator(".intake-card").wait_for(state="visible", timeout=5000)
+    assert "他和猫的故事。" in page.locator(
+        ".intake-card .intake-material textarea").first.input_value()
+    assert page.locator(".intake-reading textarea").first.input_value() \
+        .startswith("图中可见")
+
+
+def test_the_intake_card_works_on_a_narrow_screen(page):
+    asset = _stub_asset()
+    captured = []
+    page.set_viewport_size({"width": 390, "height": 844})
+    _stub_validate(page, asset)
+    _stub_auto(page, asset, captured)
+    _open_intake(page)
+    page.locator(".intake-card .intake-material textarea").first.fill("窄屏也能起草。")
+    button(page, "生成分镜草稿").click()
+    page.wait_for_timeout(900)
+    assert captured, "the generation never went out"
+    overflow = page.evaluate(
+        "document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    assert overflow <= 1, "the page scrolls sideways on a 390px viewport"

@@ -534,3 +534,46 @@ textarea.input.code {
   padding: 3px 0;
 }
 .risk-row .risk-text { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+
+/* ------------------------------------------------------------------ */
+/* 从图片或文字起草（intake）                                          */
+/* ------------------------------------------------------------------ */
+
+/* 文件选择框本身不显示，按钮/预览才是界面；键盘焦点留在按钮上。 */
+.sr-file {
+  position: absolute; width: 1px; height: 1px;
+  clip: rect(0 0 0 0); clip-path: inset(50%); overflow: hidden;
+}
+.intake-pick { display: inline-flex; }
+
+/* 图片预览：缩略图固定一边，说明和动作在旁边；窄屏换行。 */
+.intake-preview {
+  display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;
+  padding: 8px 0;
+}
+.intake-preview img {
+  width: 132px; height: auto; max-height: 132px; object-fit: cover;
+  border-radius: 8px; border: 1px solid var(--border-subtle);
+}
+.intake-preview-meta { flex: 1 1 180px; min-width: 0; }
+.intake-preview-meta p { margin: 0 0 8px; overflow-wrap: anywhere; }
+
+/* 理解确认：每组一条列表，条目是"输入框 + 删"一行。 */
+.intake-group { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.intake-item { display: flex; gap: 6px; align-items: flex-start; }
+.intake-item textarea { flex: 1; min-width: 0; }
+.intake-item .btn { flex: none; }
+
+/* 冲突：事实两行 + 处理方式一排；选定方式高亮。 */
+.intake-conflict {
+  padding: 8px; border: 1px solid var(--border-subtle); border-radius: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.intake-conflict .filter-bar { margin: 0; }
+
+.intake-card .badge { align-self: center; }
+
+@media (max-width: 640px) {
+  .intake-preview img { width: 96px; max-height: 96px; }
+  .intake-item .btn { padding: 2px 8px; }
+}

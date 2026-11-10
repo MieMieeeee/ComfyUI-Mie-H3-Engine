@@ -47,84 +47,274 @@
         <button class="btn danger" type="button" @click="remove()"
                 x-show="selected">🗑️ 删掉这份剧本</button>
       </div>
-      <p class="muted" x-show="!model && !draftOpen && !loadError">从左侧选择一个剧本，或点「＋ 新建」「✨ AI 起草」。</p>
+      <p class="muted" x-show="!model && !draftOpen && !intakeOpen && !loadError">从左侧选择一个剧本，或点「＋ 新建」「✨ AI 起草」。</p>
 
-      <!-- AI 起草表单 -->
+      <!-- 上次没写完的起草会话：问一句，等用户决定 -->
+      <template x-if="intakeResume">
+        <div class="card">
+          <div class="card-head">
+            <h3>🕘 有一份没写完的起草</h3>
+            <div class="panel-head-actions">
+              <button class="btn primary" type="button"
+                      @click="intakeResumeFromStash()">继续草稿</button>
+              <button class="btn" type="button"
+                      @click="intakeDropStash()">清空草稿</button>
+            </div>
+          </div>
+          <p class="muted small" style="margin: 0"
+             x-text="'暂存于 ' + new Date(intakeResume.updated_at || 0).toLocaleString()
+                     + '；文字：' + (intakeResume.text || '（无文字）').slice(0, 60)
+                     + (intakeResume.reading ? '；已有一份图片理解' : '')"></p>
+        </div>
+      </template>
+
+      <!-- AI 修订表单（以当前剧本为底稿；起草走下面那张 intake 卡片） -->
       <template x-if="draftOpen">
         <div class="card">
           <div class="card-head">
-            <h3 x-text="draftForm.mode === 'revise' ? '✨ 修订当前剧本' : '✨ 从点子新建'"></h3>
-            <div class="filter-bar">
-              <button class="pill" type="button" :class="{ active: draftForm.mode === 'concept' }"
-                      @click="startDraft('concept')">从点子新建</button>
-              <button class="pill" type="button" :class="{ active: draftForm.mode === 'revise' }"
-                      x-show="model"
-                      @click="startDraft('revise')">修订当前剧本</button>
-            </div>
+            <h3>✨ 修订当前剧本</h3>
           </div>
 
           <label class="field">
-            <span x-text="draftForm.mode === 'revise'
-              ? '修改要求（写这一版要改什么，未提及的部分保持不变）'
-              : '点子（一段话、一个故事、几句台词草稿都行）'"></span>
+            <span>修改要求（写这一版要改什么，未提及的部分保持不变）</span>
             <textarea class="input" rows="4" x-model="draftForm.concept"
-                      :placeholder="draftForm.mode === 'revise'
-                        ? '例如：结尾改成她笑而不语，其余不动。'
-                        : '例如：外卖员发现客人养的猫会自己开门，两人成了朋友。'"></textarea>
+                      placeholder="例如：结尾改成她笑而不语，其余不动。"></textarea>
           </label>
           <div class="field-row">
             <label class="field">
               <span>名字</span>
               <input class="input" x-model="draftForm.name">
             </label>
-            <template x-if="draftForm.mode === 'concept'">
-              <label class="field">
-                <span>段数（希望切成几镜）</span>
-                <input class="input" type="number" min="1" max="20"
-                       x-model.number="draftForm.shot_count">
-              </label>
-            </template>
           </div>
-          <template x-if="draftForm.mode === 'concept'">
-            <div>
-              <div class="field-row">
-                <label class="field">
-                  <span>语言</span>
-                  <select class="input" x-model="draftForm.language">
-                    <option value="zh">中文 zh</option>
-                    <option value="en">English en</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>目标时长（秒）</span>
-                  <input class="input" type="number" min="1" max="600" step="0.1"
-                         x-model.number="draftForm.target_duration_seconds">
-                </label>
-                <label class="field">
-                  <span>配音模式</span>
-                  <select class="input" x-model="draftForm.audio_mode">
-                    <option value="generated">生成 generated</option>
-                    <option value="reference">参考 reference</option>
-                  </select>
-                </label>
-              </div>
-              <label class="field">
-                <span>角色提示（可选，非绑定偏好，如「角色1：旁白 | 画外 | 无」）</span>
-                <input class="input" x-model="draftForm.character_settings">
-              </label>
-            </div>
-          </template>
-          <label class="inline-check">
-            <input type="checkbox" x-model="draftForm.critic">
-            生成后让 LLM 复核连续性（多一次调用）
-          </label>
 
           <div class="auto-actions">
             <button class="btn primary" type="button" :disabled="drafting"
                     @click="runDraft()"
-                    x-text="drafting ? '生成中…（可能要一两分钟）' : '✨ 生成草稿'"></button>
+                    x-text="drafting ? '生成中…（可能要一两分钟）' : '✨ 生成修订'"></button>
             <button class="btn" type="button" :disabled="drafting"
                     @click="draftOpen = false">取消</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- 从图片或文字起草（intake 计划的主入口） -->
+      <template x-if="intakeOpen">
+        <div class="card intake-card">
+          <div class="card-head">
+            <h3>✨ 从图片或文字起草</h3>
+            <div class="panel-head-actions">
+              <span class="badge" x-text="intakeStepLabel"></span>
+              <button class="btn" type="button"
+                      :disabled="intake.readBusy || intake.genBusy"
+                      @click="closeIntake()">收起</button>
+            </div>
+          </div>
+
+          <!-- 素材：文字 + 可选图片。reading 忙碌时原样保留。 -->
+          <div class="intake-material"
+               x-show="intake.step === 'material' || intake.step === 'reading'">
+            <label class="field">
+              <span>文字（一段点子、一个故事或几句台词草稿都行）</span>
+              <textarea class="input" rows="4" x-model="intake.text"
+                        @input="intakeTouch()"
+                        placeholder="例如：外卖员发现客人养的猫会自己开门，两人成了朋友。"></textarea>
+            </label>
+
+            <p class="muted small" style="margin: 2px 0 8px">
+              文字规则：允许改编 —— AI 可调整情节和台词。
+            </p>
+
+            <div class="intake-image">
+              <template x-if="!intake.image">
+                <label class="btn intake-pick">
+                  ＋ 放一张图（可选）
+                  <input type="file" accept="image/jpeg,image/png,image/webp"
+                         class="sr-file" @change="intakePickImage($event)">
+                </label>
+              </template>
+              <template x-if="intake.image">
+                <div class="intake-preview">
+                  <img :src="intake.imageDataUrl" alt="已选的素材图片">
+                  <div class="intake-preview-meta">
+                    <p class="small" x-text="intake.image.name"></p>
+                    <div class="job-actions">
+                      <label class="btn">
+                        替换
+                        <input type="file" accept="image/jpeg,image/png,image/webp"
+                               class="sr-file" @change="intakePickImage($event)">
+                      </label>
+                      <button class="btn" type="button"
+                              @click="intakeRemoveImage()">删除</button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <p class="muted small">图片用于理解故事。视频参考图可在后续单独设置。</p>
+              <p class="err small" x-show="intake.imageError"
+                 x-text="intake.imageError"></p>
+              <p class="muted small" x-show="intake.imageBusy">正在处理图片…</p>
+            </div>
+
+            <!-- 平台看不了图时的降级：作者的话就是图的内容 -->
+            <div class="intake-caption" x-show="intake.needsCaption || intake.hasCaption">
+              <label class="field">
+                <span>图注（这个平台看不了图；用你的话写图里有什么，生成按图注理解）</span>
+                <textarea class="input" rows="2" x-model="intake.caption"
+                          @input="intakeCaptionInput()"
+                          placeholder="例如：傍晚的厨房，一个穿蓝外套的年轻人蹲着逗一只橘猫。"></textarea>
+              </label>
+              <p class="muted small" x-show="intake.reading && intake.reading.basis === 'caption'">
+                当前理解根据你提供的图注（人工来源）。
+              </p>
+            </div>
+          </div>
+
+          <p class="muted small" x-show="intake.step === 'reading'">
+            正在理解素材…（可以取消等待；取消后服务器的调用可能已经产生费用）
+          </p>
+
+          <!-- 理解确认：改过即确认。candidate 生成期间也保持可见。 -->
+          <template x-if="intake.reading && ['understanding', 'generating', 'candidate'].includes(intake.step)">
+            <div class="intake-reading">
+              <h4 class="editor-sub">图片理解（检查并修改；改过的就是你的确认稿）</h4>
+              <p class="muted small" x-show="intake.reading.basis === 'caption'">
+                当前理解根据你提供的图注（人工来源）。
+              </p>
+
+              <div class="intake-group">
+                <span class="small"><strong>图中可见</strong>（只描述看得到的事实）</span>
+                <template x-for="(item, index) in intake.reading.observed" :key="item.id">
+                  <div class="intake-item">
+                    <textarea class="input" rows="1" x-model="item.text"
+                              @change="intakeTouch()"
+                              :aria-label="'图中可见 第' + (index + 1) + '条'"></textarea>
+                    <button class="btn" type="button"
+                            @click="intakeRemoveItem('observed', item.id)"
+                            :aria-label="'删除图中可见 第' + (index + 1) + '条'">删</button>
+                  </div>
+                </template>
+                <button class="btn" type="button" @click="intakeAddItem('observed')">＋ 加一条</button>
+              </div>
+
+              <div class="intake-group">
+                <span class="small"><strong>创作建议</strong>（模型的猜想，可改可删）</span>
+                <template x-for="(item, index) in intake.reading.proposed" :key="item.id">
+                  <div class="intake-item">
+                    <textarea class="input" rows="1" x-model="item.text"
+                              @change="intakeTouch()"
+                              :aria-label="'创作建议 第' + (index + 1) + '条'"></textarea>
+                    <button class="btn" type="button"
+                            @click="intakeRemoveItem('proposed', item.id)"
+                            :aria-label="'删除创作建议 第' + (index + 1) + '条'">删</button>
+                  </div>
+                </template>
+                <button class="btn" type="button" @click="intakeAddItem('proposed')">＋ 加一条</button>
+              </div>
+
+              <div class="intake-group" x-show="intake.reading.conflicts.length">
+                <span class="small"><strong>图文冲突</strong>（每条都要处理，才能生成）</span>
+                <template x-for="conflict in intake.reading.conflicts" :key="conflict.id">
+                  <div class="intake-conflict">
+                    <p class="small" style="margin: 4px 0">
+                      <strong x-text="conflict.field || '未命名'"></strong>
+                      —— 图：<span x-text="conflict.image"></span>
+                       ／ 文：<span x-text="conflict.text"></span>
+                    </p>
+                    <div class="filter-bar">
+                      <button class="pill" type="button"
+                              :class="{ active: conflict.resolution === 'text' }"
+                              @click="intakeResolveConflict(conflict, 'text')">以文字为准</button>
+                      <button class="pill" type="button"
+                              :class="{ active: conflict.resolution === 'image' }"
+                              @click="intakeResolveConflict(conflict, 'image')">以图片为准</button>
+                      <button class="pill" type="button"
+                              :class="{ active: conflict.resolution === 'manual' }"
+                              @click="intakeResolveConflict(conflict, 'manual')">手动改写</button>
+                    </div>
+                    <textarea class="input" rows="1" x-model="conflict.override"
+                              x-show="conflict.resolution === 'manual'"
+                              @change="intakeTouch()"
+                              placeholder="写下按哪个说法来讲这个故事"></textarea>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+
+          <!-- 生成参数：material 和 understanding 阶段可改 -->
+          <div class="intake-form"
+               x-show="intake.step === 'material' || intake.step === 'understanding'">
+            <div class="field-row">
+              <label class="field">
+                <span>名字</span>
+                <input class="input" x-model="intake.form.name"
+                       @change="intakeTouch()">
+              </label>
+              <label class="field">
+                <span>段数（希望切成几镜）</span>
+                <input class="input" type="number" min="1" max="20"
+                       x-model.number="intake.form.shot_count" @change="intakeTouch()">
+              </label>
+              <label class="field">
+                <span>语言</span>
+                <select class="input" x-model="intake.form.language" @change="intakeTouch()">
+                  <option value="zh">中文 zh</option>
+                  <option value="en">English en</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>目标时长（秒）</span>
+                <input class="input" type="number" min="1" max="600" step="0.1"
+                       x-model.number="intake.form.target_duration_seconds"
+                       @change="intakeTouch()">
+              </label>
+              <label class="field">
+                <span>配音模式</span>
+                <select class="input" x-model="intake.form.audio_mode" @change="intakeTouch()">
+                  <option value="generated">生成 generated</option>
+                  <option value="reference">参考 reference</option>
+                </select>
+              </label>
+            </div>
+            <label class="inline-check">
+              <input type="checkbox" x-model="intake.form.critic" @change="intakeTouch()">
+              生成后让 LLM 复核连续性（多一次调用）
+            </label>
+          </div>
+
+          <p class="err" x-show="intake.readError" x-text="intake.readError"></p>
+          <p class="err" x-show="intake.genError" x-text="intake.genError"></p>
+          <p class="muted small" x-show="intake.stashFailed">
+            ⚠ 本次内容尚未暂存（浏览器存储不可用）：页面别关，刷新会丢。
+          </p>
+          <p class="muted small" x-show="intake.step === 'generating'">
+            正在生成分镜草稿…已等待 <span x-text="intake.waited"></span> 秒。
+            可以取消等待；取消后服务器的调用可能已经产生费用。
+          </p>
+
+          <!-- 候选结果：先看清楚，再决定要不要盖进编辑器 -->
+          <template x-if="intake.step === 'candidate' && intake.candidate">
+            <div class="intake-candidate">
+              <h4 class="editor-sub">草稿已生成 <span class="badge warn">待保存</span></h4>
+              <p class="small muted" style="margin: 4px 0"
+                 x-text="'共 ' + (intake.candidate.json.shots || []).length + ' 镜；载入编辑器检查后按「💾 保存」入库。'"></p>
+              <p class="small" x-show="(intake.candidate.notes || []).length"
+                 x-text="'备注：' + intake.candidate.notes.join('；')"></p>
+              <p class="muted small"
+                 x-show="isDirty || intake.candidate.revision !== intake.revision">
+                编辑器里有未保存的改动，或生成之后素材又改过：载入会以这份草稿为准。
+              </p>
+            </div>
+          </template>
+
+          <div class="auto-actions">
+            <button class="btn primary" type="button"
+                    :disabled="intakePrimary.disabled"
+                    @click="intakePrimary.run()"
+                    x-text="intakePrimary.label"></button>
+            <button class="btn" type="button" x-show="intakeSecondary"
+                    @click="intakeSecondary && intakeSecondary.run()"
+                    x-text="intakeSecondary ? intakeSecondary.label : ''"></button>
           </div>
         </div>
       </template>

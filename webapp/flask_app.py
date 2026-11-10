@@ -22,7 +22,7 @@ import pathlib
 from flask import Flask, abort, jsonify, render_template, request, send_from_directory
 
 from webapp import config
-from webapp.services import (autodraft, comfy, history, library, llm,
+from webapp.services import (autodraft, comfy, history, intake, library, llm,
                              riskfix, runname, runner, theme, versions)
 
 
@@ -471,6 +471,55 @@ def create_app() -> Flask:
             return jsonify(runner.plan_preview(name, role_assets))
         except (FileNotFoundError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/scripts/intake", methods=["POST"])
+    def api_intake():
+        """Read the materials the author brought - text, picture or both.
+
+        The first step of the intake plan: understand before generating.
+        This route never writes anything; the reading (what is visible,
+        what the model guesses, where picture and text contradict) comes
+        back as draft data the page lets the author confirm or edit.
+
+        Every answer carries the request_id and revision back, so a late
+        answer that belongs to an older revision of the page's materials
+        can be told apart and dropped by the caller.
+        """
+        raw_body = request.get_data(cache=True)
+        if len(raw_body) > intake.MAX_BODY_BYTES:
+            return jsonify({"code": "too_large",
+                            "error": "请求体超过 %d MB 上限" %
+                                     (intake.MAX_BODY_BYTES // (1024 * 1024)),
+                            "request_id": "", "revision": None}), 413
+        data = request.get_json(silent=True) or {}
+        request_id = str(data.get("request_id") or "")
+        revision = data.get("revision")
+        if not request_id or type(revision) is not int or revision < 0:
+            return jsonify({"code": "bad_request",
+                            "error": "request_id 和 revision（非负整数）都要带，"
+                                     "用于丢掉迟到的响应",
+                            "request_id": request_id, "revision": revision}), 400
+        action = str(data.get("action") or "")
+        if action != "read":
+            return jsonify({"code": "bad_request",
+                            "error": "action 只能是 read（收到 %r）" % action,
+                            "request_id": request_id,
+                            "revision": revision}), 400
+        try:
+            result = intake.read_materials(
+                str(data.get("text") or ""),
+                (data.get("image") or "") or None,
+                str(data.get("manual_caption") or ""))
+        except intake.IntakeError as exc:
+            return jsonify({"code": exc.code, "error": str(exc),
+                            "request_id": request_id,
+                            "revision": revision}), exc.status
+        except Exception as exc:  # noqa: BLE001 - the provider's error is the answer
+            return jsonify({"code": "provider",
+                            "error": "%s: %s" % (type(exc).__name__, exc),
+                            "request_id": request_id,
+                            "revision": revision}), 400
+        return jsonify(dict(result, request_id=request_id, revision=revision))
 
     @app.route("/api/scripts/auto", methods=["POST"])
     def api_autodraft_script():

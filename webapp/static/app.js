@@ -38,6 +38,64 @@ const api = {
 };
 
 /* ------------------------------------------------------------------ */
+/* 浏览器暂存的小仓库：图片 Blob 住 IndexedDB（localStorage 装不下它）  */
+/* ------------------------------------------------------------------ */
+
+const INTAKE_DB = "mie-intake";
+const INTAKE_STORE = "images";
+
+function intakeDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(INTAKE_DB, 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(INTAKE_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB 打不开"));
+  });
+}
+
+async function idbPut(key, blob) {
+  const db = await intakeDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(INTAKE_STORE, "readwrite");
+    tx.objectStore(INTAKE_STORE).put(blob, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("IndexedDB 写不进"));
+    tx.onabort = () => reject(tx.error || new Error("IndexedDB 写入被中止"));
+  });
+}
+
+async function idbGet(key) {
+  const db = await intakeDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(INTAKE_STORE, "readonly");
+    const request = tx.objectStore(INTAKE_STORE).get(key);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB 读不了"));
+  });
+}
+
+async function idbDel(key) {
+  const db = await intakeDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(INTAKE_STORE, "readwrite");
+    tx.objectStore(INTAKE_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("IndexedDB 删不了"));
+  });
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("读取图片失败"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* 外壳                                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -622,6 +680,8 @@ function scriptsPage() {
       if (wanted && (this.items || []).some((item) => item.name === wanted)) {
         await this.open(wanted);
       }
+      // 上次没写完的起草会话还暂存着的话，问一句要不要继续。
+      await this.intakeLoadStash();
       window.addEventListener("beforeunload", (event) => {
         if (!this.isDirty) return;
         event.preventDefault();
@@ -658,6 +718,15 @@ function scriptsPage() {
     markSaved() {
       this.setBaseline();
       this.clearDraft();
+      // 起草会话的草稿存进库了（转正）：会话和浏览器暂存一起收摊。
+      if (this.intakeLoaded) {
+        this.intakeLoaded = false;
+        this.intake = null;
+        this.intakeOpen = false;
+        this.intakeResumed = true;
+        this.intakeResume = null;
+        this.intakeClearStash();
+      }
     },
 
     /* 中文源文本的指纹：英文镜像描述的就是它。 */
@@ -1268,20 +1337,14 @@ function scriptsPage() {
     /* ---------------------------------------------------------------- */
 
     startDraft(mode) {
+      if (mode !== "revise") { this.openIntake(); return; }
       this.errors = []; this.warnings = []; this.okMessage = "";
       this.warnOpen = false;
       this.draftNotes = [];
-      this.draftForm.mode = mode === "revise" ? "revise" : "concept";
-      if (this.draftForm.mode === "revise" && this.model) {
+      this.draftForm.mode = "revise";
+      if (this.model) {
         // 修订只允许改名字和改动意见：接线事实（配音/重叠/结构）由底稿继承。
         this.draftForm.name = this.model.name || "新剧本";
-      } else {
-        this.draftForm.mode = "concept";
-        this.draftForm.name = "新剧本";
-        this.draftForm.shot_count = 2;
-        this.draftForm.language = "zh";
-        this.draftForm.target_duration_seconds = 20;
-        this.draftForm.audio_mode = "generated";
       }
       this.draftForm.concept = "";
       this.draftOpen = true;
@@ -1313,19 +1376,10 @@ function scriptsPage() {
         // 契约不收空串，修订会直接被拒。
         if (this.draftForm.mode === "revise") body.base_asset = this.buildPayload();
         const result = await api.post("/api/scripts/auto", body);
-        this.model = normalizeStoryboardModel(result.json);
-        this.cleaned = result.json;
-        this.draftNotes = result.notes || [];
-        this.jsonDirty = false;
-        this.rawText = "";
-        this.selected = ""; /* 还没入库：保存后才有名字 */
         this.draftOpen = false;
         this.tab = "edit";
-        this.okMessage = "草稿已生成：检查、修改后按「💾 保存」入库。";
-        // 这一版是怎么来的：存的时候写进版本历史里。
-        this.changeNote = this.draftForm.mode === "revise" ? "AI 修订" : "AI 起草";
-        this.syncDerived();
-        this.queueValidate();
+        this.applyDraftResult(result.json, result.notes,
+                              this.draftForm.mode === "revise" ? "AI 修订" : "AI 起草");
       } catch (error) {
         this.errors = [error.message];
       } finally {
@@ -1334,8 +1388,523 @@ function scriptsPage() {
     },
 
     /* ---------------------------------------------------------------- */
+    /* 从图片或文字起草（intake）：素材 → 读图 → 确认理解 → 草稿          */
+    /* ---------------------------------------------------------------- */
+
+    /* 会话的三条铁律（计划 §5）：
+       1. 内容一变 revision 就 +1，响应只认发起时的那版；
+       2. 迟到的响应不许覆盖现在的工作（requestSeq 只认最新）；
+       3. 草稿只在浏览器里暂存，正式资产要用户点保存。 */
+    intakeOpen: false,
+    intake: null,
+    intakeResume: null,      /* 暂存里找到的上次会话，等人决定 */
+    intakeResumed: false,    /* 已恢复/已放弃，别再问 */
+    intakeLoaded: false,     /* 载入过 intake 草稿：保存转正后收摊 */
+
+    openIntake() {
+      this.errors = []; this.okMessage = "";
+      if (!this.intake) {
+        this.intake = {
+          step: "material",     /* material|reading|understanding|generating|candidate */
+          revision: 1,
+          requestSeq: 0,
+          text: "", textPolicy: "adapt", policyChosen: false,
+          image: null, imageDataUrl: "", imageBusy: false, imageError: "",
+          caption: "", hasCaption: false, needsCaption: false,
+          reading: null, readBusy: false, readError: "",
+          form: { name: "新剧本", shot_count: 2, language: "zh",
+                  target_duration_seconds: 20, audio_mode: "generated",
+                  critic: true },
+          genBusy: false, genError: "", waited: 0, timer: null,
+          candidate: null,      /* {json, notes, revision, forScript} */
+          stashFailed: false,
+        };
+      }
+      this.intakeOpen = true;
+    },
+
+    closeIntake() {
+      // 会话留在内存里，暂存也留着：关上不等于放弃，随时可以再打开。
+      if (this.intake && this.intake.genBusy) this.intakeCancelRunning();
+      this.intakeOpen = false;
+    },
+
+    /* 每次素材、理解或参数变化都调用：修订号 +1，旧响应从此作废。 */
+    intakeTouch() {
+      if (!this.intake) return;
+      this.intake.revision += 1;
+      this.intake.candidate = null;   /* 旧候选描述的是旧内容 */
+      this.intakeStash();
+    },
+
+    /* 主按钮只有一个：它是什么、点了做什么，都由当前步骤决定。 */
+    get intakePrimary() {
+      const s = this.intake;
+      if (!s) return { label: "生成分镜草稿", run: () => {}, disabled: true };
+      if (s.step === "reading" || s.step === "generating") {
+        return { label: "取消等待", run: () => this.intakeCancelRunning(),
+                 disabled: false };
+      }
+      if (s.step === "understanding") {
+        const blocked = this.intakeUnresolvedConflicts > 0;
+        return { label: blocked ? "先处理上面的图文冲突" : "生成分镜草稿",
+                 run: () => this.intakeGenerate(),
+                 disabled: blocked || s.genBusy };
+      }
+      if (s.step === "candidate") {
+        return { label: "载入编辑器", run: () => this.intakeLoadCandidate(),
+                 disabled: false };
+      }
+      // material：有图先解读，纯文字直接生成。
+      if (s.needsCaption) {
+        // 平台看不了图：图注写好就按图注解读；不写图注也可以只按文字生成。
+        return s.caption.trim()
+          ? { label: "按图注解读", run: () => this.intakeRead(), disabled: false }
+          : { label: "生成分镜草稿", run: () => this.intakeGenerate(),
+              disabled: !s.text.trim() };
+      }
+      if (s.image) {
+        return { label: "解读图片", run: () => this.intakeRead(), disabled: false };
+      }
+      return { label: "生成分镜草稿", run: () => this.intakeGenerate(),
+               disabled: !s.text.trim() };
+    },
+
+    get intakeSecondary() {
+      const s = this.intake;
+      if (!s) return null;
+      if (s.step === "material" && !s.image && s.text.trim()) {
+        return { label: "先看看 AI 的理解", run: () => this.intakeRead() };
+      }
+      if (s.step === "understanding") {
+        return { label: "返回修改素材", run: () => {
+          s.step = "material"; this.intakeTouch();
+        } };
+      }
+      if (s.step === "candidate") {
+        return { label: "再生成一版", run: () => this.intakeGenerate() };
+      }
+      return null;
+    },
+
+    get intakeUnresolvedConflicts() {
+      const conflicts = this.intake && this.intake.reading
+        ? this.intake.reading.conflicts || [] : [];
+      return conflicts.filter((c) => !c.resolution).length;
+    },
+
+    get intakeStepLabel() {
+      const s = this.intake;
+      if (!s) return "";
+      return {
+        material: "第 1 步 · 素材",
+        reading: "正在理解素材",
+        understanding: "第 2 步 · 确认理解",
+        generating: "正在生成草稿",
+        candidate: "草稿待载入",
+      }[s.step] || s.step;
+    },
+
+    intakeCaptionInput() {
+      const s = this.intake;
+      if (s && s.caption.trim()) s.hasCaption = true;
+      this.intakeTouch();
+    },
+
+    /* ---------------- 图片：浏览器先归一化，服务端再验一次 ------------- */
+
+    async intakePickImage(event) {
+      const s = this.intake;
+      const file = (event.target.files || [])[0];
+      event.target.value = "";       // 同一张图重选也能触发 change
+      if (!file || !s) return;
+      s.imageError = "";
+      s.imageBusy = true;
+      try {
+        const normalized = await this.normalizeImageFile(file);
+        // 换图 = 换素材：旧解读全部作废（计划 §4.2）。
+        s.imageBlob = normalized.blob;
+        s.image = { name: file.name, width: normalized.width,
+                    height: normalized.height, bytes: normalized.bytes,
+                    key: "intake-image" };
+        s.imageDataUrl = normalized.dataUrl;
+        s.reading = null; s.needsCaption = false;
+        // 图注跟旧图走；新图还没人描述过。
+        s.caption = ""; s.hasCaption = false;
+        this.intakeTouch();
+      } catch (error) {
+        s.imageError = error.message;
+      } finally {
+        s.imageBusy = false;
+      }
+    },
+
+    async normalizeImageFile(file) {
+      const okTypes = ["image/jpeg", "image/png", "image/webp"];
+      if (!okTypes.includes(file.type)) {
+        throw new Error("只接受 JPEG、PNG 或 WebP 图片；SVG 和动图请重新选择一张静态图");
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error("这张原图有 " + (file.size / 1048576).toFixed(1)
+          + " MB，超过 10 MB 上限：换一张小一点的");
+      }
+      let bitmap;
+      try {
+        // from-image：按 EXIF 把方向摆正，再谈尺寸。
+        bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      } catch {
+        throw new Error("这张图打不开（解码失败），请重新选择");
+      }
+      const maxEdge = 2048;
+      const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
+      bitmap.close();
+      let blob = null;
+      for (let quality = 0.9; quality >= 0.45; quality -= 0.15) {
+        blob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", quality));
+        if (blob && blob.size <= 4 * 1024 * 1024) break;
+      }
+      if (!blob) throw new Error("图片压缩失败，请重试");
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("读取图片失败"));
+        reader.readAsDataURL(blob);
+      });
+      return { blob, dataUrl, width, height, bytes: blob.size };
+    },
+
+    intakeRemoveImage() {
+      const s = this.intake;
+      if (!s) return;
+      s.image = null; s.imageDataUrl = ""; s.imageError = "";
+      s.reading = null; s.needsCaption = false;
+      s.caption = ""; s.hasCaption = false;
+      s.step = "material";
+      this.intakeTouch();
+    },
+
+    /* ---------------- 读素材：文字、图片或图文 ------------------------- */
+
+    async intakeRead() {
+      const s = this.intake;
+      if (!s || s.readBusy) return;
+      if (!s.text.trim() && !s.image) {
+        s.readError = "至少给一项素材：写一段文字，或放一张图。";
+        return;
+      }
+      s.readError = "";
+      s.step = "reading";
+      s.readBusy = true;
+      const seq = ++s.requestSeq;
+      const revision = s.revision;
+      try {
+        const body = {
+          request_id: "req-" + seq + "-" + Date.now(),
+          revision, action: "read",
+          text: s.text, manual_caption: s.caption,
+        };
+        if (s.image) body.image = s.imageDataUrl;
+        const { status, data } = await this.intakePost("/api/scripts/intake", body);
+        if (seq !== s.requestSeq) return;      // 迟到了：现在的工作优先
+        if (status !== 200) {
+          s.step = "material";                  // 失败回到发起步骤，素材全在
+          s.readError = data.error || "读素材失败了";
+          return;
+        }
+        if (data.code === "needs_caption") {
+          s.needsCaption = true;
+          s.reading = null;
+          s.step = "material";
+          return;
+        }
+        const reading = data.reading || {};
+        s.reading = {
+          vision: reading.vision || "", basis: reading.basis || "",
+          observed: (reading.observed || []).map((o) => ({ id: o.id, text: o.text })),
+          proposed: (reading.proposed || []).map((p) => ({ id: p.id, text: p.text })),
+          conflicts: (reading.conflicts || []).map((c, n) => ({
+            id: c.id || "cfl_" + (n + 1), field: c.field || "",
+            image: c.image || "", text: c.text || "",
+            resolution: "", override: "",
+          })),
+        };
+        s.needsCaption = false;
+        s.step = "understanding";
+        this.intakeStash();
+      } catch (error) {
+        if (seq !== s.requestSeq) return;
+        s.step = "material";
+        s.readError = error.message;
+      } finally {
+        s.readBusy = false;
+      }
+    },
+
+    intakeAddItem(group) {
+      const s = this.intake;
+      if (!s || !s.reading) return;
+      const items = s.reading[group];
+      const prefix = group === "observed" ? "obs_" : "pro_";
+      items.push({ id: prefix + (items.length + 1) + "_" + Date.now() % 1000,
+                   text: "" });
+    },
+
+    intakeRemoveItem(group, id) {
+      const s = this.intake;
+      if (!s || !s.reading) return;
+      s.reading[group] = s.reading[group].filter((item) => item.id !== id);
+      this.intakeTouch();
+    },
+
+    intakeResolveConflict(conflict, how) {
+      conflict.resolution = how;
+      if (how !== "manual") conflict.override = "";
+      this.intakeTouch();
+    },
+
+    intakeCancelRunning() {
+      const s = this.intake;
+      if (!s) return;
+      // 序号一加，在途响应回来也不认账。服务端的调用可能已经花了钱，
+      // 但结果不许再碰当前页面（计划 §5）。
+      s.requestSeq += 1;
+      if (s.step === "reading") { s.step = "material"; s.readBusy = false; }
+      if (s.step === "generating") {
+        s.step = s.reading ? "understanding" : "material";
+        s.genBusy = false;
+        if (s.timer) { clearInterval(s.timer); s.timer = null; }
+      }
+    },
+
+    /* ---------------- 生成：把确认过的理解组织成 concept --------------- */
+
+    intakeConcept() {
+      const s = this.intake;
+      const parts = [];
+      if (s.text.trim()) parts.push(s.text.trim());
+      const reading = s.reading;
+      const lines = [];
+      if (reading) {
+        if (reading.basis === "caption" && s.caption.trim()) {
+          lines.push("（图片内容由作者提供图注，人工来源）");
+          lines.push(s.caption.trim());
+        } else {
+          const observed = reading.observed
+            .map((o) => o.text.trim()).filter(Boolean);
+          const proposed = reading.proposed
+            .map((p) => p.text.trim()).filter(Boolean);
+          if (observed.length || proposed.length) lines.push("（配图信息，帮助理解故事）");
+          observed.forEach((t) => lines.push("- " + t));
+          proposed.forEach((t) => lines.push("- 剧情建议：" + t));
+        }
+      }
+      (reading ? reading.conflicts : []).forEach((c) => {
+        if (c.resolution === "text") {
+          lines.push("- 图文冲突（以作者文字为准）：图中" + c.image
+            + "；原文" + c.text);
+        } else if (c.resolution === "image") {
+          lines.push("- 图文冲突（以图片为准）：" + c.image);
+        } else if (c.resolution === "manual" && c.override.trim()) {
+          lines.push("- 图文冲突（作者裁定）：" + c.override.trim());
+        }
+      });
+      if (lines.length) parts.push(lines.join("\n"));
+      return parts.join("\n\n") || s.text.trim();
+    },
+
+    async intakeGenerate() {
+      const s = this.intake;
+      if (!s || s.genBusy) return;
+      const concept = this.intakeConcept();
+      if (!concept.trim()) {
+        s.genError = "素材是空的：写一段文字，或放一张图并解读。";
+        return;
+      }
+      s.genError = "";
+      s.step = "generating";
+      s.genBusy = true;
+      s.waited = 0;
+      if (s.timer) clearInterval(s.timer);
+      s.timer = setInterval(() => { s.waited += 1; }, 1000);
+      const seq = ++s.requestSeq;
+      const revision = s.revision;
+      const forScript = this.selected;
+      try {
+        const { status, data } = await this.intakePost("/api/scripts/auto", {
+          mode: "concept", concept,
+          name: s.form.name || "新剧本",
+          shot_count: Number(s.form.shot_count) || 2,
+          language: s.form.language,
+          target_duration_seconds: Number(s.form.target_duration_seconds) || 20,
+          audio_mode: s.form.audio_mode,
+          critic: s.form.critic ? "on" : "off",
+        });
+        if (seq !== s.requestSeq) return;
+        if (status !== 200) {
+          s.step = s.reading ? "understanding" : "material";
+          s.genError = data.error || "生成失败了";
+          return;
+        }
+        s.candidate = { json: data.json, notes: data.notes || [],
+                        revision, forScript };
+        s.step = "candidate";
+        this.intakeStash();
+        // 编辑器干净、内容也没再动过：直接载入，少点一次。
+        if (!this.isDirty && revision === s.revision) this.intakeLoadCandidate();
+      } catch (error) {
+        if (seq !== s.requestSeq) return;
+        s.step = s.reading ? "understanding" : "material";
+        s.genError = error.message;
+      } finally {
+        s.genBusy = false;
+        if (s.timer) { clearInterval(s.timer); s.timer = null; }
+      }
+    },
+
+    intakeLoadCandidate() {
+      const s = this.intake;
+      if (!s || !s.candidate) return;
+      // 编辑器里有别人的东西（或生成期间切走了剧本）：要用户点头才覆盖。
+      const sameScript = s.candidate.forScript === this.selected;
+      if ((this.isDirty || !sameScript) && !this.confirmDiscard("载入新草稿")) {
+        return;
+      }
+      this.applyDraftResult(s.candidate.json, s.candidate.notes, "从图片或文字起草");
+      this.intakeLoaded = true;
+      s.candidate = null;
+      s.step = s.reading ? "understanding" : "material";
+      this.intakeOpen = false;
+    },
+
+    applyDraftResult(json, notes, changeNote) {
+      this.model = normalizeStoryboardModel(json);
+      this.cleaned = json;
+      this.draftNotes = notes || [];
+      this.jsonDirty = false;
+      this.rawText = "";
+      this.selected = ""; /* 还没入库：保存后才有名字 */
+      this.changeNote = changeNote;
+      this.syncDerived();
+      this.queueValidate();
+      this.okMessage = "草稿已生成：检查、修改后按「💾 保存」入库。";
+    },
+
+    /* intake 响应要带 code，不能走 api.post（它只留 error 文本）。 */
+    async intakePost(url, body) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(body || {}),
+      });
+      const data = await response.json().catch(() => ({}));
+      return { status: response.status, data };
+    },
+
+    /* ---------------- 浏览器暂存：文字在 localStorage，图在 IndexedDB -- */
+
+    get intakeStashKey() { return "storyboard-intake:v1"; },
+
+    async intakeStash() {
+      const s = this.intake;
+      if (!s) return;
+      const meta = {
+        schema_version: 1, updated_at: Date.now(),
+        step: s.step === "reading" || s.step === "generating"
+          ? (s.reading ? "understanding" : "material") : s.step,
+        text: s.text, textPolicy: s.textPolicy, caption: s.caption,
+        hasCaption: s.hasCaption,
+        reading: s.reading ? {
+          vision: s.reading.vision, basis: s.reading.basis,
+          observed: s.reading.observed, proposed: s.reading.proposed,
+          conflicts: s.reading.conflicts,
+        } : null,
+        form: s.form,
+        candidate: null,   /* 候选不暂存：它要么载入，要么重来 */
+      };
+      try {
+        // 先图片后元数据：引用了 Blob 的记录发布时，Blob 一定已经在。
+        if (s.image) await idbPut("intake-image", s.imageBlob || null);
+        window.localStorage.setItem(this.intakeStashKey, JSON.stringify(meta));
+        s.stashFailed = false;
+      } catch {
+        // 配额满了、隐私模式、IDB 坏了：页面照常工作，只是不承诺恢复。
+        s.stashFailed = true;
+      }
+    },
+
+    async intakeLoadStash() {
+      let meta = null;
+      try {
+        const raw = window.localStorage.getItem(this.intakeStashKey);
+        meta = raw ? JSON.parse(raw) : null;
+      } catch { meta = null; }
+      if (!meta || meta.schema_version !== 1) return;
+      // 七天没碰过的草稿清掉（计划 §5 的产品默认值）。
+      if (Date.now() - (meta.updated_at || 0) > 7 * 24 * 3600 * 1000) {
+        await this.intakeClearStash();
+        return;
+      }
+      this.intakeResume = meta;
+    },
+
+    async intakeResumeFromStash() {
+      const meta = this.intakeResume;
+      this.intakeResume = null;
+      this.intakeResumed = true;
+      if (!meta) return;
+      this.openIntake();
+      const s = this.intake;
+      s.text = meta.text || "";
+      s.textPolicy = meta.textPolicy || "adapt";
+      s.caption = meta.caption || "";
+      s.hasCaption = !!meta.hasCaption;
+      s.reading = meta.reading || null;
+      s.form = Object.assign(s.form, meta.form || {});
+      s.step = meta.reading ? "understanding" : "material";
+      if (meta.reading && Array.isArray(meta.reading.conflicts)) {
+        s.reading.conflicts = meta.reading.conflicts.map((c) => ({
+          id: c.id, field: c.field || "", image: c.image || "",
+          text: c.text || "", resolution: c.resolution || "",
+          override: c.override || "",
+        }));
+      }
+      // 图片单独住：丢失了就明说，文字部分照常回来。
+      try {
+        const blob = await idbGet("intake-image");
+        if (blob instanceof Blob) {
+          s.imageBlob = blob;
+          s.imageDataUrl = await blobToDataUrl(blob);
+          s.image = { name: "暂存的图片", width: 0, height: 0,
+                      bytes: blob.size, key: "intake-image" };
+        } else if (s.reading) {
+          s.readError = "暂存的图片没能恢复（图没了），文字和理解还在；需要的话重新放一张。";
+        }
+      } catch {
+        if (s.reading) s.readError = "暂存的图片没能恢复（图没了），文字和理解还在。";
+      }
+    },
+
+    async intakeDropStash() {
+      this.intakeResume = null;
+      this.intakeResumed = true;
+      await this.intakeClearStash();
+    },
+
+    async intakeClearStash() {
+      try { window.localStorage.removeItem(this.intakeStashKey); } catch { /* 同上 */ }
+      try { await idbDel("intake-image"); } catch { /* 同上 */ }
+    },
+
+    /* ---------------------------------------------------------------- */
     /* 版本                                                                */
     /* ---------------------------------------------------------------- */
+
 
     /* 每一版都是一份完整的剧本：引擎读的是当前版，旧版原样留着。
        旧版不是"另一个剧本"——它是同一份剧本的第几版。 */

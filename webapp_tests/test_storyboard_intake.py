@@ -15,6 +15,7 @@ No real LLM is ever called.
 
 from __future__ import annotations
 
+import base64
 import json
 
 
@@ -231,5 +232,227 @@ def test_a_script_draft_writes_nothing_to_the_library(
         client, monkeypatch):
     stub = EchoScriptConnector()
     response = _post_script(client, monkeypatch, stub)
+    assert response.status_code == 200, response.get_json()
+    assert client.get("/api/scripts").get_json()["names"] == []
+
+
+# --------------------------------------------------------------------------- #
+# M1: POST /api/scripts/intake, action=read - reading the materials
+# --------------------------------------------------------------------------- #
+
+class ReadingStub:
+    """Answers a reading call once, or raises like a provider would."""
+
+    timeout = 30
+
+    def __init__(self, replies=None, errors=None):
+        self.replies = list(replies or [])
+        self.errors = list(errors or [])
+        self.calls = []
+
+    def invoke(self, messages, **kwargs):
+        self.calls.append(messages)
+        if self.errors:
+            raise Exception(self.errors.pop(0))
+        return self.replies.pop(0) if self.replies else "not json"
+
+
+READ_REPLY = json.dumps({
+    "observed": ["图中可见一名穿蓝色外套的年轻人站在厨房里。"],
+    "proposed": ["他可能是刚搬来的租客，正在检查屋子。"],
+    "conflicts": [],
+}, ensure_ascii=False)
+
+CONFLICT_REPLY = json.dumps({
+    "observed": ["图中可见两名女性。"],
+    "proposed": [],
+    "conflicts": [{"field": "人物", "image": "图中是两名女性",
+                   "text": "原文写的是一名男性和一名女性"}],
+}, ensure_ascii=False)
+
+
+def _png_data_url(width=8, height=8) -> str:
+    import io
+
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (width, height), (12, 34, 56)).save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def _post_read(client, monkeypatch, stub, **overrides):
+    from webapp.services import autodraft
+    monkeypatch.setattr(autodraft, "_connector", lambda: stub)
+    body = {
+        "request_id": "req-1",
+        "revision": 3,
+        "action": "read",
+        "text": "他在厨房里发现了一只猫。",
+    }
+    body.update(overrides)
+    return client.post("/api/scripts/intake", json=body)
+
+
+def test_a_text_only_reading_comes_back_grouped(client, monkeypatch):
+    stub = ReadingStub(replies=[READ_REPLY])
+    response = _post_read(client, monkeypatch, stub)
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    assert data["code"] == "ok"
+    assert data["request_id"] == "req-1"
+    assert data["revision"] == 3
+    reading = data["reading"]
+    assert reading["basis"] == "text"
+    assert reading["observed"][0]["id"]      # stable ids for editing
+    assert reading["observed"][0]["text"].startswith("图中可见")
+    assert reading["proposed"][0]["text"]
+    assert reading["conflicts"] == []
+    # the model saw the author's text
+    user = stub.calls[0][1]["content"]
+    assert "他在厨房里发现了一只猫。" in user
+
+
+def test_an_image_reading_sends_the_image_and_comes_back_supported(
+        client, monkeypatch):
+    stub = ReadingStub(replies=[READ_REPLY])
+    url = _png_data_url()
+    response = _post_read(client, monkeypatch, stub, image=url)
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    assert data["reading"]["vision"] == "supported"
+    assert data["reading"]["basis"] == "image"
+    content = stub.calls[0][1]["content"]
+    kinds = [part["type"] for part in content]
+    assert "image_url" in kinds and "text" in kinds
+    assert content[0]["image_url"]["url"] == url
+
+
+def test_a_platform_that_cannot_see_images_needs_a_caption(
+        client, monkeypatch):
+    stub = ReadingStub(errors=[
+        "attempt 1/3 failed with HTTP 400 body='image input is not "
+        "supported for this model'"])
+    response = _post_read(client, monkeypatch, stub,
+                          text="", image=_png_data_url())
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    # a business state, not an error: the materials survive
+    assert data["code"] == "needs_caption"
+    assert data["reading"]["vision"] == "unsupported"
+    assert data["reading"]["observed"] == []
+
+
+def test_a_manual_caption_carries_the_reading_after_vision_fails(
+        client, monkeypatch):
+    stub = ReadingStub(errors=[
+        "attempt 1/3 failed with HTTP 400 body='this model does not "
+        "accept image content'"],
+        replies=[READ_REPLY])
+    response = _post_read(client, monkeypatch, stub,
+                          text="他发现了什么。",
+                          image=_png_data_url(),
+                          manual_caption="一个年轻人站在厨房里。")
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    assert data["code"] == "ok"
+    assert data["reading"]["vision"] == "unsupported"
+    assert data["reading"]["basis"] == "caption"
+    # the second call went out as plain text, carrying the caption
+    assert len(stub.calls) == 2
+    second = stub.calls[1][1]["content"]
+    assert isinstance(second, str)
+    assert "一个年轻人站在厨房里。" in second
+    assert data["reading"]["observed"]
+
+
+def test_conflicts_between_the_picture_and_the_text_come_back_named(
+        client, monkeypatch):
+    stub = ReadingStub(replies=[CONFLICT_REPLY])
+    response = _post_read(client, monkeypatch, stub, image=_png_data_url())
+    assert response.status_code == 200, response.get_json()
+    conflicts = response.get_json()["reading"]["conflicts"]
+    assert conflicts[0]["field"] == "人物"
+    assert conflicts[0]["image"] and conflicts[0]["text"]
+
+
+def test_a_forged_image_type_is_refused(client, monkeypatch):
+    import base64
+    stub = ReadingStub(replies=[READ_REPLY])
+    forged = "data:image/png;base64," + base64.b64encode(b"not a png").decode()
+    response = _post_read(client, monkeypatch, stub, text="", image=forged)
+    assert response.status_code == 415
+    assert not stub.calls
+
+
+def test_an_svg_is_refused_with_a_reselection_hint(client, monkeypatch):
+    stub = ReadingStub(replies=[READ_REPLY])
+    svg = "data:image/svg+xml;base64," + base64.b64encode(
+        b"<svg xmlns='http://www.w3.org/2000/svg'/>").decode()
+    response = _post_read(client, monkeypatch, stub, text="", image=svg)
+    assert response.status_code == 415
+    assert "SVG" in response.get_json()["error"] or "重新选择" in response.get_json()["error"]
+
+
+def test_a_huge_decoded_image_is_refused(client, monkeypatch):
+    stub = ReadingStub(replies=[READ_REPLY])
+    response = _post_read(client, monkeypatch, stub, text="",
+                          image=_png_data_url(width=7000, height=3000))
+    assert response.status_code == 413
+    assert not stub.calls
+
+
+def test_an_oversized_body_is_refused(client, monkeypatch):
+    stub = ReadingStub(replies=[READ_REPLY])
+    response = _post_read(client, monkeypatch, stub,
+                          text="x" * (9 * 1024 * 1024))
+    assert response.status_code == 413
+    assert not stub.calls
+
+
+def test_an_upstream_auth_failure_is_classified_and_kept(client, monkeypatch):
+    stub = ReadingStub(errors=[
+        "attempt 1/3 failed with HTTP 401 body='invalid api key'"])
+    response = _post_read(client, monkeypatch, stub)
+    assert response.status_code == 400
+    data = response.get_json()
+    assert data["code"] == "auth"
+    assert data["request_id"] == "req-1"
+    assert "401" in data["error"] or "key" in data["error"]
+
+
+def test_an_upstream_rate_limit_is_classified(client, monkeypatch):
+    stub = ReadingStub(errors=["attempt 3/3 failed with HTTP 429 body='rate limit'"])
+    response = _post_read(client, monkeypatch, stub)
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "rate_limited"
+
+
+def test_a_model_reply_that_is_not_json_is_reported(client, monkeypatch):
+    stub = ReadingStub(replies=["我看不懂你的问题"])
+    response = _post_read(client, monkeypatch, stub)
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "bad_reply"
+
+
+def test_a_reading_without_a_request_id_is_a_field_error(client, monkeypatch):
+    stub = ReadingStub(replies=[READ_REPLY])
+    body = {"revision": 1, "action": "read", "text": "点子"}
+    from webapp.services import autodraft
+    monkeypatch.setattr(autodraft, "_connector", lambda: stub)
+    response = client.post("/api/scripts/intake", json=body)
+    assert response.status_code == 400
+    assert not stub.calls
+
+
+def test_an_unknown_action_is_a_field_error(client, monkeypatch):
+    stub = ReadingStub(replies=[READ_REPLY])
+    response = _post_read(client, monkeypatch, stub, action="dream")
+    assert response.status_code == 400
+    assert not stub.calls
+
+
+def test_a_reading_writes_nothing_to_the_library(client, monkeypatch):
+    stub = ReadingStub(replies=[READ_REPLY])
+    response = _post_read(client, monkeypatch, stub)
     assert response.status_code == 200, response.get_json()
     assert client.get("/api/scripts").get_json()["names"] == []
