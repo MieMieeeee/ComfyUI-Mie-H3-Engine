@@ -677,3 +677,95 @@ def test_a_continuation_without_its_snapshot_says_so(plugin_root, monkeypatch):
     assert "无法原样继续" in str(caught.value), caught.value
     runner._jobs.clear()
     runner._reserved.clear()
+
+
+# --------------------------------------------------------------------------- #
+# deleting must never reach outside the output tree
+# --------------------------------------------------------------------------- #
+
+def test_a_forged_disk_task_cannot_delete_outside_the_output(plugin_root,
+                                                               tmp_path,
+                                                               monkeypatch):
+    """A disk task's id can be made up. Only a run that is really in the
+    list may be removed, and the delete itself must stay inside the
+    output tree."""
+    from webapp.services import comfy, runner
+    root = tmp_path / "comfyui"
+    output = root / "output"
+    (output / "h3_chains").mkdir(parents=True)
+    victim = root / "victim"
+    victim.mkdir()
+    (victim / "keep.txt").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(comfy.config, "COMFYUI_ROOT", root)
+    monkeypatch.setattr(runner.comfy, "recent_runs", lambda limit=20: [])
+
+    # 伪造一个磁盘任务名，带着父目录。
+    for forged in (r"disk:..\..\victim", "disk:../victim",
+                   "disk:" + str(victim).replace("\\", "/")):
+        with pytest.raises(ValueError):
+            runner.delete_record(forged, delete_files=True)
+    assert (victim / "keep.txt").is_file(), "something outside was deleted"
+
+    # 连删除函数自己也不许越界。
+    removed = comfy.delete_run_files(r"..\..\victim",
+                                     ["../victim/keep.txt"])
+    assert removed == [], removed
+    assert (victim / "keep.txt").is_file(), "something outside was deleted"
+
+
+def test_a_run_name_with_a_dot_does_not_take_the_next_one(plugin_root,
+                                                           tmp_path,
+                                                           monkeypatch):
+    """A dot is a legal character in a run name, so "take.v2" is a
+    different run from "take" - and its file must not be deleted with
+    "take"."""
+    from webapp.services import comfy
+    flat = tmp_path / "output" / "live_storyboards"
+    flat.mkdir(parents=True)
+    (flat / "take_2026-11-10.mp4").write_bytes(b"0")
+    (flat / "take.v2_2026-11-10.mp4").write_bytes(b"0")
+    (flat / "take.v2.mp4").write_bytes(b"0")
+    monkeypatch.setattr(comfy.config, "COMFYUI_ROOT", tmp_path)
+
+    relpaths = [a["relpath"] for a in comfy.collect_artifacts("take")]
+    assert relpaths == ["live_storyboards/take_2026-11-10.mp4"], relpaths
+
+    comfy.delete_run_files("take", relpaths)
+    left = sorted(p.name for p in flat.iterdir())
+    assert left == ["take.v2.mp4", "take.v2_2026-11-10.mp4"], left
+
+
+def test_the_version_counter_is_seeded_from_the_old_tasks(plugin_root,
+                                                          monkeypatch):
+    """The tasks that were written before the counter existed still
+    hold the highest version. Taking one of them out must not hand its
+    number to the next one - so the counter is seeded when the app
+    starts, not only when a new task is submitted."""
+    import importlib
+
+    from webapp.services import history, runner
+    runner._jobs.clear()
+    # 旧数据：任务表里有版本号，计数器是空的。
+    runner._jobs["old-1"] = {
+        "job_id": "old-1", "number": 1, "script": "旧剧本",
+        "run_name": "sb_old_v1", "attempt": 1, "submitted_at": 1.0,
+        "status": "success", "error": "", "nodes": 33, "role_assets": {},
+    }
+    runner._jobs["old-2"] = {
+        "job_id": "old-2", "number": 2, "script": "旧剧本",
+        "run_name": "sb_old_v2", "attempt": 2, "submitted_at": 2.0,
+        "status": "success", "error": "", "nodes": 33, "role_assets": {},
+    }
+    runner._save_jobs()
+
+    # 重启：模块重新装一遍，任务表从磁盘回来，迁移也在那时发生。
+    history.claim_attempt("旧剧本", 0)
+    importlib.reload(runner)
+    assert history.last_attempt("旧剧本") == 2, \
+        "the counter was not seeded from the tasks on disk"
+
+    assert runner.next_attempt("旧剧本") == 3
+    runner.delete_record("old-2")
+    assert runner.next_attempt("旧剧本") == 3, \
+        "the number went back and the old folder would be reused"
+    runner._jobs.clear()

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -283,9 +284,9 @@ def _belongs_to_run(entry: dict, run_name: str) -> bool:
     if len(parts) > 1:
         return run_name in parts[:-1]
     name = entry["name"]
-    if name.startswith(run_name + "."):
-        return True
     stem = name.rsplit(".", 1)[0]
+    if stem == run_name:
+        return True
     head, _, tail = stem.rpartition("_")
     return head == run_name and _looks_like_date(tail)
 
@@ -408,18 +409,24 @@ def delete_run_files(run_name: str, relpaths: list = None) -> list:
     run's own directory. Nothing is matched by a name prefix: a run
     name is a prefix of the next version's name, so "sb_run" must not
     take "sb_run_v2" with it.
+
+    Every path is checked to be inside the output tree before it is
+    touched. A name is not a path: a parent directory is not a run
+    name, and a path that resolves outside the output directory is not
+    ours to delete - whatever the caller says.
     """
     import shutil
 
     name = str(run_name or "")
-    if not name:
+    if not _LEGAL_RUN_NAME.match(name):
         return []
     removed = []
     output = config.COMFYUI_ROOT / "output"
+    root = output.resolve()
     # 1) 任务记录里的那几份文件，一份一份按路径删。
     for relpath in (relpaths or []):
-        path = output / str(relpath)
-        if not path.is_file():
+        path = (output / str(relpath)).resolve()
+        if not _inside(root, path) or not path.is_file():
             continue
         try:
             path.unlink()
@@ -428,10 +435,29 @@ def delete_run_files(run_name: str, relpaths: list = None) -> list:
         removed.append(str(relpath))
     # 2) 这次运行自己的目录（目录名是整个名字，不是前缀）。
     for sub in config.OUTPUT_SUBDIRS:
-        folder = output / sub / name
-        if not folder.is_dir():
+        folder = (output / sub / name).resolve()
+        if not _inside(root, folder) or not folder.is_dir():
             continue
         count = sum(1 for p in folder.rglob("*") if p.is_file())
         shutil.rmtree(folder, ignore_errors=True)
         removed.append("%s/%s（%d 个文件）" % (sub, name, count))
     return removed
+
+
+#: The engine's own rule for a run name. A name is a name: it holds no
+#: separator, no parent directory and no absolute path.
+_LEGAL_RUN_NAME = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]{0,94}[A-Za-z0-9]$|^[A-Za-z0-9]$")
+
+
+def _inside(root: pathlib.Path, path: pathlib.Path) -> bool:
+    """Is this path inside that tree?
+
+    The paths are resolved first, so ".." and a symbolic link that
+    points outside are both caught here.
+    """
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True

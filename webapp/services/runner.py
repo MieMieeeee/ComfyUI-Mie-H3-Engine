@@ -98,6 +98,32 @@ def _now() -> float:
     return time.time()
 
 
+def _migrate_attempts() -> None:
+    """Seed the version counter from the tasks that already exist.
+
+    The counter of its own was introduced after the first versions had
+    been handed out. Without this, taking the newest task out of the
+    list would hand its number to the next one - the number would come
+    from the records that are left, and the highest one is the one
+    that was just removed.
+    """
+    with _jobs_lock:
+        records = list(_jobs.values())
+    highest = {}
+    for record in records:
+        script = record.get("script")
+        try:
+            attempt = int(record.get("attempt") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not script or not attempt:
+            continue
+        if attempt > highest.get(script, 0):
+            highest[script] = attempt
+    for script, attempt in highest.items():
+        history.claim_attempt(script, attempt)
+
+
 def next_attempt(script_name: str) -> int:
     """Which version of this script comes next.
 
@@ -557,7 +583,12 @@ def delete_record(job_id: str, delete_files: bool = False) -> dict:
             run_name = record.get("run_name") or ""
             _jobs.pop(job_id, None)
         elif job_id.startswith("disk:"):
-            run_name = job_id[len("disk:"):]
+            # 磁盘任务的编号是可以编的：只有真的在清单里的那次运行
+            # 才能被移出历史。
+            name = job_id[len("disk:"):]
+            if name not in {r["run_name"] for r in comfy.recent_runs()}:
+                raise ValueError("这条任务不在历史里。")
+            run_name = name
     if not run_name:
         raise ValueError("这条任务不在历史里。")
     history.dismiss(run_name)
@@ -619,6 +650,7 @@ def plan_preview(script_name: str, role_assets: dict[str, str]) -> dict:
 # render that failed before the restart is still on the list - with the
 # failure - instead of vanishing without a trace.
 _jobs.update(_load_jobs())
+_migrate_attempts()
 
 
 def _script_from_snapshot(snapshot_dir: str, script_name: str) -> dict:
