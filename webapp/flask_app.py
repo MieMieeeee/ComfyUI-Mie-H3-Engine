@@ -474,16 +474,40 @@ def create_app() -> Flask:
 
     @app.route("/api/scripts/auto", methods=["POST"])
     def api_autodraft_script():
-        """Draft a storyboard from an idea (concept) or a change request
-        (revise, with the open board as base_asset).
+        """Draft a storyboard from an idea (concept), a change request
+        (revise, with the open board as base_asset), or the author's
+        confirmed roles and events (script - the intake plan's locked
+        path, where the model may only group and stage, never rewrite).
 
         Nothing is written here: the draft lands in the workbench editor
         and the author reviews it before the normal save.
         """
         data = request.get_json(silent=True) or {}
+        mode = str(data.get("mode") or "concept")
+        if mode not in ("concept", "revise", "script"):
+            return jsonify({"error": "mode 只能是 concept、revise 或 script，"
+                                     "收到的是 %r" % mode}), 400
         try:
+            if mode == "script":
+                return jsonify(autodraft.storyboard_script(
+                    data.get("roles") or [],
+                    data.get("events") or [],
+                    name=str(data.get("name") or "新剧本"),
+                    shot_count=int(data.get("shot_count") or 0),
+                    language=str(data.get("language") or "zh"),
+                    target_duration_seconds=float(
+                        data.get("target_duration_seconds") or 20),
+                    audio_mode=str(data.get("audio_mode") or "generated"),
+                    critic=str(data.get("critic") or "on"),
+                    camera=data.get("camera") or {},
+                    look=str(data.get("look") or ""),
+                    setting=str(data.get("setting") or ""),
+                    scene=str(data.get("scene") or ""),
+                    constraints=str(data.get("constraints") or ""),
+                    light=str(data.get("light") or "follow_image"),
+                    light_text=str(data.get("light_text") or "")))
             return jsonify(autodraft.storyboard(
-                str(data.get("mode") or "concept"),
+                mode,
                 str(data.get("concept") or ""),
                 base_asset=data.get("base_asset") or None,
                 name=str(data.get("name") or "新剧本"),
@@ -593,10 +617,16 @@ def create_app() -> Flask:
 
     @app.route("/media/<path:relpath>")
     def media(relpath):
-        """A finished render's file."""
+        """A finished render's file.
+
+        The boundary is the tree, not a string prefix: a sibling
+        directory whose name merely starts the same ("output2" next to
+        "output") is not inside, and this route has to refuse it itself
+        rather than rely on the file server noticing.
+        """
         root = comfy.media_root()
         target = (root / relpath).resolve()
-        if not str(target).startswith(str(root.resolve())):
+        if not comfy.inside_tree(root.resolve(), target):
             abort(403)
         if not target.is_file():
             abort(404)
@@ -605,9 +635,9 @@ def create_app() -> Flask:
     @app.route("/library/<path:relpath>")
     def library_file(relpath):
         """An asset's picture, straight from the library."""
-        root = (config.PLUGIN_ROOT / "asset_library").resolve()
+        root = (config.PLUGIN_ROOT / "asset_library")
         target = (root / relpath).resolve()
-        if not str(target).startswith(str(root)):
+        if not comfy.inside_tree(root.resolve(), target):
             abort(403)
         if not target.is_file():
             abort(404)

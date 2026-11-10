@@ -81,6 +81,193 @@ def storyboard(mode: str, concept: str, *, base_asset=None, name: str = "新剧�
 
 
 # --------------------------------------------------------------------------- #
+# script mode: the author's confirmed roles and events, kept verbatim
+# --------------------------------------------------------------------------- #
+
+#: The shared parser's column separators - a role NAME that contains one
+#: would be split into several columns and read back as somebody else.
+_ROLE_SEPARATORS = ("|", "，", ",", "、")
+
+_EVENT_TYPES = ("dialogue", "action", "enter", "exit")
+
+_STATUS_WORDS = {"on_screen": "画面内", "off_screen": "画外"}
+
+_POSITION_WORDS = {"left": "左侧", "right": "右侧", "center": "中间",
+                   "none": "无"}
+
+
+def _role_settings_line(number: int, role: dict) -> str:
+    """One confirmed role as the shared parser's one-line format.
+
+    The page edits structured role cards; the core and every existing
+    node read ``character_settings`` lines. This is the one direction
+    the translation goes in, so both sides share one parser and cannot
+    disagree about what a role is.
+    """
+    name = str(role.get("name") or "").strip()
+    if not name:
+        raise ValueError("角色 %d 还没有名字：每个角色都要有个名字" % number)
+    if any(mark in name for mark in _ROLE_SEPARATORS):
+        raise ValueError(
+            "角色 %d 的名字「%s」里有分隔符（| ， 、）：名字里不能有这些符号，"
+            "否则没法可靠地写进角色表" % (number, name))
+    if len(name) > 40:
+        raise ValueError("角色 %d 的名字太长：最多 40 个字符" % number)
+    presence = str(role.get("presence") or "on_screen")
+    if presence not in _STATUS_WORDS:
+        raise ValueError("角色 %d 的画面状态无法识别：%r" % (number, presence))
+    status = _STATUS_WORDS[presence]
+    if presence == "on_screen" and role.get("initially_visible") is False:
+        status = "稍后入场"
+    position = _POSITION_WORDS.get(str(role.get("position") or ""),
+                                   str(role.get("position") or ""))
+    if presence == "off_screen":
+        position = "无"  # the parser requires it; no off-screen staging
+    voice = str(role.get("voice") or "").strip()
+    if "\n" in voice or "\r" in voice:
+        raise ValueError("角色 %d 的声音说明里有换行：改成一句" % number)
+    columns = [name, status]
+    if position:
+        columns.append(position)
+    if voice:
+        columns.append(voice)
+    return "角色%d：%s" % (number, " | ".join(columns))
+
+
+def _event_line(number: int, event: dict, role_count: int,
+                script_language: str) -> str:
+    """One confirmed event as one source_script line.
+
+    The role is written as its ``character_N`` id, never its display
+    name: a name that happens to match a type word or another alias
+    would silently retarget the line. The language tag is only written
+    when the line's language differs from the script's.
+    """
+    role = event.get("role")
+    if type(role) is not int or not 0 <= role < role_count:
+        raise ValueError(
+            "第 %d 条事件引用的角色不存在：事件要指明是哪个角色（0..%d）"
+            % (number, role_count - 1))
+    kind = str(event.get("type") or "")
+    if kind not in _EVENT_TYPES:
+        raise ValueError(
+            "第 %d 条事件的类型无法识别：%r（可用：台词 dialogue、动作 action、"
+            "入场 enter、离场 exit）" % (number, kind))
+    text = str(event.get("text") or "")
+    if "\n" in text or "\r" in text:
+        raise ValueError(
+            "第 %d 条事件里有换行：一条事件就是一行，把长段拆成几条"
+            % number)
+    text = text.strip()
+    if not text:
+        raise ValueError("第 %d 条事件是空的：写内容或删掉这一条" % number)
+    if len(text) > 2000:
+        raise ValueError("第 %d 条事件太长：最多 2000 个字符" % number)
+    language = str(event.get("language") or script_language)
+    tag = "" if language == script_language else " [%s]" % language
+    return "character_%d %s%s：%s" % (role + 1, kind, tag, text)
+
+
+def _round_trip(source: str, count: int, settings: str, events: list,
+                language: str) -> list:
+    """Serialize, parse back, and prove nothing was lost on the way.
+
+    The events the author confirmed are structured; the generator only
+    reads text. Whatever the translation writes has to read back as the
+    same events - same order, type, actor, wording (apart from the
+    shared parser's leading/trailing space rule) and language - or the
+    draft would quietly stage something the author never confirmed.
+    """
+    from mie_craft.script.contract import parse_roles, parse_script
+
+    roles = parse_roles(count, settings)
+    parsed = parse_script(source, roles, language)
+    for number, (event, back) in enumerate(zip(events, parsed), 1):
+        expected_role = "character_%d" % (int(event.get("role")) + 1)
+        problems = []
+        if back["character"] != expected_role:
+            problems.append("角色变成了 %s" % back["character"])
+        if back["type"] != event.get("type"):
+            problems.append("类型变成了 %s" % back["type"])
+        if back["text"] != str(event.get("text") or "").strip():
+            problems.append("文字被改写")
+        if back["language"] != str(event.get("language") or language):
+            problems.append("语言变成了 %s" % back["language"])
+        if problems:
+            raise ValueError(
+                "第 %d 条事件写进事件稿后走了样：%s。原文：「%s」"
+                % (number, "、".join(problems),
+                   str(event.get("text") or "")[:60]))
+    if len(parsed) != len(events):
+        raise ValueError(
+            "事件稿往返不一致：确认了 %d 条，解析回来 %d 条"
+            % (len(events), len(parsed)))
+    return parsed
+
+
+def storyboard_script(roles: list, events: list, *, name: str = "新剧本",
+                      language: str = "zh", shot_count: int = 0,
+                      target_duration_seconds: float = 20,
+                      audio_mode: str = "generated", critic: str = "on",
+                      camera: dict = None, look: str = "", setting: str = "",
+                      scene: str = "", constraints: str = "",
+                      light: str = "follow_image",
+                      light_text: str = "") -> dict:
+    """Generate from the author's CONFIRMED roles and events.
+
+    Script mode is the locked path of the intake plan: the roles, the
+    event list and the global picture fields are the author's word, and
+    the model only groups events into shots, spreads the duration and
+    writes the English execution mirror. The confirmed text goes to the
+    generator's FIRST positional argument - the core's ``**_unused``
+    would silently swallow a ``source_script=`` keyword, so this mapping
+    is what the intake tests lock in place.
+    """
+    from mie_craft.script.generator import AssetStoryboardEnhancer
+
+    if not isinstance(roles, list) or not roles:
+        raise ValueError("至少要有一个角色")
+    if len(roles) > 8:
+        raise ValueError("角色太多：最多 8 个")
+    if not isinstance(events, list) or not events:
+        raise ValueError("至少要有一条事件")
+    if len(events) > 200:
+        raise ValueError("事件太多：最多 200 条")
+    language = language if language in ("zh", "en") else "zh"
+    settings = "\n".join(_role_settings_line(number, role)
+                         for number, role in enumerate(roles, 1))
+    source = "\n".join(_event_line(number, event, len(roles), language)
+                       for number, event in enumerate(events, 1))
+    if len(source) > 30000:
+        raise ValueError("事件稿太长：全文最多 30000 个字符")
+    confirmed = _round_trip(source, len(roles), settings, events, language)
+
+    camera = dict(camera or {})
+    planner = AssetStoryboardEnhancer(_connector(), timeout=300)
+    asset = planner(
+        source,                                   # the FIRST argument
+        int(shot_count) if shot_count else 0,
+        mode="script",
+        character_count=len(roles),
+        character_settings=settings,
+        name=str(name or "新剧本").strip() or "新剧本",
+        language=language,
+        target_duration_seconds=float(target_duration_seconds or 20),
+        audio_mode=audio_mode if audio_mode in ("generated", "reference")
+        else "generated",
+        camera_framing=str(camera.get("framing") or "medium_shot"),
+        camera_movement=str(camera.get("movement") or "locked"),
+        camera_perspective=str(camera.get("perspective") or "observer"),
+        look=str(look or ""), setting=str(setting or ""),
+        scene=str(scene or ""), constraints=str(constraints or ""),
+        light=str(light or "follow_image"), light_text=str(light_text or ""),
+        critic="on" if critic != "off" else "off",
+        seed=0)
+    return {"json": asset, "notes": list(planner.warnings),
+            "events": confirmed}
+
+
+# --------------------------------------------------------------------------- #
 # character / scene field drafts (the auto save nodes' semantics)
 # --------------------------------------------------------------------------- #
 
