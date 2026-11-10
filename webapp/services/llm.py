@@ -195,8 +195,11 @@ def build_connector(row: dict, model: str = ""):
         host = hosts().get(row["key"]) or "http://127.0.0.1:11434"
         return connector(host, model, api_token=token or "ollama", **kwargs)
     if row["connector"] == "GeneralLLMServiceConnector":
-        # The generic one has no endpoint of its own - the user gives it.
-        return connector(endpoint_of(row) or token, token, model, **kwargs)
+        # The generic one has no endpoint of its own - the user gives it
+        # via the host settings, never the token (passing the token as a
+        # URL made every General-platform call fail with a nonsense 404).
+        host = hosts().get(row["key"]) or endpoint_of(row)
+        return connector(host, token, model, **kwargs)
     return connector(token, model, **kwargs)
 
 

@@ -22,7 +22,7 @@ import pathlib
 from flask import Flask, abort, jsonify, render_template, request, send_from_directory
 
 from webapp import config
-from webapp.services import comfy, library, llm, runner, theme
+from webapp.services import autodraft, comfy, library, llm, runname, runner, theme
 
 
 def create_app() -> Flask:
@@ -205,12 +205,41 @@ def create_app() -> Flask:
         abort(404)
 
     # ------------------------------------------------------------------ #
+    # auto drafts (the web's version of the auto save / generator nodes)
+    # ------------------------------------------------------------------ #
+
+    @app.route("/api/assets/auto", methods=["POST"])
+    def api_autodraft_asset():
+        """Draft the EMPTY text fields of one character/scene asset.
+
+        Nothing is written here: the draft lands in the edit form and the
+        author saves it through the normal endpoint.
+        """
+        data = request.get_json(silent=True) or {}
+        try:
+            return jsonify(autodraft.asset_fields(
+                str(data.get("kind") or ""),
+                str(data.get("name") or ""),
+                hint=str(data.get("hint") or ""),
+                current=data.get("current") or {},
+                image_data_url=str(data.get("image") or "") or None))
+        except (ValueError, FileNotFoundError) as exc:
+            return jsonify({"error": str(exc)}), 400
+        except Exception as exc:  # noqa: BLE001 - the provider's error is the answer
+            return jsonify({"error": "%s: %s" % (type(exc).__name__, exc)}), 400
+
+    # ------------------------------------------------------------------ #
     # scripts
     # ------------------------------------------------------------------ #
 
     @app.route("/api/scripts")
     def api_scripts():
-        return jsonify({"names": library.list_storyboards()})
+        # ``items`` is additive metadata for the list view; ``names`` stays
+        # the canonical field the video page and older clients read.
+        return jsonify({
+            "names": library.list_storyboards(),
+            "items": library.list_storyboards_meta(),
+        })
 
     @app.route("/api/scripts/<name>")
     def api_script(name):
@@ -260,6 +289,32 @@ def create_app() -> Flask:
         except (FileNotFoundError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
 
+    @app.route("/api/scripts/auto", methods=["POST"])
+    def api_autodraft_script():
+        """Draft a storyboard from an idea (concept) or a change request
+        (revise, with the open board as base_asset).
+
+        Nothing is written here: the draft lands in the workbench editor
+        and the author reviews it before the normal save.
+        """
+        data = request.get_json(silent=True) or {}
+        try:
+            return jsonify(autodraft.storyboard(
+                str(data.get("mode") or "concept"),
+                str(data.get("concept") or ""),
+                base_asset=data.get("base_asset") or None,
+                name=str(data.get("name") or "新剧本"),
+                shot_count=int(data.get("shot_count") or 2),
+                language=str(data.get("language") or "zh"),
+                target_duration_seconds=float(data.get("target_duration_seconds") or 20),
+                audio_mode=str(data.get("audio_mode") or "generated"),
+                character_settings=str(data.get("character_settings") or ""),
+                critic=str(data.get("critic") or "on")))
+        except (ValueError, FileNotFoundError) as exc:
+            return jsonify({"error": str(exc)}), 400
+        except Exception as exc:  # noqa: BLE001 - the provider's error is the answer
+            return jsonify({"error": "%s: %s" % (type(exc).__name__, exc)}), 400
+
     # ------------------------------------------------------------------ #
     # render
     # ------------------------------------------------------------------ #
@@ -285,6 +340,19 @@ def create_app() -> Flask:
     @app.route("/api/render/jobs")
     def api_render_jobs():
         return jsonify({"jobs": runner.jobs()})
+
+    @app.route("/api/render/run_name", methods=["POST"])
+    def api_render_run_name():
+        """The run name a submission WOULD use, for the page to show.
+
+        The engine takes the name verbatim, so the page shows the exact
+        string instead of letting a Chinese script name become a
+        surprise error at submit time.
+        """
+        data = request.get_json(silent=True) or {}
+        return jsonify({"run_name": runname.effective_run_name(
+            str(data.get("run_name") or ""),
+            str(data.get("script") or ""))})
 
     @app.route("/api/render/<job_id>")
     def api_render_job(job_id):

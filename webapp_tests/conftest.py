@@ -61,6 +61,8 @@ def plugin_root(tmp_path, monkeypatch):
 
     monkeypatch.setattr(config, "SETTINGS_FILE", tmp_path / "settings.json")
 
+    monkeypatch.setattr(config, "JOBS_FILE", tmp_path / "jobs.json")
+
     monkeypatch.setenv("MIE_PLUGIN_ROOT", str(root))
 
     return root
@@ -78,6 +80,21 @@ def client(plugin_root):
     from webapp.flask_app import create_app
 
     return create_app().test_client()
+
+
+
+@pytest.fixture(autouse=True)
+
+def _isolate_the_job_log(tmp_path, monkeypatch):
+
+    """No test may write into the user's real job log.
+
+    The job table is module-level and the runner persists it on every
+    status change, so a test that forgets the plugin_root fixture would
+    quietly append its fake jobs to the real file.
+    """
+
+    monkeypatch.setattr(config, "JOBS_FILE", tmp_path / "jobs.json")
 
 
 

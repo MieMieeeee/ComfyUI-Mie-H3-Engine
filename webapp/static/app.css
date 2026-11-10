@@ -281,7 +281,33 @@ textarea.input.code {
   background: var(--color-error-bg); border: 1px solid var(--color-error);
 }
 .validation-box.ok { background: var(--color-success-bg); border-color: var(--color-success); }
+.validation-box.risk { background: var(--color-warning-bg); border-color: var(--color-warning); }
 .validation-box ul { margin: 6px 0 0; padding-left: 20px; }
+
+/* 渲染风险：压成一行分级 chips，点开才见全文 */
+.risk-summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.warn-chip {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; cursor: pointer; font-family: inherit;
+  border: 1px solid var(--color-warning); color: var(--color-warning); background: none;
+}
+.warn-chip.err { border-color: var(--color-error); color: var(--color-error); }
+.warn-chip.info { border-color: var(--border-default); color: var(--text-secondary); }
+.warn-chip.mini { cursor: default; }
+.event-risk { font-size: 11px; white-space: nowrap; }
+.event-risk.err { color: var(--color-error); }
+
+/* AI 起草 */
+.draft-box {
+  margin-bottom: 10px; padding: 10px 13px;
+  border-radius: 8px; font-size: 13px;
+  background: var(--color-info-bg); border: 1px solid var(--color-info);
+}
+.draft-box ul { margin: 6px 0 0; padding-left: 20px; }
+.auto-actions { display: flex; gap: 10px; margin-top: 14px; }
+.auto-box { display: flex; gap: 8px; margin-top: 14px; }
+.auto-box .input { flex: 1; }
+.btn:disabled { opacity: .55; cursor: wait; }
 
 .job-row {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -290,3 +316,75 @@ textarea.input.code {
 .job-row:last-child { border-bottom: none; }
 .job-artifacts { display: flex; gap: 10px; flex-wrap: wrap; }
 .artifact { font-size: 12px; }
+
+/* ---------------------------------------------------------------- */
+/* 剧本工作台（预览 / 编辑 / JSON 三标签）                            */
+/* ---------------------------------------------------------------- */
+
+.workbench-tabs { display: flex; gap: 8px; margin: 4px 0 14px; }
+.preview-pane, .editor-pane { margin-top: 4px; }
+
+.editor-section {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 18px 0 10px; padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 13px; font-weight: 600;
+}
+.editor-section:first-child { margin-top: 4px; padding-top: 0; border-top: none; }
+.editor-sub { margin: 14px 0 8px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+
+.role-editor {
+  display: grid; grid-template-columns: auto 1.4fr auto auto auto 1fr auto;
+  gap: 8px; align-items: center; margin-bottom: 8px;
+}
+.inline-check {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--text-secondary); white-space: nowrap;
+}
+
+.chip {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; background: var(--bg-input);
+  border: 1px solid var(--border-default); color: var(--text-secondary);
+}
+.chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.role-chip {
+  display: inline-flex; flex-direction: column; gap: 1px;
+  padding: 5px 11px; border-radius: 8px; font-size: 12px;
+  background: var(--bg-input); border: 1px solid var(--border-accent, var(--border-default));
+}
+.role-chip.offscreen { border-style: dashed; opacity: .75; }
+
+.shot-card {
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+  padding: 9px 12px; margin-bottom: 10px; background: var(--bg-input);
+}
+.shot-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.row-tools { margin-left: auto; }
+.event-line {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 3px 0; font-size: 13px;
+}
+.event-split { padding: 0 7px; font-size: 11px; }
+.badge.type-dialogue { color: var(--color-info); border-color: var(--color-info); }
+.badge.type-action { color: var(--color-warning); border-color: var(--color-warning); }
+.badge.type-enter { color: var(--color-success); border-color: var(--color-success); }
+.badge.type-exit { color: var(--text-muted); border-color: var(--border-strong); }
+
+.timeline {
+  display: flex; gap: 3px; margin: 12px 0 4px;
+  border-radius: 8px; overflow: hidden;
+}
+.timeline-seg {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 0; padding: 7px 4px; overflow: hidden;
+  background: var(--color-info-bg); border: none; border-radius: 6px;
+  color: var(--text-secondary); cursor: pointer; font-family: inherit; font-size: 11px;
+  white-space: nowrap; text-overflow: ellipsis;
+}
+.timeline-seg:hover { background: var(--theme-accent-500, #66ad47); color: var(--text-on-accent, #0f1115); }
+
+.row-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* 仅剧本页的双行列表用 stack 修饰，不影响资产页的单行列表 */
+.list-row.stack { flex-direction: column; align-items: stretch; gap: 2px; }
+

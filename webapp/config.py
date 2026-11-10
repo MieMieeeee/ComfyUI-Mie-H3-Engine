@@ -64,6 +64,10 @@ SETTINGS_FILE = pathlib.Path(
     )
 )
 
+#: The submitted jobs, so a render that failed is still on the list
+#: after the app restarts.
+JOBS_FILE = SETTINGS_FILE.parent / "jobs.json"
+
 #: ComfyUI's address. The web app never starts ComfyUI itself; the
 #: launcher does (see F:/Mie-Skills/AGENTS.md).
 COMFYUI_URL = os.environ.get("MIE_COMFYUI_URL", "http://127.0.0.1:8188")

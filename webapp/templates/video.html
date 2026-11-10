@@ -45,7 +45,11 @@
 
       <label class="field">
         <span>片段名（run name）</span>
-        <input class="input" x-model="runName" placeholder="留空则自动命名">
+        <input class="input" x-model="runName" placeholder="留空则自动命名"
+               @input.debounce.300ms="refreshRunName()">
+        <span class="muted small" x-show="effectiveRunName">
+          实际运行名：<code x-text="effectiveRunName"></code>
+        </span>
       </label>
       <div class="field-row">
         <label class="field"><span>宽</span><input class="input" type="number" x-model.number="width"></label>

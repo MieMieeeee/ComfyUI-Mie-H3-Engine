@@ -249,6 +249,38 @@ def delete_storyboard(name: str) -> dict:
     return _script_asset.delete_storyboard(library_dir(), name)
 
 
+def list_storyboards_meta() -> list[dict]:
+    """One light summary row per script asset, for the list view.
+
+    Loads every board (they are small JSON files) so the list can show
+    roles/shots/duration without a second request per selection. Boards
+    the library skips (broken JSON, name mismatch) still get a row - with
+    the reason - so they can be spotted in the list instead of silently
+    vanishing from it.
+    """
+    result = _script_asset.list_storyboards(library_dir())
+    rows = []
+    for line in (result.get("status") or "").splitlines():
+        text = line.strip()
+        if text.startswith("skipped ") and ": " in text:
+            name, reason = text[len("skipped "):].split(": ", 1)
+            rows.append({"name": name, "error": reason})
+    for name in [n for n in result.get("names", "").splitlines() if n.strip()]:
+        try:
+            cleaned, _path = _script_asset.load_storyboard(library_dir(), name)
+        except (ValueError, FileNotFoundError) as exc:
+            rows.append({"name": name, "error": str(exc)})
+            continue
+        rows.append({
+            "name": name,
+            "roles": len(cleaned.get("roles", [])),
+            "shots": len(cleaned.get("shots", [])),
+            "duration_seconds": cleaned.get("target_duration_seconds"),
+            "audio_mode": cleaned.get("audio_mode", "generated"),
+        })
+    return rows
+
+
 def validate_storyboard(payload: dict) -> dict:
     """Check a script asset without writing it.
 

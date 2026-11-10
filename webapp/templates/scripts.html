@@ -7,60 +7,549 @@
     <h2>📜 剧本资产</h2>
     <div class="panel-head-actions">
       <button class="btn" type="button" @click="load()">🔄 刷新</button>
+      <button class="btn" type="button" @click="startDraft('concept')">✨ AI 起草</button>
       <button class="btn primary" type="button" @click="startNew()">＋ 新建</button>
     </div>
   </div>
 
   <p class="muted">
-    剧本资产是 v2 契约：<code>source_script</code> 是人写的源，
-    <code>shots[].events</code> 必须与它逐字一致（含 language）。
-    保存前会跑一遍契约校验，并报出渲染风险。
+    <code>source_script</code> 是人写的源，每个事件一行
+    （台词 <code>角色1：你好</code> ／ 动作 <code>角色1动作：…</code> ／
+    入场 <code>角色1入场：…</code> ／ 离场 <code>角色1离场：…</code>），
+    分镜由事件分段生成，契约校验在编辑时自动运行。
   </p>
 
   <div class="split">
+    <!-- 左：列表 -->
     <div class="split-list">
       <div class="list-scroll">
-        <template x-for="name in names" :key="name">
-          <button class="list-row" :class="{ active: name === selected }"
-                  @click="open(name)">
-            <span x-text="name"></span>
+        <template x-for="item in items" :key="item.name">
+          <button class="list-row stack" :class="{ active: item.name === selected }"
+                  @click="open(item.name)">
+            <span class="row-main">
+              <span class="cell-strong" x-text="item.name"></span>
+              <span class="badge err" x-show="item.error">损坏</span>
+            </span>
+            <span class="muted small" x-text="metaLine(item)"></span>
           </button>
         </template>
-        <p class="muted" x-show="!names.length">还没有剧本资产。</p>
+        <p class="muted" x-show="!items.length">还没有剧本资产。</p>
       </div>
     </div>
 
+    <!-- 右：工作台 -->
     <div class="split-detail">
-      <div class="card">
-        <div class="card-head">
-          <h3 x-text="selected || '（未选中）'"></h3>
-          <div class="panel-head-actions">
-            <button class="btn" type="button" @click="validate()">✔️ 校验</button>
-            <button class="btn primary" type="button" @click="save()">💾 保存</button>
-            <button class="btn danger" type="button" @click="remove()">🗑️ 删除</button>
+      <p class="muted" x-show="!model && !draftOpen">从左侧选择一个剧本，或点「＋ 新建」「✨ AI 起草」。</p>
+
+      <!-- AI 起草表单 -->
+      <template x-if="draftOpen">
+        <div class="card">
+          <div class="card-head">
+            <h3 x-text="draftForm.mode === 'revise' ? '✨ 修订当前剧本' : '✨ 从点子新建'"></h3>
+            <div class="filter-bar">
+              <button class="pill" type="button" :class="{ active: draftForm.mode === 'concept' }"
+                      @click="startDraft('concept')">从点子新建</button>
+              <button class="pill" type="button" :class="{ active: draftForm.mode === 'revise' }"
+                      x-show="model"
+                      @click="startDraft('revise')">修订当前剧本</button>
+            </div>
+          </div>
+
+          <label class="field">
+            <span x-text="draftForm.mode === 'revise'
+              ? '修改要求（写这一版要改什么，未提及的部分保持不变）'
+              : '点子（一段话、一个故事、几句台词草稿都行）'"></span>
+            <textarea class="input" rows="4" x-model="draftForm.concept"
+                      :placeholder="draftForm.mode === 'revise'
+                        ? '例如：结尾改成她笑而不语，其余不动。'
+                        : '例如：外卖员发现客人养的猫会自己开门，两人成了朋友。'"></textarea>
+          </label>
+          <div class="field-row">
+            <label class="field">
+              <span>名字</span>
+              <input class="input" x-model="draftForm.name">
+            </label>
+            <template x-if="draftForm.mode === 'concept'">
+              <label class="field">
+                <span>段数（希望切成几镜）</span>
+                <input class="input" type="number" min="1" max="20"
+                       x-model.number="draftForm.shot_count">
+              </label>
+            </template>
+          </div>
+          <template x-if="draftForm.mode === 'concept'">
+            <div>
+              <div class="field-row">
+                <label class="field">
+                  <span>语言</span>
+                  <select class="input" x-model="draftForm.language">
+                    <option value="zh">中文 zh</option>
+                    <option value="en">English en</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>目标时长（秒）</span>
+                  <input class="input" type="number" min="1" max="600" step="0.1"
+                         x-model.number="draftForm.target_duration_seconds">
+                </label>
+                <label class="field">
+                  <span>配音模式</span>
+                  <select class="input" x-model="draftForm.audio_mode">
+                    <option value="generated">生成 generated</option>
+                    <option value="reference">参考 reference</option>
+                  </select>
+                </label>
+              </div>
+              <label class="field">
+                <span>角色提示（可选，非绑定偏好，如「角色1：旁白 | 画外 | 无」）</span>
+                <input class="input" x-model="draftForm.character_settings">
+              </label>
+            </div>
+          </template>
+          <label class="inline-check">
+            <input type="checkbox" x-model="draftForm.critic">
+            生成后让 LLM 复核连续性（多一次调用）
+          </label>
+
+          <div class="auto-actions">
+            <button class="btn primary" type="button" :disabled="drafting"
+                    @click="runDraft()"
+                    x-text="drafting ? '生成中…（可能要一两分钟）' : '✨ 生成草稿'"></button>
+            <button class="btn" type="button" :disabled="drafting"
+                    @click="draftOpen = false">取消</button>
           </div>
         </div>
+      </template>
 
-        <div class="validation-box" x-show="errors.length">
-          <strong class="err">契约不通过</strong>
-          <ul><template x-for="e in errors" :key="e"><li x-text="e"></li></template></ul>
+      <template x-if="!draftOpen && model">
+        <div class="card">
+          <div class="card-head">
+            <h3 x-text="model.name || '（未命名）'"></h3>
+            <div class="panel-head-actions">
+              <button class="btn" type="button" @click="startDraft('revise')"
+                      x-show="selected" title="以当前剧本为底稿，按修改意见生成下一版">✨ 修订</button>
+              <button class="btn" type="button" @click="validateNow(true)">✔️ 校验</button>
+              <button class="btn primary" type="button" @click="save()">💾 保存</button>
+              <button class="btn danger" type="button" @click="remove()">🗑️ 删除</button>
+            </div>
+          </div>
+
+          <!-- 起草备注：LLM 评审意见，与契约渲染风险分开。 -->
+          <div class="draft-box" x-show="draftNotes.length">
+            <strong>起草备注（LLM 评审）</strong>
+            <ul><template x-for="(n, i) in draftNotes" :key="i"><li x-text="n"></li></template></ul>
+          </div>
+
+          <!-- 校验回执：三个标签共用，切换标签不会弄丢。 -->
+          <div class="validation-box" x-show="errors.length">
+            <strong class="err">契约不通过</strong>
+            <ul><template x-for="e in errors" :key="e"><li x-text="e"></li></template></ul>
+          </div>
+          <div class="validation-box risk" x-show="warnings.length">
+            <div class="risk-summary">
+              <strong class="warn">渲染风险</strong>
+              <template x-for="chip in warningChips" :key="chip.label">
+                <button class="warn-chip" type="button" :class="chip.level"
+                        :title="parsedWarnings.filter((w) => w.label === chip.label).map((w) => w.text).join('\n')"
+                        @click="warnOpen = !warnOpen"
+                        x-text="chip.label + ' ×' + chip.count"></button>
+              </template>
+              <button class="btn subtle" type="button" @click="warnOpen = !warnOpen"
+                      x-text="warnOpen ? '收起' : '说明'"></button>
+            </div>
+            <ul x-show="warnOpen">
+              <template x-for="(w, i) in parsedWarnings" :key="i">
+                <li>
+                  <span class="warn-chip mini" :class="w.level" x-text="w.label"></span>
+                  <span class="muted small" x-show="w.shot" x-text="w.shot"></span>
+                  <span x-text="w.text"></span>
+                </li>
+              </template>
+            </ul>
+          </div>
+          <div class="validation-box ok" x-show="okMessage" x-text="okMessage"></div>
+
+          <div class="workbench-tabs">
+            <button class="pill" type="button" :class="{ active: tab === 'preview' }"
+                    @click="setTab('preview')">👁 预览</button>
+            <button class="pill" type="button" :class="{ active: tab === 'edit' }"
+                    @click="setTab('edit')">✏️ 编辑</button>
+            <button class="pill" type="button" :class="{ active: tab === 'json' }"
+                    @click="setTab('json')">🧾 JSON 源码</button>
+          </div>
+
+          <!-- ============================== 预览 ============================== -->
+          <div x-show="tab === 'preview'" class="preview-pane">
+            <p class="muted" x-show="!board || !(board.shots || []).length">
+              还没有通过契约的分镜。切到「编辑」把内容补齐，校验通过后这里会出现时间轴。
+            </p>
+
+            <template x-if="board && board.shots && board.shots.length">
+              <div>
+                <dl class="meta-list">
+                  <dt>时长</dt>
+                  <dd>
+                    <span x-text="'目标 ' + formatSeconds(board.target_duration_seconds)
+                      + ' → 预计交付 ' + formatSeconds(deliveredSeconds)"></span>
+                    <span class="muted small"
+                          x-text="'（' + board.shots.length + ' 段生成 · 重叠 '
+                            + (board.continuation_overlap_frames ?? 22) + ' 帧）'"></span>
+                  </dd>
+                  <dt>相机</dt>
+                  <dd x-text="board.camera.framing + ' · ' + board.camera.movement
+                    + ' · ' + board.camera.perspective"></dd>
+                  <dt>语言</dt>
+                  <dd x-text="(board.language === 'en' ? 'English' : '中文') + ' · '
+                    + (board.audio_mode === 'reference' ? '参考音色' : '生成音色')"></dd>
+                  <template x-if="board.light">
+                    <dt>光</dt>
+                  </template>
+                  <dd x-show="board.light"
+                      x-text="board.light === 'custom' ? board.light_text : board.light"></dd>
+                  <template x-if="board.look">
+                    <dt>画风</dt>
+                  </template>
+                  <dd x-show="board.look" x-text="board.look"></dd>
+                  <template x-if="board.constraints">
+                    <dt>约束</dt>
+                  </template>
+                  <dd x-show="board.constraints" class="prewrap" x-text="board.constraints"></dd>
+                </dl>
+
+                <div class="timeline">
+                  <template x-for="seg in timeline" :key="seg.id">
+                    <button class="timeline-seg" type="button"
+                            :style="'width:' + seg.width + '%'"
+                            :title="seg.id + ' · ' + formatSeconds(seg.seconds)"
+                            @click="scrollToShot(seg.id)">
+                      <span x-text="seg.id"></span>
+                      <span class="small" x-text="formatSeconds(seg.seconds)"></span>
+                    </button>
+                  </template>
+                </div>
+
+                <h4 class="editor-section">角色</h4>
+                <div class="chip-row">
+                  <template x-for="(role, index) in board.roles" :key="role.id">
+                    <span class="role-chip" :class="{ offscreen: role.presence === 'off_screen' }">
+                      <span x-text="'角色' + (index + 1) + '=' + role.name"></span>
+                      <span class="muted small"
+                            x-text="role.presence + (role.position && role.position !== 'none'
+                              ? ' / ' + role.position : '')"></span>
+                    </span>
+                  </template>
+                </div>
+
+                <h4 class="editor-section">分镜</h4>
+                <template x-for="shot in board.shots" :key="shot.id">
+                  <div class="shot-card" :id="'shot-' + shot.id">
+                    <div class="shot-head">
+                      <span class="cell-strong" x-text="shot.id"></span>
+                      <span class="muted small"
+                            x-text="formatSeconds(shot.duration_seconds) + ' · '
+                              + shot.events.length + ' 事件'"></span>
+                      <span class="row-main">
+                        <template x-for="w in warningsForShot(shot.id)" :key="w.text">
+                          <span class="warn-chip" :class="w.level"
+                                :title="w.text" x-text="w.label"></span>
+                        </template>
+                      </span>
+                    </div>
+                    <template x-for="event in shot.events" :key="event.id">
+                      <div class="event-line">
+                        <span class="badge" x-text="eventTypeName(event.type)"></span>
+                        <span class="cell-strong" x-text="roleName(event.character)"></span>
+                        <span x-text="event.text"></span>
+                        <span class="muted small" x-show="event.language !== board.language"
+                              x-text="'[' + event.language + ']'"></span>
+                        <span class="event-risk err" x-show="riskyEvent(event)"
+                              title="不含可发音字符：H3 会渲染成提示音而非沉默；停顿请改用动作事件，反应请给出台词">⚠ 提示音</span>
+                      </div>
+                    </template>
+                    <template x-for="cut in shot.camera_cuts || []" :key="cut.before_event">
+                      <div class="event-line muted small">
+                        <span x-text="'✂ ' + cut.before_event + ' 起切 ' + cut.framing"></span>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+
+                <details class="preview-block" x-show="board.scene || board.setting">
+                  <summary>场景与表演设定</summary>
+                  <pre class="preview-text" x-text="(board.scene ? '场景：\n' + board.scene + '\n\n' : '')
+                    + (board.setting ? '表演设定：\n' + board.setting : '')"></pre>
+                </details>
+                <details class="preview-block">
+                  <summary>源文本全文</summary>
+                  <pre class="preview-text" x-text="board.source_script"></pre>
+                </details>
+              </div>
+            </template>
+          </div>
+
+          <!-- ============================== 编辑 ============================== -->
+          <!-- @input/@change 都冒泡到这里：改任何字段都会重新解析并触发自动校验 -->
+          <div x-show="tab === 'edit'" class="editor-pane"
+               @change="afterModelChange()" @input="afterModelChange()">
+
+            <h4 class="editor-section">基本信息</h4>
+            <div class="field-row">
+              <label class="field">
+                <span>名字</span>
+                <input class="input" x-model="model.name" placeholder="剧本名字">
+              </label>
+              <label class="field">
+                <span>语言</span>
+                <select class="input" x-model="model.language">
+                  <option value="zh">中文 zh</option>
+                  <option value="en">English en</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>配音模式</span>
+                <select class="input" x-model="model.audio_mode">
+                  <option value="generated">生成 generated</option>
+                  <option value="reference">参考 reference（≤3 角色）</option>
+                </select>
+              </label>
+            </div>
+            <div class="field-row">
+              <label class="field">
+                <span>目标时长（秒）</span>
+                <input class="input" type="number" step="0.1" min="1" max="600"
+                       x-model.number="model.target_duration_seconds">
+              </label>
+              <label class="field">
+                <span>重叠帧（0–120）</span>
+                <input class="input" type="number" step="1" min="0" max="120"
+                       x-model.number="model.continuation_overlap_frames">
+              </label>
+              <label class="field">
+                <span>光锚 light</span>
+                <select class="input" x-model="model.light">
+                  <option value="follow_image">follow_image 跟随图像</option>
+                  <option value="daylight">daylight 日光</option>
+                  <option value="golden_hour">golden_hour 黄金时刻</option>
+                  <option value="night_lamp">night_lamp 夜灯</option>
+                  <option value="night_screen">night_screen 夜屏</option>
+                  <option value="late_night">late_night 深夜</option>
+                  <option value="morning">morning 清晨</option>
+                  <option value="custom">custom 自定义</option>
+                </select>
+              </label>
+            </div>
+            <label class="field" x-show="model.light === 'custom'">
+              <span>光锚描述 light_text（custom 必填）</span>
+              <input class="input" x-model="model.light_text">
+            </label>
+            <p class="muted small" x-show="minimumBoardSeconds > 0"
+               x-text="'按当前分镜，契约最少需要 ' + formatSeconds(minimumBoardSeconds)
+                 + (Number(model.target_duration_seconds) < minimumBoardSeconds
+                   ? ' — 目标时长偏短，校验会报 too short' : '')"></p>
+
+            <h4 class="editor-section">相机 camera</h4>
+            <div class="field-row">
+              <label class="field">
+                <span>景别 framing</span>
+                <select class="input" x-model="model.camera.framing">
+                  <option value="two_shot">two_shot 双人</option>
+                  <option value="medium_shot">medium_shot 中景</option>
+                  <option value="medium_close_up">medium_close_up 中近景</option>
+                  <option value="close_up">close_up 特写</option>
+                  <option value="wide_shot">wide_shot 远景</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>运动 movement</span>
+                <select class="input" x-model="model.camera.movement">
+                  <option value="locked">locked 锁定</option>
+                  <option value="gentle_follow">gentle_follow 缓跟</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>视角 perspective</span>
+                <select class="input" x-model="model.camera.perspective">
+                  <option value="observer">observer 旁观</option>
+                  <option value="first_person">first_person 第一人称</option>
+                </select>
+              </label>
+            </div>
+
+            <h4 class="editor-section">画面与舞台（源语言）</h4>
+            <label class="field">
+              <span>画风 look</span>
+              <textarea class="input" rows="2" x-model="model.look"></textarea>
+            </label>
+            <label class="field">
+              <span>表演设定 setting</span>
+              <textarea class="input" rows="2" x-model="model.setting"></textarea>
+            </label>
+            <label class="field">
+              <span>场景 scene（接线场景资产时会被覆盖）</span>
+              <textarea class="input" rows="2" x-model="model.scene"></textarea>
+            </label>
+            <label class="field">
+              <span>约束 constraints（人读契约，不进编译）</span>
+              <textarea class="input" rows="2" x-model="model.constraints"></textarea>
+            </label>
+
+            <h4 class="editor-section">
+              角色 <span class="muted small">（最多 8 位；id 按顺序自动编号）</span>
+              <button class="btn subtle" type="button" @click="addRole()">＋ 添加角色</button>
+            </h4>
+            <template x-for="(role, index) in model.roles" :key="index">
+              <div class="role-editor">
+                <span class="chip" x-text="'角色' + (index + 1)"></span>
+                <input class="input" placeholder="名字" x-model="role.name">
+                <select class="input" x-model="role.presence" @change="onPresenceChange(role)">
+                  <option value="on_screen">出镜</option>
+                  <option value="off_screen">画外</option>
+                </select>
+                <label class="inline-check" x-show="role.presence === 'on_screen'">
+                  <input type="checkbox" x-model="role.initially_visible"> 初始可见
+                </label>
+                <select class="input" x-model="role.position"
+                        :disabled="role.presence === 'off_screen'">
+                  <option value="left">左</option>
+                  <option value="center">中</option>
+                  <option value="right">右</option>
+                  <option value="none">无</option>
+                </select>
+                <input class="input" placeholder="音色（英文短语，可空）" x-model="role.voice">
+                <button class="btn subtle" type="button" title="删除该角色"
+                        @click="removeRole(index)">✕</button>
+              </div>
+            </template>
+
+            <h4 class="editor-section">
+              源文本 source_script
+              <span class="muted small">（事件的唯一编辑源；每行一个事件，# 开头是注释）</span>
+            </h4>
+            <textarea class="input code" rows="6" x-model="model.source_script"></textarea>
+            <div class="validation-box" x-show="parseError">
+              <span class="err" x-text="parseError"></span>
+            </div>
+
+            <h4 class="editor-section">
+              分镜 <span class="muted small">（在事件处用 ✂ 分段；服务端校验后会重算每镜时长）</span>
+            </h4>
+            <template x-for="(shot, gi) in shotSummaries" :key="shot.id">
+              <div class="shot-card">
+                <div class="shot-head">
+                  <span class="cell-strong" x-text="shot.id"></span>
+                  <span class="muted small"
+                        x-text="formatSeconds(shot.seconds) + ' · ' + shot.events.length + ' 事件'"></span>
+                  <span class="row-main">
+                    <template x-for="w in warningsForShot(shot.id)" :key="w.text">
+                      <span class="warn-chip" :class="w.level"
+                            :title="w.text" x-text="w.label"></span>
+                    </template>
+                  </span>
+                  <span class="row-tools">
+                    <button class="btn subtle" type="button" x-show="gi > 0"
+                            @click="mergeUp(gi)">⤒ 合并到上一镜</button>
+                  </span>
+                </div>
+                <template x-for="(event, ei) in shot.events" :key="event.id">
+                  <div class="event-line">
+                    <span class="badge" x-text="eventTypeName(event.type)"></span>
+                    <span class="cell-strong" x-text="roleName(event.character)"></span>
+                    <span x-text="event.text"></span>
+                    <span class="muted small" x-show="event.language !== model.language"
+                          x-text="'[' + event.language + ']'"></span>
+                    <span class="event-risk err" x-show="riskyEvent(event)"
+                          title="不含可发音字符：H3 会渲染成提示音而非沉默；停顿请改用动作事件，反应请给出台词">⚠ 提示音</span>
+                    <button class="btn subtle event-split" type="button" x-show="ei > 0"
+                            title="在此事件前分段"
+                            @click="splitBefore(grouping[gi][ei])">✂</button>
+                  </div>
+                </template>
+              </div>
+            </template>
+
+            <h4 class="editor-section">
+              默认角色设计 <span class="muted small">（源语言；接入角色资产时覆盖，留空即不启用）</span>
+            </h4>
+            <template x-for="role in onScreenRoles" :key="role.id">
+              <label class="field">
+                <span x-text="role.name + '（' + role.id + '）'"></span>
+                <textarea class="input" rows="2"
+                          x-model="model.character_designs[role.id]"></textarea>
+              </label>
+            </template>
+
+            <h4 class="editor-section">
+              执行镜像 execution
+              <span class="muted small">（英文，编译用；键随角色与事件自动增删）</span>
+            </h4>
+            <label class="field">
+              <span>look</span>
+              <textarea class="input" rows="2" x-model="model.execution.look"></textarea>
+            </label>
+            <label class="field">
+              <span>setting</span>
+              <textarea class="input" rows="2" x-model="model.execution.setting"></textarea>
+            </label>
+            <label class="field" x-show="model.scene && model.scene.trim()">
+              <span>scene（英文镜像）</span>
+              <textarea class="input" rows="2" x-model="model.execution.scene"></textarea>
+            </label>
+            <label class="field" x-show="model.light === 'custom'">
+              <span>light（英文镜像）</span>
+              <textarea class="input" rows="2" x-model="model.execution.light"></textarea>
+            </label>
+            <label class="field">
+              <span>visible_state（英文，正向可视描述）</span>
+              <textarea class="input" rows="2" x-model="model.execution.visible_state"></textarea>
+            </label>
+
+            <h5 class="editor-sub">voices（每个角色的英文音色镜像）</h5>
+            <template x-for="role in model.roles" :key="role.id">
+              <label class="field">
+                <span x-text="role.name + '（' + role.id + '）'"></span>
+                <input class="input" x-model="model.execution.voices[role.id]"
+                       placeholder="英文音色短语；角色没写音色时留空">
+              </label>
+            </template>
+
+            <h5 class="editor-sub">
+              directions（每个动作/入场/离场事件的英文执导，以该角色的英文名开头，如 Character 1 …）
+            </h5>
+            <template x-for="event in directionEvents" :key="event.id">
+              <label class="field">
+                <span x-text="event.id + ' · ' + eventTypeName(event.type) + ' · '
+                  + roleName(event.character) + '：' + event.text"></span>
+                <input class="input" x-model="model.execution.directions[event.id]"
+                       :placeholder="'Character ' + characterNumber(event.character) + ' …'">
+              </label>
+            </template>
+            <p class="muted small" x-show="!directionEvents.length">没有动作类事件，directions 为空。</p>
+
+            <template x-if="onScreenRoles.some((role) => model.character_designs[role.id])">
+              <div>
+                <h5 class="editor-sub">character_designs（英文镜像）</h5>
+                <template x-for="role in onScreenRoles" :key="'ex-' + role.id">
+                  <label class="field" x-show="model.character_designs[role.id]">
+                    <span x-text="role.name + '（' + role.id + '）英文镜像'"></span>
+                    <textarea class="input" rows="2"
+                              x-model="model.execution.character_designs[role.id]"></textarea>
+                  </label>
+                </template>
+              </div>
+            </template>
+          </div>
+
+          <!-- ============================== JSON 源码 ============================== -->
+          <div x-show="tab === 'json'" class="json-pane">
+            <p class="muted small">
+              保存与校验都以这里能解析出的 JSON 为准；切回其它标签前会先尝试把改动同步回表单，
+              解析失败会留在本页并报错。
+            </p>
+            <textarea class="input code" rows="24" spellcheck="false"
+                      x-model="rawText" @input="onJsonInput()"></textarea>
+          </div>
         </div>
-        <div class="validation-box" x-show="warnings.length">
-          <strong class="warn">渲染风险</strong>
-          <ul><template x-for="w in warnings" :key="w"><li x-text="w"></li></template></ul>
-        </div>
-        <div class="validation-box ok" x-show="okMessage" x-text="okMessage"></div>
-
-        <label class="field">
-          <span>JSON（v2）</span>
-          <textarea class="input code" rows="18" x-model="raw"></textarea>
-        </label>
-
-        <details class="preview-block" x-show="preview">
-          <summary>人读预览</summary>
-          <pre class="preview-text" x-text="preview"></pre>
-        </details>
-      </div>
+      </template>
     </div>
   </div>
 </section>

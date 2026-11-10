@@ -217,25 +217,49 @@ def test_a_script_can_be_created_edited_and_deleted(page):
     page.wait_for_timeout(700)
     assert visible(page, ".list-row").count() == 0
 
+    # 新建：落在编辑标签，直接填表单而不是手写 JSON。
     button(page, "＋ 新建").click()
     page.wait_for_timeout(600)
-    skeleton = json.loads(page.locator("textarea.code").input_value())
-    skeleton["name"] = "测试剧本"
-    skeleton["source_script"] = "角色1：你好"
-    skeleton["shots"][0]["events"][0]["text"] = "你好"
-    page.locator("textarea.code").fill(
-        json.dumps(skeleton, ensure_ascii=False, indent=2))
+    page.get_by_placeholder("剧本名字").fill("测试剧本")
+    page.locator(".editor-pane textarea.code").fill("角色1：你好")
+    page.wait_for_timeout(400)
     button(page, "💾 保存").click()
-    page.wait_for_timeout(1500)
     assert "已保存" in message(page, ".validation-box.ok")
     assert row_named(page, "测试剧本") is not None
+    saved = api_get("/api/scripts/%E6%B5%8B%E8%AF%95%E5%89%A7%E6%9C%AC")
+    assert saved["json"]["source_script"] == "角色1：你好"
+    assert saved["json"]["shots"][0]["events"][0]["text"] == "你好"
 
+    # 重新打开：预览标签有时间轴和分镜卡。
     row_named(page, "测试剧本").click()
     page.wait_for_timeout(1200)
-    current = json.loads(page.locator("textarea.code").input_value())
+    assert visible(page, ".timeline-seg").count() == 1
+    assert "你好" in visible(page, ".shot-card").first.inner_text()
+    assert "分镜1" in row_named(page, "测试剧本").inner_text()
+
+    # 编辑标签：追加一个动作事件，用 ✂ 把它分段成第二镜；两镜各占
+    # 至少 ~1 秒，目标时长 2 秒装不下，按提示调到 6 秒。
+    button(page, "✏️ 编辑").click()
+    page.wait_for_timeout(300)
+    page.locator(".editor-pane textarea.code").fill("角色1：你好\n角色1动作：他挥了挥手。")
+    page.wait_for_timeout(600)
+    assert visible(page, ".shot-card").count() == 1
+    visible(page, ".event-split").first.click()
+    page.wait_for_timeout(600)
+    assert visible(page, ".shot-card").count() == 2
+    assert "偏短" in visible(page, ".editor-pane p.muted.small").first.inner_text()
+    target_box = page.locator(".editor-pane input[type=number]").first
+    target_box.fill("6")
+    page.wait_for_timeout(600)
+    assert "偏短" not in visible(page, ".editor-pane p.muted.small").first.inner_text()
+
+    # JSON 源码标签：改约束、校验、保存。
+    button(page, "🧾 JSON 源码").click()
+    page.wait_for_timeout(400)
+    json_box = page.locator(".json-pane textarea.code")
+    current = json.loads(json_box.input_value())
     current["constraints"] = "改过的约束"
-    page.locator("textarea.code").fill(
-        json.dumps(current, ensure_ascii=False, indent=2))
+    json_box.fill(json.dumps(current, ensure_ascii=False, indent=2))
     button(page, "✔️ 校验").click()
     page.wait_for_timeout(1200)
     boxes = visible(page, ".validation-box").all_inner_texts()
@@ -245,6 +269,14 @@ def test_a_script_can_be_created_edited_and_deleted(page):
     page.wait_for_timeout(1500)
     data = api_get("/api/scripts/%E6%B5%8B%E8%AF%95%E5%89%A7%E6%9C%AC")
     assert data["json"]["constraints"] == "改过的约束"
+    assert len(data["json"]["shots"]) == 2
+    assert [e["type"] for e in data["json"]["shots"][1]["events"]] == ["action"]
+    assert data["json"]["shots"][1]["events"][0]["text"] == "他挥了挥手。"
+
+    # 预览时间轴现在有两段。
+    row_named(page, "测试剧本").click()
+    page.wait_for_timeout(1200)
+    assert visible(page, ".timeline-seg").count() == 2
 
     row_named(page, "测试剧本").click()
     page.wait_for_timeout(800)

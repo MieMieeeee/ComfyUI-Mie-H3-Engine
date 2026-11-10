@@ -20,7 +20,7 @@ import time
 import uuid
 
 from webapp import config
-from webapp.services import comfy, library, workflow
+from webapp.services import comfy, library, runname, workflow
 
 #: The submit lock. It covers "look at the queue, then submit" - the
 #: window in which two submissions could interleave.
@@ -29,6 +29,58 @@ _submit_lock = threading.Lock()
 #: The jobs this process has started: {job_id: record}.
 _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
+
+#: How many job records are kept on disk. The list is a log of what was
+#: submitted, not an archive.
+_JOB_HISTORY = 50
+
+
+def _load_jobs() -> dict:
+    """The job records of the last run of this app.
+
+    The table used to live in memory only, so restarting the web app
+    forgot every submission - including the ones that failed. A failed
+    render that leaves no trace is the worst kind of trace.
+    """
+    try:
+        data = json.loads(config.JOBS_FILE.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+    records = {}
+    for item in data.get("jobs") or []:
+        job_id = item.get("job_id")
+        if job_id:
+            records[job_id] = item
+    return records
+
+
+def _save_jobs() -> None:
+    with _jobs_lock:
+        records = list(_jobs.values())[-_JOB_HISTORY:]
+    # Only what the list needs: the outputs are re-read from ComfyUI.
+    slim = [{key: record.get(key) for key in
+             ("job_id", "number", "script", "run_name", "submitted_at",
+              "status", "error", "nodes")}
+            for record in records]
+    try:
+        config.ensure_dirs()
+        config.JOBS_FILE.write_text(
+            json.dumps({"jobs": slim}, ensure_ascii=False, indent=2),
+            encoding="utf-8")
+    except OSError:
+        pass  # a log we cannot write must not break the render
+
+
+def _remember(record: dict) -> None:
+    """Keep one record's latest state, in memory and on disk."""
+    with _jobs_lock:
+        previous = _jobs.get(record["job_id"])
+        changed = (previous is None
+                   or previous.get("status") != record.get("status")
+                   or previous.get("error") != record.get("error"))
+        _jobs[record["job_id"]] = dict(record)
+    if changed:
+        _save_jobs()
 
 
 def _now() -> float:
@@ -44,8 +96,11 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
     polls :func:`job`.
     """
     script = library.get_storyboard(script_name)
+    # One name for both the graph and the job record: the engine takes
+    # it verbatim, so the record and the run on disk must agree.
+    effective = runname.effective_run_name(run_name, script_name)
     graph = workflow.build(
-        script_name, script["json"], role_assets, run_name=run_name,
+        script_name, script["json"], role_assets, run_name=effective,
         width=width, height=height, steps=steps, duration=duration)
 
     client_id = "mie-web-%s" % uuid.uuid4().hex[:12]
@@ -56,7 +111,7 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
         "job_id": result.get("prompt_id"),
         "number": result.get("number"),
         "script": script_name,
-        "run_name": run_name or ("sb_web_%s" % script_name[:24]),
+        "run_name": effective,
         "role_assets": role_assets,
         "submitted_at": _now(),
         "status": "queued",
@@ -65,10 +120,11 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
     }
     with _jobs_lock:
         _jobs[record["job_id"]] = record
+    _save_jobs()
     return record
 
 
-def job(job_id: str) -> dict:
+def job(job_id: str, queued: set = None) -> dict:
     """One job, with its current state read from ComfyUI."""
     with _jobs_lock:
         record = _jobs.get(job_id)
@@ -77,7 +133,20 @@ def job(job_id: str) -> dict:
     record = dict(record)
     entry = comfy.history(job_id)
     if not entry:
-        record["status"] = "running"
+        # No history entry: the prompt is either still in flight or it
+        # is gone. Only the queue can tell - a job that ComfyUI has
+        # forgotten is NOT still running, and saying so is what keeps
+        # a failed render from sitting in the list as "running" forever.
+        if queued is None:
+            queued = comfy.queue_ids()
+        if job_id in queued:
+            record["status"] = "running"
+        else:
+            record["status"] = "error"
+            record["error"] = record.get("error") or (
+                "ComfyUI 里已找不到这次运行：可能提交后立刻失败、被中断，"
+                "或历史已被清理。")
+        _remember(record)
         return record
     status = entry.get("status", {})
     record["status"] = status.get("status_str", "success")
@@ -104,6 +173,7 @@ def job(job_id: str) -> dict:
                  "size": 0}
                 for image in node_out["images"]
             ]
+    _remember(record)
     return record
 
 
@@ -118,7 +188,13 @@ def jobs() -> list[dict]:
     with _jobs_lock:
         records = list(_jobs.values())
     records.sort(key=lambda r: r.get("submitted_at", 0), reverse=True)
-    live = [job(r["job_id"]) for r in records]
+    # One queue read for the whole list: a job ComfyUI has forgotten is
+    # not running any more, and saying "running" would be a lie.
+    try:
+        queued = comfy.queue_ids()
+    except Exception:  # noqa: BLE001 - ComfyUI unreachable: keep the list
+        queued = set()
+    live = [job(r["job_id"], queued) for r in records]
 
     known = {r["run_name"] for r in live}
     for run in comfy.recent_runs():
@@ -162,3 +238,9 @@ def plan_preview(script_name: str, role_assets: dict[str, str]) -> dict:
         "requirements": script["requirements"],
         "nodes": len(graph),
     }
+
+
+# The jobs of the last run of this app are restored at import time, so a
+# render that failed before the restart is still on the list - with the
+# failure - instead of vanishing without a trace.
+_jobs.update(_load_jobs())

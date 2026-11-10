@@ -99,6 +99,19 @@
           <span>音色样本（留空则保留原样）</span>
           <input class="input" type="file" accept="audio/*" @change="pickAudio($event)">
         </label>
+
+        <!-- AI 补全：对标 auto 保存节点，只起草空字段 -->
+        <div class="auto-box">
+          <input class="input" x-model="autoHint"
+                 placeholder="一句提示（可选）：告诉 AI 这个人/地方的关键点">
+          <button class="btn" type="button" :disabled="autoBusy"
+                  @click="autoFill()"
+                  x-text="autoBusy ? '补全中…' : '✨ AI 补全'"></button>
+        </div>
+        <p class="muted small">
+          只补空字段（描述 / <span x-show="kind === 'character'">音色</span><span x-show="kind === 'scene'">环境音</span>）；
+          传了图就看图写描述。想重新起草就先清空对应字段。
+        </p>
       </div>
     </div>
   </div>

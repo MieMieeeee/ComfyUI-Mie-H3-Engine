@@ -69,6 +69,34 @@ def test_the_preset_is_not_mutated_between_builds(plugin_root):
     assert second["910"]["inputs"]["name"] == "乙"
 
 
+def test_no_link_points_at_a_node_the_build_replaced(plugin_root):
+    """The build replaces the preset's asset section, so the links that
+    pointed at the old nodes have to follow their replacements. A
+    dangling link is not a warning: ComfyUI rejects that node when it
+    validates the prompt, and the submission comes back with a
+    validation error for it."""
+    graph = workflow.build("测试剧本", SCRIPT, {"character_1": "甲"})
+    dangling = []
+    for node_id, node in graph.items():
+        for key, value in (node.get("inputs") or {}).items():
+            if isinstance(value, list) and len(value) == 2 \
+                    and isinstance(value[0], str) and value[0] not in graph:
+                dangling.append((node_id, key, value))
+    assert dangling == [], dangling
+
+
+def test_the_display_node_follows_the_new_plan_node(plugin_root):
+    """The Show-and-save node shows the plan; it used to point at the
+    plan node the build had just deleted."""
+    graph = workflow.build("测试剧本", SCRIPT, {"character_1": "甲"})
+    display = next((n for n in graph.values()
+                    if n["class_type"].startswith("ShowAndSaveAnything")), None)
+    assert display is not None
+    target = display["inputs"]["anything"][0]
+    assert target in graph
+    assert graph[target]["class_type"] == "MieH3ScriptToPlan"
+
+
 def json_copy(value):
     import json
     return json.loads(json.dumps(value))

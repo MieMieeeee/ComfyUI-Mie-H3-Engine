@@ -77,11 +77,16 @@ def test_a_script_can_be_saved_and_validated(client):
     assert response.status_code == 200, response.get_json()
     assert response.get_json()["status"] == "created"
 
-    names = client.get("/api/scripts").get_json()["names"]
-    assert "测试剧本" in names
+    listing = client.get("/api/scripts").get_json()
+    assert "测试剧本" in listing["names"]
+    # items 是给列表页的元数据：正常板有摘要，坏的也能看到原因。
+    row = next(i for i in listing["items"] if i["name"] == "测试剧本")
+    assert row["roles"] == 1 and row["shots"] == 1
+    assert row["audio_mode"] == "generated"
 
     check = client.post("/api/scripts/validate", json={"json": json.dumps(SCRIPT)})
     assert check.get_json()["ok"] is True
+    assert check.get_json()["json"]["shots"][0]["duration_seconds"] > 0
 
 
 def test_a_broken_script_reports_the_contract_error(client):
@@ -91,6 +96,136 @@ def test_a_broken_script_reports_the_contract_error(client):
                           json={"json": json.dumps(broken)}).get_json()
     assert result["ok"] is False
     assert "source events differ" in result["errors"][0]
+
+
+def test_a_punctuation_line_reports_a_render_risk(client):
+    """Punctuation-only dialogue is contract-valid but renders as a chime:
+    the risk list must flag it while validation still passes."""
+    risky = json.loads(json.dumps(SCRIPT))
+    risky["source_script"] = "甲：？？？"
+    risky["shots"][0]["events"][0]["text"] = "？？？"
+    result = client.post("/api/scripts/validate",
+                          json={"json": json.dumps(risky)}).get_json()
+    assert result["ok"] is True
+    assert result["errors"] == []
+    assert any("notification chime" in w for w in result["warnings"])
+
+
+# --------------------------------------------------------------------------- #
+# auto drafts (stub connector: no real LLM is ever called)
+# --------------------------------------------------------------------------- #
+
+class _StubConnector:
+    timeout = 30
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.calls = []
+
+    def invoke(self, messages, **kwargs):
+        self.calls.append(messages)
+        if not self.replies:
+            return "ok"
+        return self.replies.pop(0)
+
+
+def test_a_concept_draft_lands_in_the_editor_not_the_library(client, monkeypatch):
+    from webapp.services import autodraft
+    draft = json.loads(json.dumps(SCRIPT))
+    draft["continuation_overlap_frames"] = 22  # concept 模式的 caller-owned 默认值
+    stub = _StubConnector([json.dumps(draft)])
+    monkeypatch.setattr(autodraft, "_connector", lambda: stub)
+
+    response = client.post("/api/scripts/auto", json={
+        "mode": "concept", "concept": "一只猫打车", "name": "测试剧本",
+        "shot_count": 1, "critic": "off"})
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    assert data["json"]["name"] == "测试剧本"
+    assert data["notes"] == []
+    assert len(stub.calls) == 1  # critic 关掉后只有一次生成调用
+    # 草稿不落库：库里还是空的，保存要用户确认后走正常保存。
+    assert client.get("/api/scripts").get_json()["names"] == []
+
+
+def test_a_revision_draft_keeps_the_base_wiring(client, monkeypatch):
+    from webapp.services import autodraft
+    stub = _StubConnector([json.dumps(SCRIPT)])
+    monkeypatch.setattr(autodraft, "_connector", lambda: stub)
+
+    response = client.post("/api/scripts/auto", json={
+        "mode": "revise", "concept": "结尾改成她笑而不语",
+        "name": "测试剧本", "base_asset": SCRIPT, "critic": "off"})
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    # 接线事实从底稿继承，草稿原样带回。
+    assert data["json"]["audio_mode"] == SCRIPT["audio_mode"]
+    assert data["json"]["continuation_overlap_frames"] == \
+        SCRIPT["continuation_overlap_frames"]
+
+
+def test_an_empty_concept_is_a_friendly_error(client):
+    response = client.post("/api/scripts/auto", json={"mode": "concept", "concept": "  "})
+    assert response.status_code == 400
+    assert "空" in response.get_json()["error"]
+
+
+def test_asset_auto_drafts_only_empty_fields(client, monkeypatch):
+    from webapp.services import autodraft
+    stub = _StubConnector(["adult male, warm timbre, unhurried pace"])
+    monkeypatch.setattr(autodraft, "_connector", lambda: stub)
+
+    response = client.post("/api/assets/auto", json={
+        "kind": "character", "name": "卖家", "hint": "胖胖的中年男人",
+        "current": {"description": "已有描述", "voice": ""}})
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    assert data["description"] == "已有描述"      # 作者写过的字不动
+    assert "adult male" in data["voice"]         # 空的被起草
+    assert data["drafted"] == ["voice"]
+    assert len(stub.calls) == 1
+
+
+def test_scene_auto_drafts_the_ambience(client, monkeypatch):
+    from webapp.services import autodraft
+    stub = _StubConnector(["Quiet room tone, faint clock ticking"])
+    monkeypatch.setattr(autodraft, "_connector", lambda: stub)
+
+    response = client.post("/api/assets/auto", json={
+        "kind": "scene", "name": "客厅",
+        "current": {"description": "夜晚的客厅", "ambience": ""}})
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    assert data["description"] == "夜晚的客厅"
+    assert "clock" in data["ambience"]
+    assert data["drafted"] == ["ambience"]
+
+
+def test_auto_without_a_platform_is_a_friendly_error(client, monkeypatch):
+    from webapp.services import autodraft
+    monkeypatch.setattr(autodraft.llm, "current_platform", lambda: "")
+    for path, body in (
+            ("/api/scripts/auto", {"mode": "concept", "concept": "点子"}),
+            ("/api/assets/auto", {"kind": "character", "name": "卖家"})):
+        response = client.post(path, json=body)
+        assert response.status_code == 400, (path, response.get_json())
+        assert "大模型页" in response.get_json()["error"]
+
+
+def test_the_page_can_ask_which_run_name_a_submit_would_use(client):
+    """The video page shows the name the engine will actually get - a
+    Chinese script name has to become a legal one."""
+    response = client.post("/api/render/run_name",
+                           json={"script": "股神", "run_name": ""})
+    assert response.status_code == 200
+    name = response.get_json()["run_name"]
+    assert name and len(name) <= 96
+    assert all(ch.isalnum() or ch in "._-" for ch in name), name
+    assert name[0].isalnum() and name[-1].isalnum(), name
+
+    typed = client.post("/api/render/run_name",
+                        json={"script": "股神", "run_name": "my_run-1"})
+    assert typed.get_json()["run_name"] == "my_run-1"
 
 
 def test_the_platforms_are_listed(client):

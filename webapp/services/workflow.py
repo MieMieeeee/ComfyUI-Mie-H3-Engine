@@ -23,6 +23,7 @@ import json
 import pathlib
 
 from webapp import config
+from webapp.services import runname
 
 #: Node ids for the generated asset section. They are high enough not to
 #: clash with the preset's chain nodes.
@@ -67,12 +68,19 @@ def build(script_name: str, script_json: dict,
     nodes = json.loads(json.dumps(workflow if workflow is not None else _preset()))
     roles = script_roles(script_json)
 
-    # The preset's asset section is replaced wholesale.
+    # The preset's asset section is replaced wholesale. Which node
+    # replaces which is remembered: every link the preset made to one of
+    # them has to follow, or it dangles and ComfyUI rejects that node on
+    # validation (the display node pointed at the old plan node, and the
+    # submission came back with a validation error for it).
+    replaced_types = (
+        "MieH3LoadScriptAsset", "MieH3ScriptToPlan",
+        "AssetToSlots|Mie", "MieH3LoadAssetRoster", "LoadAssetV2|Mie",
+    )
+    old_ids = {}
     for node_id in list(nodes):
-        if nodes[node_id]["class_type"] in (
-            "MieH3LoadScriptAsset", "MieH3ScriptToPlan",
-            "AssetToSlots|Mie", "MieH3LoadAssetRoster", "LoadAssetV2|Mie",
-        ):
+        if nodes[node_id]["class_type"] in replaced_types:
+            old_ids.setdefault(nodes[node_id]["class_type"], []).append(node_id)
             del nodes[node_id]
 
     engine = "comfyui-minimaxh3-contex-loop"
@@ -122,7 +130,10 @@ def build(script_name: str, script_json: dict,
     plan_node["inputs"]["plan_json"] = json.dumps(
         {"shots": [{"id": "intro", "prompt": "Describe the opening shot."}]},
         ensure_ascii=False)
-    plan_node["inputs"]["run_name"] = run_name or ("sb_web_%s" % script_name[:24])
+    # The engine takes the run name verbatim - a name it cannot accept
+    # is an error, not something it rewrites. So the name is made legal
+    # here, where the app is the author of it.
+    plan_node["inputs"]["run_name"] = runname.effective_run_name(run_name, script_name)
     plan_node["inputs"]["width"] = width
     plan_node["inputs"]["height"] = height
     plan_node["inputs"]["default_steps"] = steps
@@ -155,5 +166,24 @@ def build(script_name: str, script_json: dict,
     for index, (role, node_id) in enumerate(asset_nodes):
         sampler["inputs"]["ref_audios.ref_audio_%d" % index] = [
             _ID_SLOTS, 11 + index]
+
+    # Follow the replaced nodes: a link the preset made to one of them
+    # now points at its replacement. The slot stays the same - the
+    # replacement has the same class, so it has the same outputs.
+    replacement = {}
+    for class_type, new_ids in (
+            ("MieH3LoadScriptAsset", [_ID_SCRIPT]),
+            ("MieH3ScriptToPlan", [_ID_PLAN]),
+            ("AssetToSlots|Mie", [_ID_SLOTS]),
+            ("MieH3LoadAssetRoster", [_ID_ROSTER]),
+            ("LoadAssetV2|Mie", [node_id for _role, node_id in asset_nodes])):
+        for old_id, new_id in zip(old_ids.get(class_type, []), new_ids):
+            replacement[old_id] = new_id
+    if replacement:
+        for node in nodes.values():
+            for key, value in (node.get("inputs") or {}).items():
+                if (isinstance(value, list) and len(value) == 2
+                        and isinstance(value[0], str) and value[0] in replacement):
+                    node["inputs"][key] = [replacement[value[0]], value[1]]
 
     return nodes

@@ -120,6 +120,22 @@ def history(prompt_id: str) -> dict:
     return data.get(prompt_id, {})
 
 
+def queue_ids() -> set:
+    """The prompt ids ComfyUI is running or waiting for.
+
+    A prompt that is neither in the queue nor in the history is gone:
+    it failed before its history entry was written, was cancelled, or
+    was evicted from the history. That is what tells "still running"
+    apart from "already dead" for a job the app cannot see any more.
+    """
+    data = _json(base_url() + "/queue")
+    ids = set()
+    for entry in (data.get("queue_running") or []) + (data.get("queue_pending") or []):
+        if len(entry) > 1 and entry[1]:
+            ids.add(str(entry[1]))
+    return ids
+
+
 def prompt_outputs(prompt_id: str) -> dict:
     """The text outputs of a finished prompt, joined.
 
