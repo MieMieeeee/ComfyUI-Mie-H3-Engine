@@ -22,25 +22,31 @@ from __future__ import annotations
 import json
 import pathlib
 import shutil
+import uuid
 
 from mie_craft.assets import library as _library
 from mie_craft.assets import script_asset as _script_asset
 
 from webapp import config
+from webapp.services import library
 
 #: How many snapshots are kept. Each one is a small JSON file.
 KEEP = 20
 
 
 def write_script_snapshot(run_name: str, script_name: str, payload: dict) -> str:
-    """Pin one script into the run's snapshot library.
+    """Pin one script into a snapshot library.
 
     The layout is the library's own (``storyboards/<name>/storyboard.json``),
     because that is what the loader resolves ``library_dir`` against. The
     JSON's ``name`` has to equal the directory name - the loader checks
     that, the same way the library does.
+
+    The directory is named after the submission, not after the run: two
+    submissions under one run name would otherwise write the same
+    folder, and one of them would read the other's script.
     """
-    root = config.SNAPSHOT_DIR / run_name
+    root = config.SNAPSHOT_DIR / _snapshot_dirname(run_name)
     target = root / "storyboards" / script_name
     target.mkdir(parents=True, exist_ok=True)
     pinned = dict(payload)
@@ -50,10 +56,22 @@ def write_script_snapshot(run_name: str, script_name: str, payload: dict) -> str
     return str(root)
 
 
+def _snapshot_dirname(run_name: str) -> str:
+    """One directory per submission, so nothing shares a snapshot."""
+    token = uuid.uuid4().hex[:8]
+    return "%s-%s" % (run_name, token)
+
+
 def script_fingerprint(script_name: str) -> str:
-    """The content hash of the library's script, or "" if unreadable."""
+    """The content hash of the library's script, or "" if unreadable.
+
+    The library directory is passed explicitly: the blank default
+    resolves against mie_craft's own idea of where the library is, which
+    is not necessarily the pack this app is pointed at - and a hash of
+    "not found" would make every asset look changed.
+    """
     try:
-        return _script_asset.storyboard_cache_key("", script_name)
+        return _script_asset.storyboard_cache_key(library.library_dir(), script_name)
     except Exception:  # noqa: BLE001 - a missing script has no hash
         return ""
 
@@ -62,8 +80,8 @@ def asset_fingerprint(kind: str, name: str) -> str:
     """The content hash of one character or scene asset."""
     try:
         if kind == "scene":
-            return _library.scene_cache_key("", name)
-        return _library.character_cache_key("", name)
+            return _library.scene_cache_key(library.library_dir(), name)
+        return _library.character_cache_key(library.library_dir(), name)
     except Exception:  # noqa: BLE001
         return ""
 
@@ -84,12 +102,25 @@ def changed_assets(kind: str, names: dict, marks: dict) -> list:
     return changed
 
 
-def prune(keep: int = KEEP) -> None:
-    """Drop the oldest snapshots, so the folder does not grow forever."""
+def prune(keep: int = KEEP, protect: set = None) -> None:
+    """Drop the oldest snapshots, so the folder does not grow forever.
+
+    ``protect`` holds the snapshot directories the tasks that are still
+    running or waiting need: deleting one of those would kill the render
+    when it finally starts reading it. A finished task's snapshot goes
+    with the next sweep.
+    """
     root = config.SNAPSHOT_DIR
     if not root.is_dir():
         return
+    protected = {pathlib.Path(str(p)).name for p in (protect or set())}
     runs = sorted((p for p in root.iterdir() if p.is_dir()),
                   key=lambda p: p.stat().st_mtime, reverse=True)
-    for stale in runs[keep:]:
-        shutil.rmtree(stale, ignore_errors=True)
+    kept = 0
+    for run in runs:
+        if run.name in protected:
+            continue
+        if kept < keep:
+            kept += 1
+            continue
+        shutil.rmtree(run, ignore_errors=True)

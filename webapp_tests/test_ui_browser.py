@@ -287,3 +287,54 @@ def test_a_script_can_be_created_edited_and_deleted(page):
     page.wait_for_timeout(1500)
     assert row_named(page, "测试剧本") is None
     assert api_get("/api/scripts")["names"] == []
+
+
+def test_an_unsaved_draft_is_offered_back(page):
+    """The draft has to survive the page closing, and be OFFERED - not
+    deleted before anyone can see it."""
+    page.goto(BASE + "/scripts", wait_until="networkidle")
+    page.wait_for_timeout(700)
+    button(page, "＋ 新建").click()
+    page.wait_for_timeout(500)
+    page.get_by_placeholder("剧本名字").fill("草稿剧本")
+    page.locator(".editor-pane textarea.code").fill("角色1：草稿台词")
+    # 等防抖把草稿写进本地
+    page.wait_for_timeout(1400)
+
+    # 关掉页面（换一页），再回来：草稿还在，而且有人给。
+    page.goto(BASE + "/assets", wait_until="networkidle")
+    page.wait_for_timeout(400)
+    page.goto(BASE + "/scripts", wait_until="networkidle")
+    page.wait_for_timeout(700)
+    stored = page.evaluate(
+        "() => window.localStorage.getItem('mie-script-draft:new')")
+    assert stored, "the draft was never stored"
+
+    button(page, "＋ 新建").click()
+    page.wait_for_timeout(600)
+    banner = visible(page, ".draft-box")
+    assert banner.count() >= 1, "nobody was offered the draft"
+    assert "发现未保存的草稿" in banner.first.inner_text()
+    button(page, "↩ 恢复草稿").click()
+    page.wait_for_timeout(700)
+    assert page.get_by_placeholder("剧本名字").input_value() == "草稿剧本"
+    assert "草稿台词" in page.locator(".editor-pane textarea.code").input_value()
+
+
+def test_a_half_written_json_is_unsaved_work(page):
+    """JSON that does not parse yet is still the author's work: it must
+    count as unsaved, and it must not be thrown away."""
+    page.goto(BASE + "/scripts", wait_until="networkidle")
+    page.wait_for_timeout(700)
+    button(page, "＋ 新建").click()
+    page.wait_for_timeout(500)
+    button(page, "🧾 JSON 源码").click()
+    page.wait_for_timeout(400)
+    page.locator(".json-pane textarea.code").fill('{"version": 2, "name": "没写完')
+    page.wait_for_timeout(1400)   # 等草稿的防抖写进本地
+
+    badge = visible(page, ".card-head .badge").first.inner_text()
+    assert badge == "未保存", badge
+    stored = page.evaluate(
+        "() => window.localStorage.getItem('mie-script-draft:new')")
+    assert stored and "没写完" in stored, "the raw text was not kept"

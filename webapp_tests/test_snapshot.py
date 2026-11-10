@@ -28,8 +28,10 @@ def snapshot_dir(plugin_root, tmp_path, monkeypatch):
 def test_the_snapshot_is_a_library_the_loader_can_read(snapshot_dir):
     """The layout is the library's own, because that is what the loader
     resolves ``library_dir`` against."""
+    import os
     root = snapshot.write_script_snapshot("sb_run", "测试剧本", SCRIPT)
-    path = snapshot_dir / "sb_run" / "storyboards" / "测试剧本" / "storyboard.json"
+    path = (snapshot_dir / os.path.basename(root) / "storyboards"
+            / "测试剧本" / "storyboard.json")
     assert path.is_file()
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["name"] == "测试剧本"

@@ -23,8 +23,13 @@ from webapp import config
 from webapp.services import comfy, library, runname, snapshot, workflow
 
 #: The submit lock. It covers "look at the queue, then submit" - the
-#: window in which two submissions could interleave.
+#: window in which two submissions could interleave. It also covers the
+#: name check, the reservation and the snapshot, so two requests with
+#: the same run name cannot both get through.
 _submit_lock = threading.Lock()
+
+#: The run names being submitted right now. A name in here is taken.
+_reserved: set = set()
 
 #: The jobs this process has started: {job_id: record}.
 _jobs: dict[str, dict] = {}
@@ -58,9 +63,13 @@ def _save_jobs() -> None:
     with _jobs_lock:
         records = list(_jobs.values())[-_JOB_HISTORY:]
     # Only what the list needs: the outputs are re-read from ComfyUI.
+    # The provenance fields DO have to be saved - without the asset names
+    # and their hashes, a restarted app cannot tell that the inputs
+    # changed under a queued run.
     slim = [{key: record.get(key) for key in
              ("job_id", "number", "script", "run_name", "submitted_at",
-              "status", "error", "nodes")}
+              "status", "error", "nodes", "role_assets", "asset_hashes",
+              "script_hash", "params", "snapshot_dir")}
             for record in records]
     try:
         config.ensure_dirs()
@@ -99,20 +108,29 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
     # One name for both the graph and the job record: the engine takes
     # it verbatim, so the record and the run on disk must agree.
     effective = runname.effective_run_name(run_name, script_name)
-    _refuse_a_duplicate(effective, script_name)
-    # The loader reads the library when the prompt RUNS, so the script
-    # is pinned into a snapshot now: editing it while this waits in the
-    # queue must not change what gets rendered.
-    snapshot_dir = snapshot.write_script_snapshot(
-        effective, script_name, script["json"])
-    graph = workflow.build(
-        script_name, script["json"], role_assets, run_name=effective,
-        width=width, height=height, steps=steps, duration=duration,
-        library_dir=snapshot_dir)
-
     client_id = "mie-web-%s" % uuid.uuid4().hex[:12]
+
+    # Everything that can collide is inside one critical section: the
+    # name check, the reservation, the snapshot and the queueing. Two
+    # requests with the same name used to both pass the check and both
+    # land in the queue, and they write one folder.
     with _submit_lock:
-        result = comfy.submit(graph, client_id=client_id)
+        _refuse_a_duplicate(effective, script_name)
+        _reserve(effective, script_name)
+        try:
+            # The loader reads the library when the prompt RUNS, so the
+            # script is pinned into a snapshot now: editing it while this
+            # waits in the queue must not change what gets rendered.
+            snapshot_dir = snapshot.write_script_snapshot(
+                effective, script_name, script["json"])
+            graph = workflow.build(
+                script_name, script["json"], role_assets, run_name=effective,
+                width=width, height=height, steps=steps, duration=duration,
+                library_dir=snapshot_dir)
+            result = comfy.submit(graph, client_id=client_id)
+        except Exception:
+            _release(effective)
+            raise
 
     record = {
         "job_id": result.get("prompt_id"),
@@ -131,12 +149,32 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
                          for role_id, name in (role_assets or {}).items() if name},
         "params": {"width": width, "height": height,
                    "steps": steps, "duration": duration},
+        "snapshot_dir": snapshot_dir,
     }
     with _jobs_lock:
         _jobs[record["job_id"]] = record
+    # The reservation only had to cover the window between the check and
+    # the record being in the table - from here on the running/queued
+    # records keep the name taken. Holding it forever would refuse the
+    # same name for good, and say "being submitted" about a run that
+    # finished hours ago.
+    _release(effective)
     _save_jobs()
-    snapshot.prune()
+    snapshot.prune(protect=_active_snapshots())
     return record
+
+
+def _active_snapshots() -> set:
+    """The snapshot directories the running and waiting tasks need.
+
+    A queued task reads its snapshot when it STARTS, so the snapshot has
+    to outlive the queue, not just the submission.
+    """
+    with _jobs_lock:
+        records = list(_jobs.values())
+    return {record.get("snapshot_dir") for record in records
+            if record.get("status") in ("running", "queued")
+            and record.get("snapshot_dir")}
 
 
 def _refuse_a_duplicate(run_name: str, script_name: str) -> None:
@@ -144,7 +182,13 @@ def _refuse_a_duplicate(run_name: str, script_name: str) -> None:
 
     Two runs with the same name write the same folder, and the second
     one overwrites the first one's segments while it is still running.
+    The names being submitted RIGHT NOW count as taken too: the check
+    and the reservation happen in the same critical section, so two
+    concurrent requests cannot both pass it.
     """
+    if run_name in _reserved:
+        raise ValueError(
+            "同名任务 %r 正在提交中：等它完成，或者换一个片段名。" % run_name)
     for record in list(_jobs.values()):
         if record.get("run_name") != run_name:
             continue
@@ -153,6 +197,16 @@ def _refuse_a_duplicate(run_name: str, script_name: str) -> None:
                 "同名任务 %r 已经在跑（#%s）：两个运行会写同一个目录，"
                 "先等它结束，或者换一个片段名。"
                 % (run_name, record.get("number")))
+
+
+def _reserve(run_name: str, script_name: str) -> None:
+    """Claim a run name for the submission in flight."""
+    _reserved.add(run_name)
+
+
+def _release(run_name: str) -> None:
+    """Give the name back when the submission did not happen."""
+    _reserved.discard(run_name)
 
 
 def job(job_id: str, queued: tuple = None) -> dict:
@@ -184,10 +238,24 @@ def job(job_id: str, queued: tuple = None) -> dict:
         return record
     status = entry.get("status", {})
     record["status"] = status.get("status_str", "success")
+    interrupted = False
+    failed = False
     for message in status.get("messages") or []:
         if message[0] == "execution_error":
+            failed = True
             record["status"] = "error"
             record["error"] = message[1].get("exception_message", "")
+        elif message[0] == "execution_interrupted":
+            interrupted = True
+    if interrupted and not failed:
+        # ComfyUI reports an interrupted run as status_str "error" with
+        # no exception - it was stopped, not broken. Saying "error" with
+        # an empty reason would be a lie in both halves.
+        record["status"] = "interrupted"
+        record["error"] = ("这次运行被中断了（可能是在工作台里点了停止，"
+                           "或 ComfyUI 被打断），不是渲染出错。")
+    if record["status"] == "error" and not record.get("error"):
+        record["error"] = "ComfyUI 报告这次运行失败，但没有给出具体原因。"
     outputs = entry.get("outputs") or {}
     texts = {}
     for node_id, node_out in outputs.items():

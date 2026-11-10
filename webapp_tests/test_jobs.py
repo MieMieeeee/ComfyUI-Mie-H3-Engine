@@ -83,6 +83,39 @@ def test_a_failed_run_reports_the_error_comfyui_gave(clean_jobs, monkeypatch):
     assert "run_name" in job["error"]
 
 
+def test_an_interrupted_run_is_not_reported_as_an_error(clean_jobs, monkeypatch):
+    """ComfyUI files an interrupted run as status_str "error" with no
+    exception - it was stopped, not broken. Reporting it as a failure
+    with an empty reason is wrong in both halves."""
+    runner._jobs["job-1"] = _record()
+    monkeypatch.setattr(runner.comfy, "history", lambda pid: {
+        "status": {"status_str": "error", "completed": False, "messages": [
+            ["execution_start", {"prompt_id": "job-1"}],
+            ["execution_interrupted", {"node_id": "13"}]]},
+        "outputs": {},
+    })
+    monkeypatch.setattr(runner.comfy, "collect_artifacts", lambda name: [])
+
+    job = runner.job("job-1")
+    assert job["status"] == "interrupted"
+    assert "中断" in job["error"]
+    assert job["error"].strip(), "an interrupted run still has to say why"
+
+
+def test_a_failure_without_a_reason_still_says_something(clean_jobs, monkeypatch):
+    """An error with no message is still an error - but the list must not
+    show a blank reason."""
+    runner._jobs["job-1"] = _record()
+    monkeypatch.setattr(runner.comfy, "history", lambda pid: {
+        "status": {"status_str": "error", "messages": []}, "outputs": {},
+    })
+    monkeypatch.setattr(runner.comfy, "collect_artifacts", lambda name: [])
+
+    job = runner.job("job-1")
+    assert job["status"] == "error"
+    assert job["error"].strip()
+
+
 def test_the_jobs_survive_a_restart(clean_jobs, plugin_root):
     """A failed render must not vanish when the web app restarts."""
     runner._jobs["job-1"] = _record(status="error", error="提交后立刻失败")

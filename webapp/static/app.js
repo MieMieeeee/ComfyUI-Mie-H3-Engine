@@ -589,6 +589,9 @@ function scriptsPage() {
     /* ---------------------------------------------------------------- */
 
     get isDirty() {
+      // JSON 源码标签页里还没解析成功的内容也算未保存：它还没回到模型里，
+      // 只比模型的话，这段字会被当成不存在，切走就没了。
+      if (this.jsonDirty) return true;
       if (!this.model) return false;
       try { return JSON.stringify(this.model) !== this.baseline; }
       catch { return true; }
@@ -599,9 +602,15 @@ function scriptsPage() {
       return this.isDirty ? "未保存" : "已保存";
     },
 
-    markSaved() {
+    /* 只记基线，不动草稿：打开一份剧本时用它，之后还要去读草稿。 */
+    setBaseline() {
       this.baseline = JSON.stringify(this.model || {});
       this.sourceSnapshot = this.sourceSignature();
+    },
+
+    /* 真的保存成功之后才用这个：基线更新，草稿也清掉。 */
+    markSaved() {
+      this.setBaseline();
       this.clearDraft();
     },
 
@@ -662,7 +671,7 @@ function scriptsPage() {
         window.localStorage.setItem(this.draftKey(), JSON.stringify({
           model: this.model,
           // JSON 标签页里的改动还没回到模型里，原文得一起存。
-          raw: (this.tab === "json" && this.jsonDirty) ? this.rawText : null,
+          raw: this.jsonDirty ? this.rawText : null,
         }));
       } catch (error) { /* 隐私模式/配额：没有草稿而已 */ }
     },
@@ -680,7 +689,7 @@ function scriptsPage() {
 
     restoreDraft() {
       if (!this.recoveredDraft) return;
-      const draft = this.recoveredDraft;
+      const draft = this.recoveredDraft.draft || this.recoveredDraft;
       this.recoveredDraft = null;
       let model = draft.model || draft;
       let raw = null;
@@ -698,10 +707,9 @@ function scriptsPage() {
 
     discardDraft() {
       if (!this.recoveredDraft) return;
-      try {
-        window.localStorage.removeItem(
-          this.draftKey(this.recoveredDraft.name || this.selected));
-      } catch (error) { /* 同上 */ }
+      const name = this.recoveredDraft.name || this.selected;
+      try { window.localStorage.removeItem(this.draftKey(name)); }
+      catch (error) { /* 同上 */ }
       this.recoveredDraft = null;
     },
 
@@ -741,11 +749,13 @@ function scriptsPage() {
         // 取在同步之前，一打开就会被算成"有未保存的改动"。
         this.syncDerived();
         this.adoptGroupingFromShots();
-        this.markSaved();
-        // 之前那次没保存就关掉的改动，还在本地。
+        // 草稿先读，再记基线：记基线不碰草稿，但顺序也不能反 -—
+        // 上次没保存就关掉的改动，还在本地。
         const draft = this.readDraft(name);
+        this.setBaseline();
         if (draft && JSON.stringify(draft) !== this.baseline) {
-          this.recoveredDraft = draft;
+          // 记下它是哪一份剧本的：丢弃时要用同一个键去删。
+          this.recoveredDraft = { name, draft };
         }
         this.queueValidate();
       } catch (error) {
@@ -782,7 +792,12 @@ function scriptsPage() {
       });
       this.tab = "edit";
       this.syncDerived();
-      this.markSaved();
+      // 只记基线，不清草稿：上次没保存就关掉的新剧本，也该被找回。
+      this.setBaseline();
+      const draft = this.readDraft();
+      if (draft && JSON.stringify(draft) !== this.baseline) {
+        this.recoveredDraft = { name: this.selected || "new", draft };
+      }
       this.queueValidate();
     },
 

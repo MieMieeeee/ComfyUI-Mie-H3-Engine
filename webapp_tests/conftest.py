@@ -92,9 +92,15 @@ def _isolate_the_job_log(tmp_path, monkeypatch):
     The job table is module-level and the runner persists it on every
     status change, so a test that forgets the plugin_root fixture would
     quietly append its fake jobs to the real file.
+
+    The snapshot folder goes with it: a submission pins its script into
+    a snapshot, so a test that calls the runner leaves a folder behind
+    in the user's real snapshot directory.
     """
 
     monkeypatch.setattr(config, "JOBS_FILE", tmp_path / "jobs.json")
+
+    monkeypatch.setattr(config, "SNAPSHOT_DIR", tmp_path / "snapshots")
 
 
 
