@@ -440,6 +440,11 @@ def test_the_task_card_leads_with_the_finished_film(page):
     card = visible(page, ".job-row").first
     assert card.count() > 0, "the task list is empty"
 
+    # 播放器是点开才挂的：一次挂二十几个，每个都会去拉一次 mp4 的
+    # 元数据，页面会卡住。
+    assert card.locator("video.delivery-player").count() == 0,         "the player is mounted before anyone asked for it"
+    card.locator("button", has_text="播放").first.click()
+    page.wait_for_timeout(400)
     player = card.locator("video.delivery-player")
     assert player.count() == 1, "there is no player for the film"
     assert "sb_demo.mp4" in (player.get_attribute("src") or "")

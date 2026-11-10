@@ -42,7 +42,8 @@ def test_a_job_comfyui_has_forgotten_is_not_running(clean_jobs, monkeypatch):
     runner._jobs["job-1"] = _record()
     monkeypatch.setattr(runner.comfy, "history", lambda pid: {})
     monkeypatch.setattr(runner.comfy, "queue_ids", lambda: (set(), set()))
-    monkeypatch.setattr(runner.comfy, "collect_artifacts", lambda name: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
 
     job = runner.job("job-1")
     assert job["status"] == "interrupted"
@@ -53,7 +54,8 @@ def test_a_job_still_in_the_queue_is_running(clean_jobs, monkeypatch):
     runner._jobs["job-1"] = _record()
     monkeypatch.setattr(runner.comfy, "history", lambda pid: {})
     monkeypatch.setattr(runner.comfy, "queue_ids", lambda: ({"job-1"}, set()))
-    monkeypatch.setattr(runner.comfy, "collect_artifacts", lambda name: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
 
     assert runner.job("job-1")["status"] == "running"
 
@@ -64,7 +66,8 @@ def test_a_job_waiting_in_the_queue_is_not_running(clean_jobs, monkeypatch):
     runner._jobs["job-1"] = _record()
     monkeypatch.setattr(runner.comfy, "history", lambda pid: {})
     monkeypatch.setattr(runner.comfy, "queue_ids", lambda: (set(), {"job-1"}))
-    monkeypatch.setattr(runner.comfy, "collect_artifacts", lambda name: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
 
     assert runner.job("job-1")["status"] == "queued"
 
@@ -76,7 +79,8 @@ def test_a_failed_run_reports_the_error_comfyui_gave(clean_jobs, monkeypatch):
             ["execution_error", {"exception_message": "H3 run_name must be ..."}]]},
         "outputs": {},
     })
-    monkeypatch.setattr(runner.comfy, "collect_artifacts", lambda name: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
 
     job = runner.job("job-1")
     assert job["status"] == "error"
@@ -94,7 +98,8 @@ def test_an_interrupted_run_is_not_reported_as_an_error(clean_jobs, monkeypatch)
             ["execution_interrupted", {"node_id": "13"}]]},
         "outputs": {},
     })
-    monkeypatch.setattr(runner.comfy, "collect_artifacts", lambda name: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
 
     job = runner.job("job-1")
     assert job["status"] == "interrupted"
@@ -109,7 +114,8 @@ def test_a_failure_without_a_reason_still_says_something(clean_jobs, monkeypatch
     monkeypatch.setattr(runner.comfy, "history", lambda pid: {
         "status": {"status_str": "error", "messages": []}, "outputs": {},
     })
-    monkeypatch.setattr(runner.comfy, "collect_artifacts", lambda name: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
 
     job = runner.job("job-1")
     assert job["status"] == "error"
@@ -168,7 +174,8 @@ def test_the_page_shows_a_dead_job_as_an_error(clean_jobs, client, monkeypatch):
     monkeypatch.setattr(runner.comfy, "history", lambda pid: {})
     monkeypatch.setattr(runner.comfy, "queue_ids", lambda: (set(), set()))
     monkeypatch.setattr(runner.comfy, "recent_runs", lambda limit=20: [])
-    monkeypatch.setattr(runner.comfy, "collect_artifacts", lambda name: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
 
     payload = client.get("/api/render/jobs").get_json()
     job = next(j for j in payload["jobs"] if j["job_id"] == "job-1")

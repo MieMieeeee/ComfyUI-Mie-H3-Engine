@@ -2,7 +2,7 @@
 {% block title %}视频制作 · ComfyUI-Mie{% endblock %}
 
 {% block content %}
-<section class="panel" x-data="videoPage()" x-init="init()">
+<section class="panel" x-data="videoPage()">
   <div class="panel-head">
     <h2>🎞️ 视频制作</h2>
     <div class="panel-head-actions">
@@ -120,15 +120,21 @@
 
             <!-- 正式成片：这就是作者要拿走的东西。
                  x-if 而不是 x-show：没有成片的任务不能去求值
-                 j.deliverable.relpath。 -->
+                 j.deliverable.relpath。
+                 播放器是点开才挂的：一次挂二十几个播放器，每个都会去
+                 拉一次 mp4 的元数据，页面会卡住。 -->
             <template x-if="j.deliverable">
               <div class="delivery">
-                <video class="delivery-player" controls preload="metadata"
-                       :src="'/media/' + j.deliverable.relpath"></video>
+                <template x-if="playingJob === j.job_id">
+                  <video class="delivery-player" controls preload="metadata"
+                         :src="'/media/' + j.deliverable.relpath"></video>
+                </template>
                 <div class="delivery-meta">
                   <span class="cell-strong" x-text="j.deliverable.name"></span>
                   <span class="muted small"
                         x-text="durationText(j.manifest)"></span>
+                  <button class="btn" type="button" x-show="playingJob !== j.job_id"
+                          @click="playJob(j)">▶ 播放</button>
                   <a class="btn primary" :href="'/media/' + j.deliverable.relpath"
                      download x-text="'⬇ 下载成片'"></a>
                 </div>

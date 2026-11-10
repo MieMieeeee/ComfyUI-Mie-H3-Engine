@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -176,41 +177,96 @@ def output_files(subfolder: str = "") -> list[dict]:
     return []
 
 
-def collect_artifacts(run_name: str) -> list[dict]:
+def scan_output(max_age: float = None) -> list[dict]:
+    """Every file in the output tree, read ONCE.
+
+    The tree holds thousands of files and the task list asks about
+    every run at once. Walking it once per run made the list take
+    seconds - long enough for the page to feel stuck.
+
+    The result is reused for a few seconds: the page polls every three
+    seconds, and a render's files do not change in between.
+    """
+    now = time.time()
+    root = str(config.COMFYUI_ROOT)
+    if (max_age is None and _scan_cache["entries"]
+            and _scan_cache["root"] == root
+            and now - _scan_cache["at"] < _SCAN_TTL):
+        return _scan_cache["entries"]
+    entries = _walk_output()
+    _scan_cache["root"] = root
+    _scan_cache["at"] = now
+    _scan_cache["entries"] = entries
+    return entries
+
+
+#: The last scan of the output tree, when it was made, and which root it
+#: was of - a changed root must not be served from the old scan.
+_scan_cache: dict = {"root": None, "at": 0.0, "entries": []}
+
+#: How long a scan stays good for. The page polls every three seconds;
+#: a file appearing a few seconds late is nothing next to walking the
+#: whole tree on every poll.
+_SCAN_TTL = 5.0
+
+
+def _walk_output() -> list[dict]:
+    """The output tree, file by file."""
+    entries = []
+    for sub in config.OUTPUT_SUBDIRS:
+        root = config.COMFYUI_ROOT / "output" / sub
+        if not root.is_dir():
+            continue
+        for dirpath, _dirnames, filenames in os.walk(root):
+            for filename in filenames:
+                path = pathlib.Path(dirpath) / filename
+                try:
+                    size = path.stat().st_size
+                except OSError:
+                    continue
+                relpath = str(
+                    path.relative_to(config.COMFYUI_ROOT / "output")).replace("\\", "/")
+                entries.append({
+                    "path": path,
+                    "root": root,
+                    # 相对目录的各段，算一次就够：匹配每个任务时都要用。
+                    "parts": path.relative_to(root).parts,
+                    "name": filename,
+                    "relpath": relpath,
+                    "size": size,
+                    "kind": _kind_of(path),
+                    "role": _role_of(relpath),
+                })
+    return entries
+
+
+def collect_artifacts(run_name: str, index: list = None) -> list[dict]:
     """The finished render's files, read straight off the disk.
 
     The web app runs on the same machine as ComfyUI (the plan's D8), so
     the output directory is a local path - no HTTP round trip, and the
     files are served by the app's own /media route.
 
+    ``index`` is a scan of the whole tree (see :func:`scan_output`); pass
+    it when asking about several runs at once, so the tree is walked
+    once instead of once per run.
+
     Every file gets a ROLE as well as a kind: the finished film, the
     per-shot clips, the audio and the technical files (json, locks,
     checkpoints) are different things to the author, and a flat list of
     nineteen of them answers none of the questions.
     """
+    entries = index if index is not None else scan_output()
     found = []
-    for sub in config.OUTPUT_SUBDIRS:
-        root = config.COMFYUI_ROOT / "output" / sub
-        if not root.is_dir():
+    for entry in entries:
+        if run_name and not _belongs_to_run(entry, run_name):
             continue
-        for path in sorted(root.rglob("*")):
-            if not path.is_file():
-                continue
-            if run_name and not _belongs_to_run(path, root, run_name):
-                continue
-            relpath = str(path.relative_to(config.COMFYUI_ROOT / "output")).replace("\\", "/")
-            found.append({
-                "name": path.name,
-                "relpath": relpath,
-                "size": path.stat().st_size,
-                "kind": _kind_of(path),
-                "role": _role_of(relpath),
-            })
+        found.append({key: entry[key] for key in
+                      ("name", "relpath", "size", "kind", "role")})
     return found
 
 
-def _belongs_to_run(path: pathlib.Path, root: pathlib.Path,
-                    run_name: str) -> bool:
+def _belongs_to_run(entry: dict, run_name: str) -> bool:
     """Whether this file belongs to THIS run.
 
     Matching on a substring would give one version another version's
@@ -221,10 +277,10 @@ def _belongs_to_run(path: pathlib.Path, root: pathlib.Path,
     The flat directory (live_storyboards) has no run directory, so there
     the file name has to carry the name.
     """
-    parts = path.relative_to(root).parts
+    parts = entry["parts"]
     if len(parts) > 1:
         return run_name in parts[:-1]
-    return path.name.startswith(run_name)
+    return entry["name"].startswith(run_name)
 
 
 def _role_of(relpath: str) -> str:

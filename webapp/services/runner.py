@@ -240,8 +240,12 @@ def _release(run_name: str) -> None:
     _reserved.discard(run_name)
 
 
-def job(job_id: str, queued: tuple = None) -> dict:
-    """One job, with its current state read from ComfyUI."""
+def job(job_id: str, queued: tuple = None, index: list = None) -> dict:
+    """One job, with its current state read from ComfyUI.
+
+    ``index`` is a scan of the output tree, shared by the callers
+    that ask about many runs at once.
+    """
     with _jobs_lock:
         record = _jobs.get(job_id)
     if record is None:
@@ -266,7 +270,7 @@ def job(job_id: str, queued: tuple = None) -> dict:
                 "ComfyUI 里已找不到这次运行：可能提交后立刻失败、被中断，"
                 "或历史已被清理。")
         # 中断的任务，磁盘上可能已经有片段甚至成片：作者要看得见。
-        _attach_artifacts(record)
+        _attach_artifacts(record, index=index)
         _remember(record)
         return record
     status = entry.get("status", {})
@@ -297,19 +301,20 @@ def job(job_id: str, queued: tuple = None) -> dict:
             texts[node_id] = "".join(
                 p if isinstance(p, str) else str(p) for p in pieces)
     record["texts"] = texts
-    _attach_artifacts(record, outputs)
+    _attach_artifacts(record, outputs, index=index)
     _remember(record)
     return record
 
 
-def _attach_artifacts(record: dict, outputs: dict = None) -> None:
+def _attach_artifacts(record: dict, outputs: dict = None,
+                       index: list = None) -> None:
     """Put the delivery on the record: the film first, then the shots,
     then the engine's own files.
 
     The author wants the film, not the nineteen files that came with
     it.
     """
-    artifacts = comfy.collect_artifacts(record.get("run_name") or "")
+    artifacts = comfy.collect_artifacts(record.get("run_name") or "", index)
     for node_out in (outputs or {}).values():
         if node_out.get("images"):
             artifacts = artifacts + [
@@ -349,7 +354,10 @@ def jobs() -> list[dict]:
         queued = comfy.queue_ids()
     except Exception:  # noqa: BLE001 - ComfyUI unreachable: keep the list
         queued = (set(), set())
-    live = [job(r["job_id"], queued) for r in records]
+    # One walk of the output tree for the whole list: the tree holds
+    # thousands of files and the list asks about every run at once.
+    index = comfy.scan_output()
+    live = [job(r["job_id"], queued, index) for r in records]
     for record in live:
         record["inputs_changed"] = _inputs_changed(record)
 

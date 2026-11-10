@@ -1473,6 +1473,7 @@ function videoPage() {
     statusText: "",
     effectiveRunName: "",
     nextTitle: "",           /* 这一次生成的作品名（第几版） */
+    playingJob: "",         /* 正在播放的那个任务（一次只挂一个播放器） */
     pollTimer: null,
     submitting: false,
     assetDetails: {},
@@ -1674,6 +1675,12 @@ function videoPage() {
       } catch (error) {
         this.statusText = "";
       }
+    },
+
+    /* 播放器是点开才挂的：一次挂二十几个，每个都会去拉一次 mp4 的
+       元数据，页面会卡住。 */
+    playJob(job) {
+      this.playingJob = job.job_id;
     },
 
     /* 接着上次那个任务继续：同样的角色绑定、参数，进同一个目录。 */
