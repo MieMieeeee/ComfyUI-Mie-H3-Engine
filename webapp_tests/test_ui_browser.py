@@ -170,6 +170,11 @@ def api_get(path):
     return json.loads(urllib.request.urlopen(BASE + path, timeout=30).read())
 
 
+def api_script(name):
+    """One script from the library, by name."""
+    return api_get("/api/scripts/" + urllib.parse.quote(name))
+
+
 def test_a_character_can_be_created_edited_and_deleted(page):
     page.goto(BASE + "/assets", wait_until="networkidle")
     page.wait_for_timeout(700)
@@ -802,3 +807,44 @@ def test_the_making_page_shows_a_script_with_repeated_lines(page, web):
     page.wait_for_timeout(2000)
     events = visible(page, ".event-brief")
     assert events.count() == 3, "重复的台词把预览里的事件全弄没了"
+
+
+def test_the_versions_of_a_script_are_kept(page, web):
+    """保存永远产生新的一版：旧的一版还在，能打开看，也能恢复回去。
+
+    改坏了一版、或者改砸了想反悔的时候，这一版还在，就不用重做。
+    """
+    _write_a_script(page, "版本测试", ["角色1：你好"])
+    page.get_by_role("button", name="🕘 版本").click()
+    page.wait_for_timeout(900)
+    panel = page.locator(".version-list")
+    assert panel.count() == 1, "the version panel did not open"
+    assert "版本 1" in panel.inner_text(), panel.inner_text()
+
+    # 改一句台词再存：多一版，旧的那版还在。
+    page.locator(".editor-pane textarea.code").fill("角色1：改过的台词")
+    page.wait_for_timeout(900)
+    button(page, "💾 保存").click()
+    page.wait_for_timeout(1800)
+    panel = page.locator(".version-list")
+    assert "版本 2" in panel.inner_text(), panel.inner_text()
+    assert "版本 1" in panel.inner_text(), panel.inner_text()
+
+    # 打开旧版：编辑器里是旧的内容，库里那份没变。
+    page.locator(".version-row", has_text="版本 1").get_by_role(
+        "button", name="打开").click()
+    page.wait_for_timeout(1500)
+    code = page.locator(".editor-pane textarea.code").input_value()
+    assert "你好" in code, code
+    assert page.locator(".card-head .badge").filter(visible=True).first.inner_text() \
+        == "未保存"
+    assert "改过的台词" in api_script("版本测试")["json"]["source_script"]
+
+    # 恢复：旧版的内容存成新的一版，历史只增不减。
+    page.locator(".version-row", has_text="版本 1").get_by_role(
+        "button", name="恢复").click()
+    page.wait_for_timeout(2500)
+    assert "你好" in api_script("版本测试")["json"]["source_script"]
+    panel = page.locator(".version-list")
+    assert "版本 3" in panel.inner_text(), panel.inner_text()
+    assert "版本 2" in panel.inner_text(), panel.inner_text()

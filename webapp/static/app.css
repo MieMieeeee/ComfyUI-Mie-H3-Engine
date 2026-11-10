@@ -352,6 +352,15 @@ textarea.input.code {
 }
 .draft-box ul { margin: 6px 0 0; padding-left: 20px; }
 
+/* 版本历史：一行一版，看得清是哪一版、什么时候的、怎么来的。 */
+.version-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.version-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 5px 0; border-top: 1px solid var(--border-subtle);
+}
+.version-row > * { min-width: 0; }
+.version-row .auto-actions { margin-left: auto; display: flex; gap: 6px; }
+
 /* 差异：旧的和新的摆在一起，作者一眼看出改了什么。 */
 .diff-row {
   display: grid; grid-template-columns: minmax(90px, 140px) 1fr 1fr;

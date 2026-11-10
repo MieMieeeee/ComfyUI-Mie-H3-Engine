@@ -26,6 +26,15 @@ const api = {
     if (!response.ok) throw new Error(data.error || `${response.status}`);
     return data;
   },
+  async del(url) {
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: { "Accept": "application/json" },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `${response.status}`);
+    return data;
+  },
 };
 
 /* ------------------------------------------------------------------ */
@@ -595,6 +604,9 @@ function scriptsPage() {
     draftOpen: false,
     drafting: false,
     fixing: false,              /* 正在按风险改：可能是模型在写，等一会儿 */
+    versionInfo: { current: 0, items: [] },  /* 这一份剧本的版本历史 */
+    versionOpen: false,
+    changeNote: "",             /* 这一版是怎么来的：AI 修订 / 手工修改… */
     draftNotes: [],
     draftForm: { mode: "concept", concept: "", name: "新剧本", shot_count: 2,
                  language: "zh", target_duration_seconds: 20,
@@ -830,6 +842,7 @@ function scriptsPage() {
         parts.push(`${item.duration_seconds.toFixed(1)}s`);
       }
       parts.push(item.audio_mode === "reference" ? "参考音" : "生成音");
+      if (item.content_version) parts.push(`版本${item.content_version}`);
       return parts.join(" · ");
     },
 
@@ -842,6 +855,8 @@ function scriptsPage() {
       this.loadError = "";
       this.executionDraft = null;
       this.executionApplied = "";
+      this.changeNote = "";
+      await this.loadVersions(name);
       try {
         const data = await api.get(`/api/scripts/${encodeURIComponent(name)}`);
         this.model = normalizeStoryboardModel(data.json);
@@ -856,7 +871,7 @@ function scriptsPage() {
         // 这一次会话里，镜像是对着眼下这份源文本的；之后源文本动了，
         // 这个记号就会和新的对不上，"过期"因此会亮起来。
         this.sourceSnapshot = this.sourceSignature();
-        // 草稿先读，再记基线：记基线不碰草稿，但顺序也不能反 -—
+        // 草稿先读，再记基线：记基线不碰草稿，但顺序也不能反 ——
         // 上次没保存就关掉的改动，还在本地。
         const draft = this.readDraft(name);
         this.setBaseline();
@@ -1307,12 +1322,97 @@ function scriptsPage() {
         this.draftOpen = false;
         this.tab = "edit";
         this.okMessage = "草稿已生成：检查、修改后按「💾 保存」入库。";
+        // 这一版是怎么来的：存的时候写进版本历史里。
+        this.changeNote = this.draftForm.mode === "revise" ? "AI 修订" : "AI 起草";
         this.syncDerived();
         this.queueValidate();
       } catch (error) {
         this.errors = [error.message];
       } finally {
         this.drafting = false;
+      }
+    },
+
+    /* ---------------------------------------------------------------- */
+    /* 版本                                                                */
+    /* ---------------------------------------------------------------- */
+
+    /* 每一版都是一份完整的剧本：引擎读的是当前版，旧版原样留着。
+       旧版不是"另一个剧本"——它是同一份剧本的第几版。 */
+    async loadVersions(name) {
+      this.versionInfo = { current: 0, items: [] };
+      if (!name) return;
+      try {
+        const data = await api.get(
+          `/api/scripts/${encodeURIComponent(name)}/versions`);
+        this.versionInfo = { current: data.current || 0, items: data.items || [] };
+      } catch (error) {
+        this.versionInfo = { current: 0, items: [] };
+      }
+    },
+
+    /* 打开旧版看看：读进编辑器，不落库。基线不动，所以徽章是"未保存"——
+       你正在看的是旧版，不是库里那份。 */
+    async openVersion(number) {
+      if (!this.selected || this.drafting) return;
+      if (!this.confirmDiscard("打开旧版本")) return;
+      try {
+        const data = await api.get(
+          `/api/scripts/${encodeURIComponent(this.selected)}/versions/${number}`);
+        this.model = normalizeStoryboardModel(data.json);
+        this.cleaned = data.json;
+        this.rawText = ""; this.jsonDirty = false;
+        this.tab = "edit";
+        this.syncDerived();
+        this.adoptGroupingFromShots();
+        // 镜像是按剧本名记的，不是按版本记的：这一版的镜像对不对得上，
+        // 服务端不知道，所以说"还没确认过"，不装作知道。
+        this.executionState = "unknown";
+        this.executionDraft = null;
+        this.executionApplied = "";
+        this.sourceSnapshot = this.sourceSignature();
+        this.changeNote = `打开版本 ${number}`;
+        this.queueValidate();
+        this.okMessage = `打开的是版本 ${number}（现在的当前版是版本 `
+          + `${this.versionInfo.current}）。改完按「💾 保存」会存成新的一版。`;
+      } catch (error) {
+        this.errors = [error.message];
+      }
+    },
+
+    /* 把旧版恢复成当前版：不是把指针挪回去，而是把旧版的内容存成
+       新的一版——历史只增不减，回退本身也在历史里。 */
+    async restoreVersion(number) {
+      if (!this.selected || this.drafting) return;
+      // 恢复会重新打开这份剧本：编辑器里没保存的改动会没，所以要说。
+      const dirty = this.isDirty
+        ? "\n\n你在编辑器里还有没保存的改动，恢复之后那些改动就没了。"
+        : "";
+      if (!window.confirm(`把版本 ${number} 的内容恢复成当前版？\n\n`
+        + `现在这一版不会被删掉：它会变成新的一版（版本 `
+        + `${(this.versionInfo.current || 0) + 1}），历史只增不减。` + dirty)) return;
+      try {
+        const result = await api.post(
+          `/api/scripts/${encodeURIComponent(this.selected)}/versions/${number}/restore`);
+        const from = number;
+        const to = result.content_version;
+        await this.open(this.selected);
+        this.okMessage = `已把版本 ${from} 的内容存成版本 ${to}，现在是当前版。`;
+      } catch (error) {
+        this.errors = [error.message];
+      }
+    },
+
+    async deleteVersion(number) {
+      if (!this.selected || this.drafting) return;
+      if (!window.confirm(`删掉版本 ${number}？\n\n删了就没有了，救不回来。`)) return;
+      try {
+        await api.del(
+          `/api/scripts/${encodeURIComponent(this.selected)}/versions/${number}`);
+        await this.loadVersions(this.selected);
+        this.okMessage = `版本 ${number} 删掉了。`;
+      } catch (error) {
+        this.errors = [error.message];
       }
     },
 
@@ -1354,10 +1454,15 @@ function scriptsPage() {
       if (!this.model) return;
       if (this.tab === "json" && !this.trySyncJson()) return;
       try {
-        const result = await api.post("/api/scripts", { json: this.buildPayload() });
+        const result = await api.post("/api/scripts",
+          { json: this.buildPayload(), note: this.changeNote || "手工修改" });
         this.selected = result.name;
         this.okMessage = `已保存：${result.name}（${result.status}）`;
+        if (result.content_version) {
+          this.okMessage += ` · 版本 ${result.content_version}`;
+        }
         this.errors = []; this.warnings = [];
+        this.changeNote = "";
         this.markSaved();
         // 存的是新源文本；镜像是否已经跟上，只有用户知道。
         if (this.executionState === "unknown") this.executionState = "changed";
@@ -1372,6 +1477,7 @@ function scriptsPage() {
           this.executionApplied = "";
         }
         await this.load();
+        await this.loadVersions(this.selected);
         this.queueValidate();
       } catch (error) {
         this.errors = [error.message];
@@ -1383,10 +1489,13 @@ function scriptsPage() {
       if (!this.selected) return;
       // 读不出来的剧本删掉就没有备份了：整个文件夹都会被拿走，
       // 里面那份文件也没了。所以这一次的确认要说清楚。
+      // 版本历史也在那个文件夹里：删剧本连同历史一起没。
+      const old = (this.versionInfo.items || []).length;
+      const history = old > 1 ? `\n\n它的 ${old} 个版本也一起删掉，救不回来。` : "";
       const ask = this.loadError
         ? `删除 ${this.selected}？\n\n这份剧本读不出来，删除会把整个文件夹一起删掉，`
-          + "里面的文件也不会留下备份。"
-        : `删除 ${this.selected}？`;
+          + "里面的文件也不会留下备份。" + history
+        : `删除 ${this.selected}？` + history;
       if (!window.confirm(ask)) return;
       try {
         await api.post(`/api/scripts/${encodeURIComponent(this.selected)}/delete`);
@@ -1394,6 +1503,8 @@ function scriptsPage() {
         this.rawText = ""; this.parseEvents = []; this.grouping = [];
         this.baseline = "";
         this.loadError = "";
+        this.versionInfo = { current: 0, items: [] };
+        this.versionOpen = false;
         this.okMessage = "已删除";
         await this.load();
       } catch (error) {
@@ -1471,6 +1582,7 @@ function scriptsPage() {
           }
         }
         this.adoptFixedBoard(result.json);
+        this.changeNote = "按风险改";
         const notes = (result.notes || []).filter(Boolean);
         let message = notes.length ? notes.join(" ")
           : "已经按这些风险改好了";

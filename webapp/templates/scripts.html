@@ -136,6 +136,11 @@
             <div class="panel-head-actions">
               <span class="badge" :class="isDirty ? 'warn' : 'ok'"
                     x-text="savedLabel"></span>
+              <span class="badge ok" x-show="selected && versionInfo.current"
+                    :title="'这一份剧本现在到第 ' + versionInfo.current + ' 版'"
+                    x-text="'版本 ' + versionInfo.current"></span>
+              <button class="btn" type="button" @click="versionOpen = !versionOpen"
+                      x-show="selected" title="这一份剧本的版本历史">🕘 版本</button>
               <a class="btn" x-show="selected" :href="'/video?script=' + encodeURIComponent(selected)"
                  title="带着这份剧本去制作页">🎬 用此剧本制作</a>
               <button class="btn" type="button" @click="startDraft('revise')"
@@ -144,6 +149,33 @@
               <button class="btn primary" type="button" @click="save()">💾 保存</button>
               <button class="btn danger" type="button" @click="remove()">🗑️ 删除</button>
             </div>
+          </div>
+
+          <!-- 版本历史：保存永远产生新的一版，旧的一版一直留着。 -->
+          <div class="draft-box" x-show="versionOpen && selected">
+            <strong>版本历史（<span x-text="versionInfo.items.length"></span> 版）</strong>
+            <p class="muted small">
+              当前版是引擎渲染用的那份。每次保存都会把上一版留在这里，
+              旧版可以打开来看，也可以恢复成当前版（恢复会存成新的一版，历史只增不减）。
+            </p>
+            <ul class="version-list">
+              <template x-for="v in versionInfo.items" :key="v.number">
+                <li class="version-row">
+                  <span class="cell-strong" x-text="'版本 ' + v.number"></span>
+                  <span class="muted small" x-text="v.time"></span>
+                  <span class="muted small" x-text="v.note"></span>
+                  <span class="badge ok" x-show="v.current">当前</span>
+                  <span class="auto-actions">
+                    <button class="btn subtle" type="button" @click="openVersion(v.number)"
+                            x-show="!v.current" title="把这一版读进编辑器看看（不落库）">打开</button>
+                    <button class="btn subtle" type="button" @click="restoreVersion(v.number)"
+                            x-show="!v.current" title="用这一版的内容存成新的一版">恢复</button>
+                    <button class="btn subtle" type="button" @click="deleteVersion(v.number)"
+                            x-show="!v.current" title="删掉这一版，救不回来">删掉</button>
+                  </span>
+                </li>
+              </template>
+            </ul>
           </div>
 
           <!-- 上次没保存就关掉的改动，还在本地。 -->

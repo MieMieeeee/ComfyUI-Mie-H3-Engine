@@ -28,6 +28,7 @@ from mie_craft.assets import library as _library
 from mie_craft.assets import script_asset as _script_asset
 
 from webapp import config
+from webapp.services import versions
 
 
 def plugin_root() -> pathlib.Path:
@@ -422,14 +423,23 @@ def execution_reason(state: str) -> str:
     }.get(state, "")
 
 
-def save_storyboard(payload: dict) -> dict:
-    """Validate and write a script asset."""
-    cleaned, path, status = _script_asset.save_storyboard(library_dir(), payload)
+def save_storyboard(payload: dict, note: str = "") -> dict:
+    """Validate and write a script asset.
+
+    The write goes through the version store: the copy that is being
+    replaced is kept, so nothing that was ever saved is lost. ``note``
+    says how this version came about ("AI 修订", "手工修改"), and it
+    shows up in the version list.
+    """
+    result = versions.save_versioned(str(payload.get("name") or ""), payload,
+                                     note=note)
+    cleaned = result.get("json") or {}
     return {
         "name": cleaned.get("name", ""),
-        "path": path,
-        "status": status,
+        "path": result.get("path", ""),
+        "status": result.get("status", ""),
         "preview": _script_asset.storyboard_preview(cleaned),
+        "content_version": result.get("content_version", 0),
     }
 
 
@@ -466,6 +476,8 @@ def list_storyboards_meta() -> list[dict]:
             "shots": len(cleaned.get("shots", [])),
             "duration_seconds": cleaned.get("target_duration_seconds"),
             "audio_mode": cleaned.get("audio_mode", "generated"),
+            # 这一份剧本现在到第几版（内容版本，不是渲染次数）。
+            "content_version": versions.content_version(name),
         })
     return rows
 

@@ -23,7 +23,7 @@ from flask import Flask, abort, jsonify, render_template, request, send_from_dir
 
 from webapp import config
 from webapp.services import (autodraft, comfy, history, library, llm,
-                             riskfix, runname, runner, theme)
+                             riskfix, runname, runner, theme, versions)
 
 
 def create_app() -> Flask:
@@ -265,9 +265,55 @@ def create_app() -> Flask:
             except ValueError as exc:
                 return jsonify({"error": "the JSON does not parse: %s" % exc}), 400
         try:
-            return jsonify(library.save_storyboard(payload))
+            return jsonify(library.save_storyboard(
+                payload, note=str(data.get("note") or "")))
         except (ValueError, FileNotFoundError) as exc:
             return jsonify({"error": str(exc)}), 400
+
+    # ------------------------------------------------------------------ #
+    # the versions of one script
+    # ------------------------------------------------------------------ #
+
+    @app.route("/api/scripts/<name>/versions")
+    def api_script_versions(name):
+        """Every version of one script, newest first.
+
+        The current one is the copy the engine renders; the others are
+        what it was before, kept exactly as it was.
+        """
+        try:
+            return jsonify(versions.list_versions(name))
+        except (FileNotFoundError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 404
+
+    @app.route("/api/scripts/<name>/versions/<int:number>")
+    def api_script_version(name, number):
+        """One version's script, to look at or to build on."""
+        try:
+            return jsonify({"number": number,
+                            "json": versions.read_version(name, number)})
+        except (FileNotFoundError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 404
+
+    @app.route("/api/scripts/<name>/versions/<int:number>/restore", methods=["POST"])
+    def api_restore_script_version(name, number):
+        """Make an old version the current one.
+
+        Not by moving a pointer back: the old content is saved as a new
+        version, so the history only grows and nothing is lost.
+        """
+        try:
+            return jsonify(versions.restore_version(name, number))
+        except (FileNotFoundError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 404
+
+    @app.route("/api/scripts/<name>/versions/<int:number>", methods=["DELETE"])
+    def api_delete_script_version(name, number):
+        """Throw an archived version away. The current one stays."""
+        try:
+            return jsonify(versions.delete_version(name, number))
+        except (FileNotFoundError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 404
 
     @app.route("/api/scripts/validate", methods=["POST"])
     def api_validate_script():
