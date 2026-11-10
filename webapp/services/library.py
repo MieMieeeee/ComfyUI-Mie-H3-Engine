@@ -283,6 +283,7 @@ def get_storyboard(name: str) -> dict:
     except (FileNotFoundError, ValueError) as exc:
         raise ValueError(unreadable_reason(name, str(exc))) from exc
     meta = _script_asset.read_storyboard_meta(library_dir(), name)
+    state = execution_state(name, cleaned)
     return {
         "name": cleaned.get("name", name),
         "path": path,
@@ -292,7 +293,8 @@ def get_storyboard(name: str) -> dict:
         "requirements": meta.get("requirements") or [],
         "sections": meta.get("sections") or [],
         "source_hash": source_fingerprint(cleaned),
-        "execution_state": execution_state(name, cleaned),
+        "execution_state": state,
+        "execution_reason": execution_reason(state),
     }
 
 
@@ -350,9 +352,15 @@ def confirm_execution(name: str, script: dict) -> dict:
     The record is the app's own business: the contract has no room for
     it (the payload rejects unknown fields), and it belongs to the work
     session rather than to the asset.
+
+    Two fingerprints are kept, because "confirmed" is a claim about a
+    PAIR: the mirror was confirmed against this source, and it has not
+    been touched since. The source hash says the first half; the mirror
+    hash says the second.
     """
     data = _load_sync()
     data[name] = {"hash": source_fingerprint(script),
+                  "execution_hash": execution_fingerprint(script),
                   "confirmed_at": time.time()}
     config.ensure_dirs()
     _sync_file().write_text(
@@ -360,19 +368,58 @@ def confirm_execution(name: str, script: dict) -> dict:
     return {"name": name, "confirmed": True}
 
 
+def execution_fingerprint(script: dict) -> str:
+    """A hash of the English mirror itself.
+
+    Without it, a hand-edit of the English text after the confirmation
+    would still read as "confirmed" - the confirmation says nothing
+    about a text that was written after it.
+
+    The optional keys are dropped when they are empty: the contract
+    removes them on save, and a hash that changed because a key was
+    dropped would report a stale mirror that is in fact current.
+    """
+    import hashlib
+
+    execution = dict(script.get("execution") or {})
+    for key in ("scene", "light", "character_designs"):
+        if not execution.get(key):
+            execution.pop(key, None)
+    blob = json.dumps(execution, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
 def execution_state(name: str, script: dict) -> str:
     """How the English mirror stands against the Chinese source.
 
-    ``confirmed`` - the mirror was confirmed against this source.
+    ``confirmed`` - the mirror was confirmed against this source and
+                    has not been touched since.
     ``changed``   - it was confirmed against an EARLIER source, so the
                     source moved and the mirror may not describe it.
+    ``edited``    - the mirror was changed after the confirmation, so
+                    what was confirmed is not what is there now.
     ``unknown``   - nobody ever confirmed it (every script written
                     before this feature existed).
     """
     record = _load_sync().get(name) or {}
     if not record.get("hash"):
         return "unknown"
-    return "confirmed" if record["hash"] == source_fingerprint(script) else "changed"
+    if record["hash"] != source_fingerprint(script):
+        return "changed"
+    confirmed_mirror = record.get("execution_hash")
+    if confirmed_mirror and confirmed_mirror != execution_fingerprint(script):
+        return "edited"
+    return "confirmed"
+
+
+def execution_reason(state: str) -> str:
+    """What the state means, in words the reader can act on."""
+    return {
+        "confirmed": "英文镜像与当前中文设定一致。",
+        "changed": "中文设定改过了，英文镜像还是旧的：生成会用旧描述。",
+        "edited": "英文镜像在确认之后被改过，这次确认不再作数。",
+        "unknown": "这份剧本的英文镜像还没有确认过。",
+    }.get(state, "")
 
 
 def save_storyboard(payload: dict) -> dict:

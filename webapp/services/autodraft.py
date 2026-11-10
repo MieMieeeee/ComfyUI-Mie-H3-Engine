@@ -19,6 +19,8 @@ a missing key is reported as a friendly error before any call.
 
 from __future__ import annotations
 
+import json
+
 from mie_craft.assets.library import (
     AMBIENCE_MAX_CHARS,
     DESCRIPTION_MAX_CHARS,
@@ -210,3 +212,202 @@ def asset_fields(kind: str, name: str, hint: str = "", current: dict = None,
         drafted.append("ambience")
 
     return {"drafted": drafted, **out}
+
+
+# --------------------------------------------------------------------------- #
+# the English execution mirror
+# --------------------------------------------------------------------------- #
+
+_EXECUTION_SYSTEM = (
+    "You write the English EXECUTION MIRROR of a Chinese storyboard. The "
+    "mirror is what the video compiler actually reads: the staging, what "
+    "is visible, the voice of every character and the action of every "
+    "non-dialogue event.\n"
+    "Rules:\n"
+    "- English only, one or two sentences per field.\n"
+    "- Output ONE JSON object and nothing else: no prose, no code fence.\n"
+    "- voices maps EVERY role id exactly once, using the ids you are given.\n"
+    "- directions maps EVERY non-dialogue event id exactly once, using the "
+    "ids you are given. Each direction MUST begin with the actor exactly as "
+    "the id list writes it, for example \"Character 2 ...\".\n"
+    "- Describe only what the source says. Never invent a character, a prop "
+    "or a place the source does not mention.\n"
+    "- Write directions as positive visual descriptions of what is on "
+    "screen. \"Character 2 does not move\" is not a description.\n"
+)
+
+
+def _json_object(text: str) -> dict:
+    """The JSON object in a model reply, fences and all."""
+    body = str(text or "").strip()
+    if body.startswith("```"):
+        body = body.split("```", 2)[1] if body.count("```") >= 2 else body
+        if body.lower().startswith("json"):
+            body = body[4:]
+    body = body.strip()
+    start, end = body.find("{"), body.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("模型没有返回 JSON：%s" % body[:120])
+    try:
+        payload = json.loads(body[start:end + 1])
+    except ValueError as exc:
+        raise ValueError("模型返回的 JSON 解析不了：%s" % exc) from exc
+    if not isinstance(payload, dict):
+        raise ValueError("模型返回的不是一个 JSON 对象")
+    return payload
+
+
+def _actor_label(role_id: str, roles: list) -> str:
+    """How a direction has to open: "Character 2".
+
+    The contract wants the ROLE INDEX in English, not the role id
+    ("character_2") and not the role's name ("Claude娘"). The model
+    guesses wrong here often enough that the prompt has to spell it
+    out.
+    """
+    for index, role in enumerate(roles, 1):
+        if role.get("id") == role_id:
+            return "Character %d" % index
+    return ""
+
+
+def _mirror_prompt(script: dict) -> str:
+    """The source, laid out so the reply has one obvious shape."""
+    roles = script.get("roles") or []
+    events = [event for shot in (script.get("shots") or [])
+              for event in (shot.get("events") or [])]
+    lines = ["Source (Chinese):"]
+    for key, label in (("look", "look"), ("setting", "setting")):
+        if script.get(key):
+            lines.append("%s: %s" % (label, script[key]))
+    if script.get("scene"):
+        lines.append("scene: %s" % script["scene"])
+    if script.get("light") == "custom":
+        lines.append("light: %s" % (script.get("light_text") or ""))
+
+    lines.append("")
+    lines.append("Roles (id | name | presence | position | voice):")
+    for role in roles:
+        lines.append("- %s | %s | %s | %s | %s" % (
+            role.get("id"), role.get("name"), role.get("presence"),
+            role.get("position"), role.get("voice") or ""))
+
+    lines.append("")
+    lines.append("Events (id | type | character | text):")
+    for event in events:
+        lines.append("- %s | %s | %s | %s" % (
+            event.get("id"), event.get("type"), event.get("character"),
+            event.get("text") or ""))
+
+    actions = [e for e in events if e.get("type") != "dialogue"]
+    if actions:
+        lines.append("")
+        lines.append("Directions are required for these events, and each one "
+                     "has to OPEN with the exact words given here:")
+        for event in actions:
+            label = _actor_label(event.get("character"), roles)
+            lines.append("- %s: must start with %r, then say what is on screen"
+                         % (event.get("id"), label + " "))
+
+    shape = {
+        "look": "...",
+        "setting": "...",
+        "visible_state": "...",
+        "voices": {role.get("id"): "..." for role in roles},
+        "directions": {event.get("id"): "%s ..." % _actor_label(
+            event.get("character"), roles)
+                       for event in actions},
+    }
+    if script.get("scene"):
+        shape["scene"] = "..."
+    if script.get("light") == "custom":
+        shape["light"] = "..."
+
+    lines.append("")
+    lines.append("Output JSON with exactly this shape (fill in every value):")
+    lines.append(json.dumps(shape, ensure_ascii=False, indent=2))
+    return "\n".join(lines)
+
+
+def execution_mirror(script: dict, attempts: int = 3) -> dict:
+    """Rewrite ONLY the English mirror, from the Chinese source.
+
+    The mirror is the text the compiler reads. When the Chinese source
+    moves, the mirror has to follow - but it is written by hand (or by a
+    model) and is never overwritten behind the author's back. This is
+    the explicit action that brings it back in step, and it touches
+    nothing else in the script.
+
+    The contract is the judge, and it is strict: a direction has to
+    open with "Character 2", a voice has to be a bare phrase, and so
+    on. A model misses those often enough that the mistake is fed back
+    to it and the answer is asked for again - the same thing the
+    storyboard enhancer does.
+    """
+    from mie_craft.script import contract
+
+    connector = _connector()
+    prompt = _mirror_prompt(script)
+    complaint = ""
+    for _ in range(max(1, int(attempts))):
+        reply = _invoke(connector, _EXECUTION_SYSTEM, prompt,
+                        max_tokens=8192)
+        try:
+            proposed = _json_object(reply)
+        except ValueError as exc:
+            complaint = str(exc)
+            prompt = (_mirror_prompt(script)
+                      + "\n\nYour previous answer could not be used: %s\n"
+                        "Answer again, with the JSON only." % complaint)
+            continue
+        try:
+            _check_mirror(script, proposed, contract)
+        except ValueError as exc:
+            complaint = str(exc)
+            prompt = (_mirror_prompt(script)
+                      + "\n\nYour previous answer was rejected: %s\n"
+                        "Fix exactly that and answer again, with the JSON only."
+                      % complaint)
+            continue
+        return {"execution": proposed, "diff": execution_diff(
+            script.get("execution") or {}, proposed)}
+    raise ValueError("生成的执行描述不符合契约：%s" % complaint)
+
+
+def _check_mirror(script: dict, proposed: dict, contract) -> None:
+    """The contract's opinion on a proposed mirror."""
+    candidate = dict(script)
+    candidate["execution"] = proposed
+    events = [event for shot in (script.get("shots") or [])
+              for event in (shot.get("events") or [])]
+    validator = getattr(contract, "_validate_execution", None)
+    try:
+        if validator is not None:
+            validator(candidate, events)
+        else:
+            contract.validate_v2(candidate, _check_timing=False)
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def execution_diff(before: dict, after: dict) -> list:
+    """What changed between two mirrors, field by field.
+
+    The author reviews this before the new text replaces the old one:
+    the mirror is theirs, and a silent rewrite would throw away a
+    hand-written direction.
+    """
+    rows = []
+    for key in ("look", "setting", "visible_state", "scene", "light"):
+        old, new = str(before.get(key) or ""), str(after.get(key) or "")
+        if old != new:
+            rows.append({"field": key, "before": old, "after": new})
+    for key in ("voices", "directions"):
+        old_map = before.get(key) or {}
+        new_map = after.get(key) or {}
+        for name in sorted(set(old_map) | set(new_map)):
+            old, new = str(old_map.get(name) or ""), str(new_map.get(name) or "")
+            if old != new:
+                rows.append({"field": "%s.%s" % (key, name),
+                             "before": old, "after": new})
+    return rows

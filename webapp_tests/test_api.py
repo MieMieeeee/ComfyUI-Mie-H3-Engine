@@ -339,3 +339,197 @@ def test_editing_only_the_description_keeps_the_voice(client):
     assert data["description"] == "第二版"
     assert data["voice"] == "male voice", "the voice must survive a text-only edit"
     assert data["image_count"] == 1, "the portrait must survive too"
+
+
+# --------------------------------------------------------------------------- #
+# the English mirror can be brought back in step, and only on request
+# --------------------------------------------------------------------------- #
+
+def test_the_mirror_draft_carries_the_difference(client, monkeypatch):
+    """The author sees what would change before anything is replaced."""
+    from webapp.services import autodraft
+    script = json.loads(json.dumps(SCRIPT))
+    script["look"] = "手绘动画风格"
+    script["setting"] = "角色1站在中间"
+    script["source_script"] = "角色1：你好"
+    script["shots"] = [{"id": "shot_1", "events": [
+        {"id": "event_001", "type": "dialogue", "character": "character_1",
+         "text": "你好", "language": "zh"}]}]
+    script["execution"] = {
+        "look": "An old look.", "setting": "Character 1 stands at center.",
+        "visible_state": "Character 1 stands at center.",
+        "voices": {"character_1": "young female, clear timbre"},
+        "directions": {},
+    }
+    stub = _StubConnector([json.dumps({
+        "look": "A hand-drawn animation look.",
+        "setting": "Character 1 stands at center.",
+        "visible_state": "Character 1 stands at center, facing the camera.",
+        "voices": {"character_1": "young female, clear timbre"},
+        "directions": {},
+    })])
+    monkeypatch.setattr(autodraft, "_connector", lambda: stub)
+
+    response = client.post("/api/scripts/测试剧本/execution/draft",
+                           json={"json": script})
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    assert data["execution"]["look"] == "A hand-drawn animation look."
+    fields = {row["field"]: row for row in data["diff"]}
+    assert "look" in fields, data["diff"]
+    assert fields["look"]["before"] == "An old look."
+    assert fields["look"]["after"] == "A hand-drawn animation look."
+    # 没变的字段不进差异表。
+    assert "setting" not in fields, data["diff"]
+
+
+def test_a_mirror_that_breaks_the_contract_is_refused(client, monkeypatch):
+    """An English mirror the contract rejects would be rejected by the
+    engine later, with a message nobody here would understand."""
+    from webapp.services import autodraft
+    script = json.loads(json.dumps(SCRIPT))
+    script["shots"] = [{"id": "shot_1", "events": [
+        {"id": "event_001", "type": "action", "character": "character_1",
+         "text": "他挥了挥手", "language": "zh"}]}]
+    stub = _StubConnector([json.dumps({
+        "look": "", "setting": "",
+        "visible_state": "Character 1 stands at center.",
+        "voices": {"character_1": ""},
+        "directions": {},          # the action event has no direction
+    })])
+    monkeypatch.setattr(autodraft, "_connector", lambda: stub)
+
+    response = client.post("/api/scripts/测试剧本/execution/draft",
+                           json={"json": script})
+    assert response.status_code == 400, response.get_json()
+    assert "契约" in response.get_json()["error"], response.get_json()
+
+
+def test_the_draft_never_writes_to_the_library(client, monkeypatch):
+    from webapp.services import autodraft
+    script = json.loads(json.dumps(SCRIPT))
+    script["shots"] = [{"id": "shot_1", "events": [
+        {"id": "event_001", "type": "dialogue", "character": "character_1",
+         "text": "你好", "language": "zh"}]}]
+    script["execution"] = {
+        "look": "Old.", "setting": "Character 1 stands at center.",
+        "visible_state": "Character 1 stands at center.",
+        "voices": {"character_1": "young female, clear timbre"},
+        "directions": {},
+    }
+    stub = _StubConnector([json.dumps({
+        "look": "New.", "setting": "Character 1 stands at center.",
+        "visible_state": "Character 1 stands at center.",
+        "voices": {"character_1": "young female, clear timbre"},
+        "directions": {},
+    })])
+    monkeypatch.setattr(autodraft, "_connector", lambda: stub)
+
+    client.post("/api/scripts/测试剧本/execution/draft", json={"json": script})
+    # 库里还是空的：草稿要作者看过、再按正常的保存走。
+    assert client.get("/api/scripts").get_json()["names"] == []
+
+
+# --------------------------------------------------------------------------- #
+# the mirror's staleness is the server's truth, not the page's memory
+# --------------------------------------------------------------------------- #
+
+def test_editing_the_source_after_the_confirmation_makes_it_stale(client):
+    """The complaint this answers: "I changed the look, saved, and the
+    stale notice went away - but the English never changed."
+
+    The confirmation is bound to the version it was made against, so
+    the state stays "changed" no matter what the page remembers.
+    """
+    script = json.loads(json.dumps(SCRIPT))
+    script["look"] = "手绘动画风格"
+    # 英文镜像留着旧文案：这就是作者改完中文、还没更新英文的那份。
+    script["execution"]["look"] = "An older animation look."
+    saved = client.post("/api/scripts", json={"json": script}).get_json()
+    assert saved.get("name"), saved
+    name = saved["name"]
+
+    confirmed = client.post("/api/scripts/%s/confirm_execution" % name)
+    assert confirmed.status_code == 200, confirmed.get_json()
+    state = client.get("/api/scripts/%s" % name).get_json()
+    assert state["execution_state"] == "confirmed", state["execution_state"]
+
+    moved = json.loads(json.dumps(script))
+    moved["look"] = "换成了另一种画风"
+    client.post("/api/scripts", json={"json": moved})
+    state = client.get("/api/scripts/%s" % name).get_json()
+    assert state["execution_state"] == "changed", state["execution_state"]
+    assert "旧" in state["execution_reason"], state["execution_reason"]
+
+
+def test_saving_alone_does_not_confirm_the_mirror(client):
+    """Saving writes the source. It says nothing about the English."""
+    script = json.loads(json.dumps(SCRIPT))
+    script["look"] = "手绘动画风格"
+    script["execution"]["look"] = "An older animation look."
+    saved = client.post("/api/scripts", json={"json": script}).get_json()
+    assert saved.get("name"), saved
+    name = saved["name"]
+    client.post("/api/scripts/%s/confirm_execution" % name)
+
+    moved = json.loads(json.dumps(script))
+    moved["look"] = "又改了"
+    client.post("/api/scripts", json={"json": moved})
+    state = client.get("/api/scripts/%s" % name).get_json()
+    assert state["execution_state"] != "confirmed"
+
+
+# --------------------------------------------------------------------------- #
+# every generation is a version of its own
+# --------------------------------------------------------------------------- #
+
+def test_two_generations_get_two_run_names(client, monkeypatch):
+    from webapp.services import runner
+    script = json.loads(json.dumps(SCRIPT))
+    client.post("/api/scripts", json={"json": script})
+    name = client.get("/api/scripts").get_json()["names"][0]
+
+    calls = {"n": 0}
+
+    def submit(graph, client_id=""):
+        calls["n"] += 1
+        return {"prompt_id": "p-%d" % calls["n"], "number": calls["n"]}
+
+    monkeypatch.setattr(runner.comfy, "submit", submit)
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+    first = client.post("/api/render/submit", json={
+        "script": name, "role_assets": {"character_1": "甲"}}).get_json()
+    second = client.post("/api/render/submit", json={
+        "script": name, "role_assets": {"character_1": "甲"}}).get_json()
+    assert first["run_name"] != second["run_name"], \
+        "the second generation overwrites the first"
+    assert "第 2 版" in second["title"], second["title"]
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+
+def test_a_continuation_keeps_the_name_and_the_inputs(client, monkeypatch):
+    from webapp.services import runner
+    script = json.loads(json.dumps(SCRIPT))
+    client.post("/api/scripts", json={"json": script})
+    name = client.get("/api/scripts").get_json()["names"][0]
+    monkeypatch.setattr(runner.comfy, "submit",
+                        lambda graph, client_id="": {"prompt_id": "p-1",
+                                                     "number": 1})
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+    first = client.post("/api/render/submit", json={
+        "script": name, "role_assets": {"character_1": "甲"},
+        "width": 960, "height": 544, "steps": 20, "duration": 18}).get_json()
+    runner._jobs[first["job_id"]]["status"] = "error"
+    again = client.post("/api/render/submit", json={
+        "script": name, "role_assets": {"character_1": "甲"},
+        "run_name": first["run_name"], "continue_run": True,
+        "width": 960, "height": 544, "steps": 20, "duration": 18}).get_json()
+    assert again["run_name"] == first["run_name"]
+    assert again["params"]["duration"] == 18
+    runner._jobs.clear()
+    runner._reserved.clear()

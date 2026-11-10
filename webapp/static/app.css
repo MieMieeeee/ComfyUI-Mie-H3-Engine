@@ -351,18 +351,47 @@ textarea.input.code {
   background: var(--color-info-bg); border: 1px solid var(--color-info);
 }
 .draft-box ul { margin: 6px 0 0; padding-left: 20px; }
+
+/* 差异：旧的和新的摆在一起，作者一眼看出改了什么。 */
+.diff-row {
+  display: grid; grid-template-columns: minmax(90px, 140px) 1fr 1fr;
+  gap: 8px; align-items: start;
+  padding: 6px 0; border-top: 1px solid var(--border-subtle);
+}
+.diff-row > * { min-width: 0; overflow-wrap: anywhere; }
+.diff-before { color: var(--text-muted); text-decoration: line-through; }
+.diff-after { color: var(--color-success); }
+@media (max-width: 640px) {
+  .diff-row { grid-template-columns: 1fr; gap: 2px; }
+  .diff-before, .diff-after { padding-left: 10px; }
+}
 .auto-actions { display: flex; gap: 10px; margin-top: 14px; }
 .auto-box { display: flex; gap: 8px; margin-top: 14px; }
 .auto-box .input { flex: 1; }
 .btn:disabled { opacity: .55; cursor: wait; }
 
 .job-row {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 10px 0; border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap;
+  padding: 12px 0; border-bottom: 1px solid var(--border-subtle);
 }
 .job-row:last-child { border-bottom: none; }
+.job-head { flex: 1 1 240px; min-width: 0; }
 .job-artifacts { display: flex; gap: 10px; flex-wrap: wrap; }
 .artifact { font-size: 12px; }
+
+/* 正式成片：先看见片子本身，再看见它旁边的说明。 */
+.delivery {
+  flex: 1 1 100%; display: flex; gap: 12px; flex-wrap: wrap;
+  align-items: center; margin: 4px 0 2px;
+}
+.delivery-player {
+  width: 100%; max-width: 520px; max-height: 300px;
+  background: #000; border-radius: 8px; border: 1px solid var(--border-subtle);
+}
+.delivery-meta { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+@media (max-width: 640px) {
+  .delivery-player { max-width: 100%; }
+}
 
 /* ---------------------------------------------------------------- */
 /* 剧本工作台（预览 / 编辑 / JSON 三标签）                            */

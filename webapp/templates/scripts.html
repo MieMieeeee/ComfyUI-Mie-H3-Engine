@@ -505,17 +505,41 @@
             <details class="preview-block advanced" x-show="model.execution">
               <summary>
                 执行镜像 execution（高级）
-                <span class="badge warn" x-show="executionStale">源文本已改，镜像未更新</span>
+                <span class="badge warn" x-show="executionStale">镜像未跟上</span>
               </summary>
               <div class="advanced-body">
             <p class="muted small">
               英文镜像是你写给编译器的：不会随中文设定自动更新，也不会被悄悄覆盖。
+              <span class="warn small" x-show="executionStale" x-text="executionNote"></span>
               <button class="btn subtle" type="button" x-show="executionStale"
                       @click="confirmExecution()">我已确认</button>
               <button class="btn subtle" type="button" x-show="executionStale"
+                      @click="draftExecution()" :disabled="draftingExecution"
+                      title="只重写英文镜像，分镜、台词一个字都不动；改完先给你看差异">✨ 更新生成描述</button>
+              <button class="btn subtle" type="button" x-show="executionStale"
                       @click="startDraft('revise')"
-                      title="以当前剧本为底稿，让模型重写这一版（会带上你的修改要求）">✨ 让 AI 重写</button>
+                      title="以当前剧本为底稿，让模型重写这一版（会带上你的修改要求）">✨ 让 AI 重写整版</button>
             </p>
+
+            <!-- 模型重写的镜像：先看差异，用不用由作者定。 -->
+            <div class="draft-box" x-show="executionDraft">
+              <p class="muted small">
+                新的英文镜像（还没进编辑器）：
+                <button class="btn primary" type="button" @click="applyExecutionDraft()">用这一版</button>
+                <button class="btn subtle" type="button" @click="discardExecutionDraft()">不用了</button>
+              </p>
+              <p class="muted small" x-show="executionDraft && !(executionDraft.diff || []).length">
+                新旧内容一样，没有需要改的地方。
+              </p>
+              <template x-for="row in ((executionDraft && executionDraft.diff) || [])" :key="row.field">
+                <div class="diff-row">
+                  <div class="cell-strong small" x-text="row.field"></div>
+                  <div class="diff-before small" x-text="row.before || '（空）'"></div>
+                  <div class="diff-after small" x-text="row.after || '（空）'"></div>
+                </div>
+              </template>
+            </div>
+
             <label class="field">
               <span>look</span>
               <textarea class="input" rows="2" x-model="model.execution.look"></textarea>

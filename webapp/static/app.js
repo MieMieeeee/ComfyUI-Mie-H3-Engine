@@ -571,8 +571,11 @@ function scriptsPage() {
     loadError: "",              /* 这份剧本读不出来时的原因（面板上直接说） */
     warnOpen: false,
     baseline: "",              /* 打开/保存时的模型快照（用来算未保存） */
-    sourceSnapshot: "",        /* 打开/保存时的中文源文本（镜像陈旧的判据） */
-    executionState: "unknown", /* confirmed | changed | unknown */
+    sourceSnapshot: "",        /* 镜像所对应的那一版中文源文本 */
+    executionState: "unknown", /* confirmed | changed | edited | unknown */
+    executionDraft: null,      /* 模型重写的英文镜像草稿 + 差异 */
+    draftingExecution: false,
+    executionApplied: false,   /* 这次会话里换过镜像：存盘时可以确认 */
     draftTimer: null,
     recoveredDraft: null,      /* 本地找到的草稿，等人决定恢复还是丢弃 */
     draftOpen: false,
@@ -612,10 +615,11 @@ function scriptsPage() {
       return this.isDirty ? "未保存" : "已保存";
     },
 
-    /* 只记基线，不动草稿：打开一份剧本时用它，之后还要去读草稿。 */
+    /* 只记基线，不动草稿：打开一份剧本时用它，之后还要去读草稿。
+       注意：不动 sourceSnapshot —— 那是"镜像对上的是哪一版源文本"的
+       记号，只有镜像本身被更新或确认时才该动它。 */
     setBaseline() {
       this.baseline = JSON.stringify(this.model || {});
-      this.sourceSnapshot = this.sourceSignature();
     },
 
     /* 真的保存成功之后才用这个：基线更新，草稿也清掉。 */
@@ -643,12 +647,27 @@ function scriptsPage() {
       catch { return ""; }
     },
 
-    /* 镜像陈旧：源文本在这次会话里动过，或者它上次被确认时源文本还不是现在这样。 */
+    /* 镜像陈旧：源文本在这次会话里动过，或者它上次被确认时源文本还不是
+       现在这样。保存不算确认 —— 保存的是新源文本，英文还是旧的。 */
     get executionStale() {
       if (!this.model) return false;
-      if (this.executionState === "changed") return true;
+      if (this.executionState === "changed" || this.executionState === "edited") {
+        return true;
+      }
       const snapshot = this.sourceSnapshot;
       return !!snapshot && snapshot !== this.sourceSignature();
+    },
+
+    /* 这句话要具体：源文本改了、还是镜像被人手改过，处理方式不一样。 */
+    get executionNote() {
+      if (!this.model || !this.executionStale) return "";
+      if (this.executionState === "changed") {
+        return "中文设定改过了，英文镜像还是旧的：现在去生成会用旧描述。";
+      }
+      if (this.executionState === "edited") {
+        return "英文镜像在确认之后被改过：这次确认不再作数。";
+      }
+      return "中文设定改过了，英文镜像还没更新：现在去生成会用旧描述。";
     },
 
     async confirmExecution() {
@@ -662,6 +681,41 @@ function scriptsPage() {
       } catch (error) {
         this.errors = [error.message];
       }
+    },
+
+    /* 让模型只重写英文镜像。改完先给差异，作者看过再决定要不要用。 */
+    async draftExecution() {
+      if (!this.model || this.draftingExecution) return;
+      this.draftingExecution = true;
+      this.executionDraft = null;
+      this.errors = [];
+      try {
+        const data = await api.post(
+          `/api/scripts/${encodeURIComponent(this.selected || "")}/execution/draft`,
+          { json: this.buildPayload() });
+        this.executionDraft = data;
+      } catch (error) {
+        this.errors = [error.message];
+      } finally {
+        this.draftingExecution = false;
+      }
+    },
+
+    /* 把草稿里的英文镜像放进编辑器：只动 execution，其余一个字不改。 */
+    applyExecutionDraft() {
+      if (!this.executionDraft || !this.model) return;
+      const incoming = this.executionDraft.execution || {};
+      const current = this.model.execution || {};
+      this.model.execution = Object.assign({}, current, incoming);
+      this.executionDraft = null;
+      this.executionApplied = true;
+      this.executionState = "confirmed";
+      this.sourceSnapshot = this.sourceSignature();
+      this.okMessage = "英文镜像已换成新的：看一眼上面的差异，满意就按「💾 保存」。";
+    },
+
+    discardExecutionDraft() {
+      this.executionDraft = null;
     },
 
     /* 换剧本、新建、离开页面之前：脏了就问一句。 */
@@ -749,6 +803,8 @@ function scriptsPage() {
       this.draftOpen = false; this.draftNotes = [];
       this.recoveredDraft = null;
       this.loadError = "";
+      this.executionDraft = null;
+      this.executionApplied = false;
       try {
         const data = await api.get(`/api/scripts/${encodeURIComponent(name)}`);
         this.model = normalizeStoryboardModel(data.json);
@@ -760,6 +816,9 @@ function scriptsPage() {
         // 取在同步之前，一打开就会被算成"有未保存的改动"。
         this.syncDerived();
         this.adoptGroupingFromShots();
+        // 这一次会话里，镜像是对着眼下这份源文本的；之后源文本动了，
+        // 这个记号就会和新的对不上，"过期"因此会亮起来。
+        this.sourceSnapshot = this.sourceSignature();
         // 草稿先读，再记基线：记基线不碰草稿，但顺序也不能反 -—
         // 上次没保存就关掉的改动，还在本地。
         const draft = this.readDraft(name);
@@ -810,6 +869,11 @@ function scriptsPage() {
       this.syncDerived();
       // 只记基线，不清草稿：上次没保存就关掉的新剧本，也该被找回。
       this.setBaseline();
+      // 新剧本还没有镜像可言，这一版就是它对照的那一版。
+      this.sourceSnapshot = this.sourceSignature();
+      this.executionState = "unknown";
+      this.executionDraft = null;
+      this.executionApplied = false;
       const draft = this.readDraft();
       if (draft && JSON.stringify(draft) !== this.baseline) {
         this.recoveredDraft = { name: this.selected || "new", draft };
@@ -1258,6 +1322,12 @@ function scriptsPage() {
         this.markSaved();
         // 存的是新源文本；镜像是否已经跟上，只有用户知道。
         if (this.executionState === "unknown") this.executionState = "changed";
+        // 保存不等于确认镜像：源文本动了而英文没动，"过期"必须留着。
+        // 只有这次会话里刚用"更新生成描述"换过镜像，才算已经跟上。
+        if (this.executionApplied) {
+          this.executionApplied = false;
+          await this.confirmExecution();
+        }
         await this.load();
         this.queueValidate();
       } catch (error) {
@@ -1402,9 +1472,13 @@ function videoPage() {
     message: "",
     statusText: "",
     effectiveRunName: "",
+    nextTitle: "",           /* 这一次生成的作品名（第几版） */
     pollTimer: null,
     submitting: false,
     assetDetails: {},
+    executionState: "unknown",  /* 剧本的英文镜像跟不跟得上中文 */
+    executionReason: "",
+    staleOverride: false,       /* 明知镜像过期，仍要用旧版生成 */
 
     async init() {
       await this.loadScripts();
@@ -1476,17 +1550,33 @@ function videoPage() {
       this.roles = [];
       this.planPreview = "";
       this.message = "";
+      this.executionState = "unknown";
+      this.executionReason = "";
+      this.staleOverride = false;
       if (!this.script) { this.effectiveRunName = ""; return; }
       try {
         const data = await api.get(`/api/scripts/${encodeURIComponent(this.script)}`);
         this.roles = (data.json.roles || []).map((r) => ({
           id: r.id, name: r.name, presence: r.presence, asset: "",
         }));
+        // 英文镜像跟不跟得上中文：生成实际读的是英文，源文本改了而
+        // 镜像没改，就是拿旧描述去生成。这里必须说出来。
+        this.executionState = data.execution_state || "unknown";
+        this.executionReason = data.execution_reason || "";
         await this.preview();
         await this.refreshRunName();
       } catch (error) {
         this.message = `读取失败：${error.message}`;
       }
+    },
+
+    /* 镜像过期时不能闷头生成。要么去更新，要么明说"我知道，仍用旧版"。 */
+    get executionStale() {
+      return this.executionState === "changed" || this.executionState === "edited";
+    },
+
+    get staleBlocked() {
+      return this.executionStale && !this.staleOverride;
     },
 
     /* 引擎逐字接收 run_name，所以这里显示真正会提交的那个名字。 */
@@ -1496,8 +1586,10 @@ function videoPage() {
           script: this.script, run_name: this.runName,
         });
         this.effectiveRunName = data.run_name || "";
+        this.nextTitle = data.title || "";
       } catch (error) {
         this.effectiveRunName = "";
+        this.nextTitle = "";
       }
     },
 
@@ -1514,7 +1606,7 @@ function videoPage() {
 
     get canSubmit() {
       return !!(this.script && this.roles.length && !this.missingRoles.length
-        && !this.submitting);
+        && !this.submitting && !this.staleBlocked);
     },
 
     async preview() {
@@ -1547,7 +1639,10 @@ function videoPage() {
       if (!this.canSubmit) {
         this.message = this.missingRoles.length
           ? "还有角色没接资产：" + this.missingRoles.join("、")
-          : "先选一个剧本。";
+          : (this.staleBlocked
+            ? "英文镜像跟中文设定对不上：先去剧本页「更新生成描述」，"
+              + "或勾选下面的「仍用旧版生成」。"
+            : "先选一个剧本。");
         return;
       }
       this.submitting = true;
@@ -1579,6 +1674,47 @@ function videoPage() {
       } catch (error) {
         this.statusText = "";
       }
+    },
+
+    /* 接着上次那个任务继续：同样的角色绑定、参数，进同一个目录。 */
+    canContinue(job) {
+      if (!job || !job.script || !job.run_name) return false;
+      return ["success", "error", "interrupted", "partial", "empty"].indexOf(
+        job.status) >= 0;
+    },
+
+    async continueJob(job) {
+      if (this.submitting) return;
+      const params = job.params || {};
+      this.submitting = true;
+      this.message = `正在接着 ${job.title || job.run_name} 继续…`;
+      try {
+        const record = await api.post("/api/render/submit", {
+          script: job.script,
+          role_assets: job.role_assets || {},
+          run_name: job.run_name,
+          width: params.width || this.width,
+          height: params.height || this.height,
+          steps: params.steps || this.steps,
+          duration: params.duration || this.duration,
+          continue_run: true,
+        });
+        this.message = `已排队（#${record.number}）：接着 ${job.run_name} 继续`;
+        await this.refreshJobs();
+      } catch (error) {
+        this.message = `继续失败：${error.message}`;
+      } finally {
+        this.submitting = false;
+      }
+    },
+
+    /* 成片的时长：manifest 里写着，没有就不知道，不编。 */
+    durationText(manifest) {
+      const seconds = manifest && manifest.duration_seconds;
+      if (typeof seconds !== "number" || !isFinite(seconds)) return "";
+      const clips = manifest.clip_count;
+      const shots = clips ? ` · ${clips} 个分镜` : "";
+      return `时长 ${seconds.toFixed(1)} 秒${shots}`;
     },
 
     /* 任务状态：说人话。磁盘上只剩片段的运行不是"正在跑"。 */

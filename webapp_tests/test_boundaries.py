@@ -146,12 +146,14 @@ def test_the_name_is_free_again_once_the_run_is_over(plugin_root, monkeypatch):
 
     # While it is queued the name is taken - by the job record now.
     with pytest.raises(ValueError) as caught:
-        runner.submit("测试剧本", {"character_1": "甲"})
+        runner.submit("测试剧本", {"character_1": "甲"},
+                      run_name=record["run_name"], continue_run=True)
     assert "已经在跑" in str(caught.value), caught.value
 
     # And once it is over, the name can be used again.
     runner._jobs[record["job_id"]]["status"] = "success"
-    again = runner.submit("测试剧本", {"character_1": "甲"})
+    again = runner.submit("测试剧本", {"character_1": "甲"},
+                          run_name=record["run_name"], continue_run=True)
     assert again["run_name"] == record["run_name"]
     runner._jobs.clear()
     runner._reserved.clear()
@@ -285,3 +287,174 @@ def test_the_broken_storyboard_is_still_listed(plugin_root):
 
     names = [row["name"] for row in library.broken_assets()["storyboard"]]
     assert "坏剧本" in names
+
+
+# --------------------------------------------------------------------------- #
+# every generation is its own version
+# --------------------------------------------------------------------------- #
+
+def test_two_generations_get_two_folders(plugin_root, monkeypatch):
+    """Re-rendering used to land in the same folder and overwrite the
+    previous result. The author keeps both without inventing a name."""
+    from webapp.services import library
+    monkeypatch.setattr(library, "get_storyboard", lambda name: {"json": SCRIPT})
+    counter = {"n": 0}
+
+    def submit(graph, client_id=""):
+        counter["n"] += 1
+        return {"prompt_id": "p-%d" % counter["n"], "number": counter["n"]}
+
+    monkeypatch.setattr(runner.comfy, "submit", submit)
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+    first = runner.submit("测试剧本", {"character_1": "甲"})
+    second = runner.submit("测试剧本", {"character_1": "甲"})
+    assert first["run_name"] != second["run_name"], \
+        "the second generation overwrites the first"
+    assert first["attempt"] == 1 and second["attempt"] == 2
+    assert "第 2 版" in second["title"], second["title"]
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+
+def test_a_continuation_keeps_the_very_same_name(plugin_root, monkeypatch):
+    """"From here on" means the same folder: that is how the engine can
+    pick up where it stopped."""
+    from webapp.services import library
+    monkeypatch.setattr(library, "get_storyboard", lambda name: {"json": SCRIPT})
+    monkeypatch.setattr(runner.comfy, "submit",
+                        lambda graph, client_id="": {"prompt_id": "p-1",
+                                                     "number": 1})
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+    first = runner.submit("测试剧本", {"character_1": "甲"})
+    runner._jobs[first["job_id"]]["status"] = "error"
+    again = runner.submit("测试剧本", {"character_1": "甲"},
+                          run_name=first["run_name"], continue_run=True)
+    assert again["run_name"] == first["run_name"]
+    assert again["continued"] is True
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+
+def test_the_version_number_survives_a_restart(plugin_root, monkeypatch):
+    """The job table is on disk, so the numbering does not start over
+    after the app is restarted - the old result keeps its folder."""
+    from webapp.services import library
+    monkeypatch.setattr(library, "get_storyboard", lambda name: {"json": SCRIPT})
+    monkeypatch.setattr(runner.comfy, "submit",
+                        lambda graph, client_id="": {"prompt_id": "p-1",
+                                                     "number": 1})
+    runner._jobs.clear()
+    runner._reserved.clear()
+    runner.submit("测试剧本", {"character_1": "甲"})
+    runner._save_jobs()
+
+    runner._jobs.clear()          # what a restart does
+    runner._jobs.update(runner._load_jobs())
+    assert runner.next_attempt("测试剧本") == 2
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+
+# --------------------------------------------------------------------------- #
+# the English mirror must not fall behind the Chinese source
+# --------------------------------------------------------------------------- #
+
+def test_a_confirmation_is_bound_to_the_version_it_was_made_against(
+        plugin_root):
+    """Editing the Chinese after the confirmation makes the mirror
+    stale - that is the whole point of the confirmation."""
+    from webapp.services import library
+    script = json.loads(json.dumps(SCRIPT))
+    script["execution"] = {
+        "look": "A hand-drawn look.",
+        "setting": "Character 1 stands at center.",
+        "visible_state": "Character 1 stands at center.",
+        "voices": {"character_1": "young female, clear timbre"},
+        "directions": {},
+    }
+    library.confirm_execution("测试剧本", script)
+    assert library.execution_state("测试剧本", script) == "confirmed"
+
+    moved = json.loads(json.dumps(script))
+    moved["look"] = "A changed look."
+    assert library.execution_state("测试剧本", moved) == "changed"
+
+
+def test_editing_the_mirror_after_the_confirmation_is_noticed(plugin_root):
+    """The confirmation says "this mirror matches this source". A mirror
+    written after that says no such thing."""
+    from webapp.services import library
+    script = json.loads(json.dumps(SCRIPT))
+    script["execution"] = {
+        "look": "A hand-drawn look.",
+        "setting": "Character 1 stands at center.",
+        "visible_state": "Character 1 stands at center.",
+        "voices": {"character_1": "young female, clear timbre"},
+        "directions": {},
+    }
+    library.confirm_execution("测试剧本", script)
+
+    edited = json.loads(json.dumps(script))
+    edited["execution"]["look"] = "Something else entirely."
+    assert library.execution_state("测试剧本", edited) == "edited"
+
+
+def test_the_two_states_say_different_things(plugin_root):
+    from webapp.services import library
+    assert "旧" in library.execution_reason("changed")
+    assert "改过" in library.execution_reason("edited")
+
+
+# --------------------------------------------------------------------------- #
+# the finished film comes first
+# --------------------------------------------------------------------------- #
+
+def test_the_finished_film_is_told_apart_from_the_engine_files(
+        plugin_root, tmp_path, monkeypatch):
+    """A run's files are not one pile: the film, the shots and the
+    engine's own paperwork are three different things."""
+    from webapp.services import comfy
+    root = tmp_path / "output" / "h3_chains" / "sb_run"
+    (root / "final").mkdir(parents=True)
+    (root / "segments").mkdir(parents=True)
+    (root / "checkpoints").mkdir(parents=True)
+    (root / "final" / "sb_run.mp4").write_bytes(b"0")
+    (root / "final" / "sb_run.generated.wav").write_bytes(b"0")
+    (root / "segments" / "clip_0001.mp4").write_bytes(b"0")
+    (root / "checkpoints" / "model.safetensors").write_bytes(b"0")
+    (root / "manifest.json").write_text(
+        json.dumps({"duration_seconds": 12.5, "clip_count": 3}),
+        encoding="utf-8")
+    monkeypatch.setattr(comfy.config, "COMFYUI_ROOT", tmp_path)
+
+    artifacts = comfy.collect_artifacts("sb_run")
+    roles = {a["name"]: a["role"] for a in artifacts}
+    assert roles["sb_run.mp4"] == "deliverable"
+    assert roles["sb_run.generated.wav"] == "audio"
+    assert roles["clip_0001.mp4"] == "segment"
+    assert roles["model.safetensors"] == "technical"
+
+    manifest = comfy.run_manifest("sb_run")
+    assert manifest["duration_seconds"] == 12.5
+    assert manifest["clip_count"] == 3
+
+
+def test_one_version_does_not_collect_another_versions_files(
+        plugin_root, tmp_path, monkeypatch):
+    """The run name is a prefix of the next version's name. Matching on
+    a substring would hand version one version two's clips."""
+    from webapp.services import comfy
+    root = tmp_path / "output" / "h3_chains"
+    for name in ("sb_run", "sb_run_v2"):
+        (root / name / "final").mkdir(parents=True)
+        (root / name / "final" / (name + ".mp4")).write_bytes(b"0")
+    monkeypatch.setattr(comfy.config, "COMFYUI_ROOT", tmp_path)
+
+    first = {a["name"] for a in comfy.collect_artifacts("sb_run")}
+    second = {a["name"] for a in comfy.collect_artifacts("sb_run_v2")}
+    assert first == {"sb_run.mp4"}, first
+    assert second == {"sb_run_v2.mp4"}, second

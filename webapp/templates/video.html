@@ -67,6 +67,10 @@
                @input.debounce.300ms="refreshRunName()">
         <span class="muted small" x-show="effectiveRunName">
           实际运行名：<code x-text="effectiveRunName"></code>
+          <span x-show="nextTitle" x-text="'（' + nextTitle + '）'"></span>
+        </span>
+        <span class="muted small" x-show="!runName.trim()">
+          每次生成新版本会自动换一个目录，上一版的结果不会被覆盖。
         </span>
       </label>
       <div class="field-grid">
@@ -76,9 +80,23 @@
         <label class="field"><span>目标秒</span><input class="input" type="number" x-model.number="duration"></label>
       </div>
 
+      <!-- 英文镜像过期：生成实际读的是英文，源文本改了而镜像没改，
+           就是拿旧描述去生成。不能闷头开始。 -->
+      <div class="validation-box" x-show="executionStale">
+        <p style="margin: 0 0 6px;" x-text="executionReason"></p>
+        <p class="muted small" style="margin: 0 0 8px;">
+          去剧本页点「✨ 更新生成描述」可以让英文重新跟上中文；
+          分镜和台词不会动。
+        </p>
+        <label class="muted small" style="display: flex; gap: 6px; align-items: center;">
+          <input type="checkbox" x-model="staleOverride">
+          我知道镜像过期，仍用旧版生成
+        </label>
+      </div>
+
       <button class="btn primary wide" type="button" @click="submit()"
               :disabled="!canSubmit"
-              x-text="submitting ? '提交中…' : (missingRoles.length ? '还差 ' + missingRoles.length + ' 个资产' : '🎬 开始渲染')"></button>
+              x-text="submitting ? '提交中…' : (missingRoles.length ? '还差 ' + missingRoles.length + ' 个资产' : (staleBlocked ? '先处理上面的镜像问题' : '🎬 开始渲染'))"></button>
       <div class="result-box" x-show="message" x-text="message"></div>
     </div>
 
@@ -87,20 +105,69 @@
         <div class="card-head"><h3>任务</h3></div>
         <template x-for="j in jobs" :key="j.job_id || j.run_name">
           <div class="job-row">
-            <div>
-              <div class="cell-strong" x-text="j.run_name"></div>
-              <div class="muted small" x-text="j.script + ' · ' + j.status"></div>
+            <div class="job-head">
+              <div class="cell-strong" x-text="j.title || j.run_name"></div>
+              <div class="muted small">
+                <span x-text="j.script"></span>
+                <span x-show="j.attempt" x-text="' · 第 ' + j.attempt + ' 版'"></span>
+                <span x-show="j.continued" x-text="' · 续跑'"></span>
+              </div>
               <div class="muted small" x-show="j.from_disk">磁盘记录（不是本页提交的）</div>
               <div class="warn small" x-show="(j.inputs_changed || []).length"
                    x-text="'输入已变更：' + j.inputs_changed.join('、') + '（结果可能与提交时不同）'"></div>
             </div>
             <span class="badge" :class="statusClass(j.status)" x-text="statusLabel(j.status)"></span>
-            <div class="job-artifacts">
-              <template x-for="a in (j.artifacts || [])" :key="a.relpath">
-                <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
-                   x-text="a.name"></a>
-              </template>
-            </div>
+
+            <!-- 正式成片：这就是作者要拿走的东西。
+                 x-if 而不是 x-show：没有成片的任务不能去求值
+                 j.deliverable.relpath。 -->
+            <template x-if="j.deliverable">
+              <div class="delivery">
+                <video class="delivery-player" controls preload="metadata"
+                       :src="'/media/' + j.deliverable.relpath"></video>
+                <div class="delivery-meta">
+                  <span class="cell-strong" x-text="j.deliverable.name"></span>
+                  <span class="muted small"
+                        x-text="durationText(j.manifest)"></span>
+                  <a class="btn primary" :href="'/media/' + j.deliverable.relpath"
+                     download x-text="'⬇ 下载成片'"></a>
+                </div>
+              </div>
+            </template>
+            <!-- 只有片段没有成片：说清楚差什么。 -->
+            <p class="warn small" x-show="!j.deliverable && (j.segments || []).length"
+               x-text="'还没有成片，只有 ' + j.segments.length + ' 个分镜片段。'"></p>
+
+            <details class="preview-block" x-show="(j.segments || []).length">
+              <summary x-text="'分镜片段（' + j.segments.length + '）'"></summary>
+              <div class="job-artifacts">
+                <template x-for="a in (j.segments || [])" :key="a.relpath">
+                  <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
+                     x-text="a.name"></a>
+                </template>
+              </div>
+            </details>
+
+            <details class="preview-block" x-show="(j.audio || []).length || (j.technical || []).length">
+              <summary x-text="'声音与技术文件（' + ((j.audio || []).length + (j.technical || []).length) + '）'"></summary>
+              <div class="job-artifacts">
+                <template x-for="a in (j.audio || [])" :key="a.relpath">
+                  <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
+                     x-text="a.name"></a>
+                </template>
+                <template x-for="a in (j.technical || [])" :key="a.relpath">
+                  <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
+                     x-text="a.name"></a>
+                </template>
+              </div>
+            </details>
+
+            <!-- 从上次继续：接着原来的任务走，不新开一版。 -->
+            <button class="btn subtle" type="button"
+                    x-show="canContinue(j)" @click="continueJob(j)"
+                    :disabled="submitting"
+                    title="用同样的角色绑定和参数，接着这个任务继续生成">▶ 从这次继续</button>
+
             <p class="err small" x-show="j.error" x-text="j.error"></p>
           </div>
         </template>

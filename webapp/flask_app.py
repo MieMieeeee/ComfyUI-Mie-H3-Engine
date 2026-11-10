@@ -294,6 +294,39 @@ def create_app() -> Flask:
             return jsonify({"error": str(exc)}), 404
         return jsonify(library.confirm_execution(name, script["json"]))
 
+    @app.route("/api/scripts/<name>/execution/draft", methods=["POST"])
+    def api_execution_draft(name):
+        """Rewrite ONLY the English execution mirror, from the source.
+
+        The author asks for this explicitly: the mirror is their text,
+        and it is never replaced behind their back. The reply carries
+        the new mirror and a field-by-field diff, so the page can show
+        what would change before anything is replaced.
+
+        Nothing is written here. The draft lands in the workbench
+        editor, and it is saved like any other edit.
+        """
+        data = request.get_json(silent=True) or {}
+        payload = data.get("json")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except ValueError as exc:
+                return jsonify({"error": "剧本 JSON 解析不了：%s" % exc}), 400
+        try:
+            if not isinstance(payload, dict):
+                script = library.get_storyboard(name)["json"]
+            else:
+                script = payload
+        except (FileNotFoundError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 404
+        try:
+            return jsonify(autodraft.execution_mirror(script))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except Exception as exc:  # noqa: BLE001 - the provider's error is the answer
+            return jsonify({"error": "%s: %s" % (type(exc).__name__, exc)}), 400
+
     @app.route("/api/scripts/<name>/plan", methods=["POST"])
     def api_script_plan(name):
         data = request.get_json(silent=True) or {}
@@ -344,7 +377,8 @@ def create_app() -> Flask:
                 width=int(data.get("width") or 960),
                 height=int(data.get("height") or 544),
                 steps=int(data.get("steps") or 20),
-                duration=int(data.get("duration") or 18))
+                duration=int(data.get("duration") or 18),
+                continue_run=bool(data.get("continue_run")))
         except (FileNotFoundError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
         except comfy.ComfyUnavailable as exc:
@@ -361,12 +395,19 @@ def create_app() -> Flask:
 
         The engine takes the name verbatim, so the page shows the exact
         string instead of letting a Chinese script name become a
-        surprise error at submit time.
+        surprise error at submit time. The version number comes with it:
+        the author does not have to invent a name to keep the old
+        result.
         """
         data = request.get_json(silent=True) or {}
-        return jsonify({"run_name": runname.effective_run_name(
-            str(data.get("run_name") or ""),
-            str(data.get("script") or ""))})
+        script = str(data.get("script") or "")
+        attempt = runner.next_attempt(script) if script else 1
+        return jsonify({
+            "run_name": runname.effective_run_name(
+                str(data.get("run_name") or ""), script, attempt),
+            "attempt": attempt,
+            "title": runname.work_title(script, attempt),
+        })
 
     @app.route("/api/render/<job_id>")
     def api_render_job(job_id):

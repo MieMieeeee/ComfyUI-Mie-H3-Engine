@@ -67,7 +67,8 @@ def _save_jobs() -> None:
     # and their hashes, a restarted app cannot tell that the inputs
     # changed under a queued run.
     slim = [{key: record.get(key) for key in
-             ("job_id", "number", "script", "run_name", "submitted_at",
+             ("job_id", "number", "script", "run_name", "title", "attempt",
+              "continued", "submitted_at",
               "status", "error", "nodes", "role_assets", "asset_hashes",
               "script_hash", "params", "snapshot_dir")}
             for record in records]
@@ -96,18 +97,34 @@ def _now() -> float:
     return time.time()
 
 
+def next_attempt(script_name: str) -> int:
+    """Which version of this script comes next.
+
+    Every generation of one script is its own run, with its own folder
+    on disk and its own result to keep. The number counts the runs this
+    app has started for the script, so it survives a restart (the job
+    table is on disk).
+    """
+    with _jobs_lock:
+        used = [record.get("attempt") or 0 for record in _jobs.values()
+                if record.get("script") == script_name]
+    return (max(used) if used else 0) + 1
+
+
 def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
            width: int = 960, height: int = 544, steps: int = 20,
-           duration: int = 18) -> dict:
+           duration: int = 18, continue_run: bool = False) -> dict:
     """Build the workflow for a script and queue it.
 
     Returns the job record. The render itself takes minutes; the caller
     polls :func:`job`.
+
+    ``continue_run`` says: this is the SAME run as before - the author
+    wants to carry on from where it stopped, into the same folder. Every
+    other submission is a new version, with its own folder, so the
+    previous result stays where it was.
     """
     script = library.get_storyboard(script_name)
-    # One name for both the graph and the job record: the engine takes
-    # it verbatim, so the record and the run on disk must agree.
-    effective = runname.effective_run_name(run_name, script_name)
     client_id = "mie-web-%s" % uuid.uuid4().hex[:12]
 
     # Everything that can collide is inside one critical section: the
@@ -115,6 +132,15 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
     # requests with the same name used to both pass the check and both
     # land in the queue, and they write one folder.
     with _submit_lock:
+        attempt = 1 if continue_run else next_attempt(script_name)
+        # One name for both the graph and the job record: the engine
+        # takes it verbatim, so the record and the run on disk must
+        # agree. A continuation keeps the old name exactly - that is
+        # what makes it a continuation.
+        effective = (runname.safe_run_name(run_name)
+                     if continue_run
+                     else runname.effective_run_name(
+                         run_name, script_name, attempt))
         _refuse_a_duplicate(effective, script_name)
         _reserve(effective, script_name)
         try:
@@ -137,6 +163,11 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
         "number": result.get("number"),
         "script": script_name,
         "run_name": effective,
+        # The author's name for the work, and which version it is. The
+        # run name is the engine's folder; this is what the list shows.
+        "title": runname.work_title(script_name, attempt),
+        "attempt": attempt,
+        "continued": bool(continue_run),
         "role_assets": role_assets,
         "submitted_at": _now(),
         "status": "queued",
@@ -234,6 +265,8 @@ def job(job_id: str, queued: tuple = None) -> dict:
             record["error"] = record.get("error") or (
                 "ComfyUI 里已找不到这次运行：可能提交后立刻失败、被中断，"
                 "或历史已被清理。")
+        # 中断的任务，磁盘上可能已经有片段甚至成片：作者要看得见。
+        _attach_artifacts(record)
         _remember(record)
         return record
     status = entry.get("status", {})
@@ -264,18 +297,38 @@ def job(job_id: str, queued: tuple = None) -> dict:
             texts[node_id] = "".join(
                 p if isinstance(p, str) else str(p) for p in pieces)
     record["texts"] = texts
-    record["artifacts"] = comfy.collect_artifacts(record["run_name"])
-    for node_out in outputs.values():
+    _attach_artifacts(record, outputs)
+    _remember(record)
+    return record
+
+
+def _attach_artifacts(record: dict, outputs: dict = None) -> None:
+    """Put the delivery on the record: the film first, then the shots,
+    then the engine's own files.
+
+    The author wants the film, not the nineteen files that came with
+    it.
+    """
+    artifacts = comfy.collect_artifacts(record.get("run_name") or "")
+    for node_out in (outputs or {}).values():
         if node_out.get("images"):
-            record["artifacts"] = record.get("artifacts", []) + [
+            artifacts = artifacts + [
                 {"name": image.get("filename", ""),
                  "relpath": "%s/%s" % (image.get("subfolder", ""),
                                        image.get("filename", "")),
                  "kind": "video" if image.get("type") == "output" else "image",
+                 "role": "deliverable" if image.get("type") == "output"
+                 else "technical",
                  "size": 0}
                 for image in node_out["images"]
             ]
-    _remember(record)
+    record["artifacts"] = artifacts
+    record["deliverable"] = next(
+        (a for a in artifacts if a.get("role") == "deliverable"), None)
+    record["segments"] = [a for a in artifacts if a.get("role") == "segment"]
+    record["audio"] = [a for a in artifacts if a.get("role") == "audio"]
+    record["technical"] = [a for a in artifacts if a.get("role") == "technical"]
+    record["manifest"] = comfy.run_manifest(record.get("run_name") or "")
     return record
 
 
@@ -304,18 +357,26 @@ def jobs() -> list[dict]:
     for run in comfy.recent_runs():
         if run["run_name"] in known:
             continue
+        artifacts = ([{"name": os.path.basename(run["video"]),
+                       "relpath": run["video"], "kind": "video",
+                       "role": "deliverable", "size": 0}]
+                      if run["video"] else [])
         live.append({
             # A synthetic id: the disk runs have no prompt id, and an
             # empty one would collide in the page's x-for key.
             "job_id": "disk:" + run["run_name"],
             "run_name": run["run_name"],
+            "title": run["run_name"],
             "status": run["status"],
             "script": "",
             "video": run["video"],
             "clips": run["clips"],
-            "artifacts": ([{"name": os.path.basename(run["video"]),
-                            "relpath": run["video"], "kind": "video", "size": 0}]
-                           if run["video"] else []),
+            "artifacts": artifacts,
+            "deliverable": artifacts[0] if artifacts else None,
+            "segments": [],
+            "audio": [],
+            "technical": [],
+            "manifest": comfy.run_manifest(run["run_name"]),
             "from_disk": True,
             "inputs_changed": [],
         })

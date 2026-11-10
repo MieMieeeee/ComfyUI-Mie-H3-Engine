@@ -182,6 +182,11 @@ def collect_artifacts(run_name: str) -> list[dict]:
     The web app runs on the same machine as ComfyUI (the plan's D8), so
     the output directory is a local path - no HTTP round trip, and the
     files are served by the app's own /media route.
+
+    Every file gets a ROLE as well as a kind: the finished film, the
+    per-shot clips, the audio and the technical files (json, locks,
+    checkpoints) are different things to the author, and a flat list of
+    nineteen of them answers none of the questions.
     """
     found = []
     for sub in config.OUTPUT_SUBDIRS:
@@ -191,15 +196,73 @@ def collect_artifacts(run_name: str) -> list[dict]:
         for path in sorted(root.rglob("*")):
             if not path.is_file():
                 continue
-            if run_name and run_name not in path.name and run_name not in str(path.parent):
+            if run_name and not _belongs_to_run(path, root, run_name):
                 continue
+            relpath = str(path.relative_to(config.COMFYUI_ROOT / "output")).replace("\\", "/")
             found.append({
                 "name": path.name,
-                "relpath": str(path.relative_to(config.COMFYUI_ROOT / "output")).replace("\\", "/"),
+                "relpath": relpath,
                 "size": path.stat().st_size,
                 "kind": _kind_of(path),
+                "role": _role_of(relpath),
             })
     return found
+
+
+def _belongs_to_run(path: pathlib.Path, root: pathlib.Path,
+                    run_name: str) -> bool:
+    """Whether this file belongs to THIS run.
+
+    Matching on a substring would give one version another version's
+    files: "sb_run" is a prefix of "sb_run_v2", so the first version's
+    list would grow the second version's clips.
+
+    Inside a run directory the name has to be a whole directory name.
+    The flat directory (live_storyboards) has no run directory, so there
+    the file name has to carry the name.
+    """
+    parts = path.relative_to(root).parts
+    if len(parts) > 1:
+        return run_name in parts[:-1]
+    return path.name.startswith(run_name)
+
+
+def _role_of(relpath: str) -> str:
+    """What a file is to the author.
+
+    ``deliverable`` - the finished film. ``segment`` - one shot, before
+    the shots are joined. ``audio`` - the soundtrack. ``technical`` -
+    everything the engine wrote for itself.
+    """
+    parts = relpath.split("/")
+    name = parts[-1].lower()
+    if len(parts) >= 2 and parts[-2] == "final" and name.endswith(
+            (".mp4", ".webm", ".mkv", ".mov")):
+        return "deliverable"
+    if "segments" in parts or "blend_segments" in parts:
+        return "segment"
+    if name.endswith((".wav", ".mp3", ".m4a", ".flac")):
+        return "audio"
+    return "technical"
+
+
+def run_manifest(run_name: str) -> dict:
+    """What the run says about itself: how long it is, how many shots."""
+    path = (config.COMFYUI_ROOT / "output" / "h3_chains" / run_name
+            / "manifest.json")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError, AttributeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    segments = payload.get("segments") or []
+    return {
+        "duration_seconds": payload.get("duration_seconds"),
+        "clip_count": payload.get("clip_count") or len(segments),
+        "delivered_frames": payload.get("total_delivered_frames"),
+        "plan_hash": payload.get("plan_hash"),
+    }
 
 
 def _kind_of(path: pathlib.Path) -> str:

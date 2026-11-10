@@ -60,14 +60,39 @@ def _wait_for(url: str, timeout: float = 30.0) -> bool:
 
 @pytest.fixture(scope="module")
 def web(tmp_path_factory):
-    """A web app on a throwaway plugin root."""
+    """A web app on a throwaway plugin root.
+
+    The ComfyUI output directory is thrown away too: the task list
+    reads the finished renders off the disk, and a test has no business
+    reading - let alone writing - the user's real output folder.
+    """
     root = tmp_path_factory.mktemp("plugin")
     (root / "asset_library" / "characters").mkdir(parents=True)
     (root / "asset_library" / "scenes").mkdir(parents=True)
     (root / "asset_library" / "storyboards").mkdir(parents=True)
+    # 一份做出来的片子：正式成片、片段、技术文件。
+    run = root / "comfyui" / "output" / "h3_chains" / "sb_demo"
+    (run / "final").mkdir(parents=True)
+    (run / "segments").mkdir(parents=True)
+    (run / "checkpoints").mkdir(parents=True)
+    (run / "final" / "sb_demo.mp4").write_bytes(b"0")
+    (run / "final" / "sb_demo.generated.wav").write_bytes(b"0")
+    (run / "segments" / "clip_0001.mp4").write_bytes(b"0")
+    (run / "checkpoints" / "model.safetensors").write_bytes(b"0")
+    (run / "manifest.json").write_text(json.dumps(
+        {"duration_seconds": 12.5, "clip_count": 1}), encoding="utf-8")
+    # 任务记录：app 启动时读它。
+    (root / "jobs.json").write_text(json.dumps({"jobs": [{
+        "job_id": "p-demo", "number": 1, "script": "测试剧本",
+        "run_name": "sb_demo", "title": "测试剧本 · 第 1 版", "attempt": 1,
+        "submitted_at": 1.0, "status": "success", "error": "", "nodes": 33,
+        "role_assets": {"character_1": "甲"},
+        "params": {"width": 960, "height": 544, "steps": 20, "duration": 12},
+    }]}), encoding="utf-8")
     env = dict(os.environ)
     env["MIE_PLUGIN_ROOT"] = str(root)
     env["MIE_WEB_SETTINGS"] = str(root / "settings.json")
+    env["MIE_COMFYUI_ROOT"] = str(root / "comfyui")
     env["MIE_WEB_PORT"] = str(PORT)
     env["MIE_WEB_HOST"] = "127.0.0.1"
     process = subprocess.Popen(
@@ -405,3 +430,42 @@ def test_a_broken_character_shows_up_and_can_be_deleted(page, web):
     page.wait_for_timeout(1500)
     assert row_named(page, "坏角色") is None, "it is still in the list"
     assert not folder.exists(), "the folder is still on disk"
+
+
+def test_the_task_card_leads_with_the_finished_film(page):
+    """Nineteen files in a flat list answers none of the author's
+    questions. The film comes first, in a player, with a download."""
+    page.goto(BASE + "/video", wait_until="networkidle")
+    page.wait_for_timeout(1500)
+    card = visible(page, ".job-row").first
+    assert card.count() > 0, "the task list is empty"
+
+    player = card.locator("video.delivery-player")
+    assert player.count() == 1, "there is no player for the film"
+    assert "sb_demo.mp4" in (player.get_attribute("src") or "")
+
+    download = card.locator("a.btn.primary")
+    assert download.count() == 1, "there is no download button"
+    assert download.get_attribute("download") is not None
+    assert "sb_demo.mp4" in (download.get_attribute("href") or "")
+
+    # 时长来自 manifest，不是编的。
+    assert "12.5" in card.inner_text(), card.inner_text()
+
+    # 片段和技术文件收进次级区，不平铺。
+    summaries = [d.locator("summary").inner_text()
+                 for d in card.locator("details.preview-block").all()]
+    assert any("分镜片段" in s for s in summaries), summaries
+    assert any("技术文件" in s for s in summaries), summaries
+    # 技术文件不直接出现在页面上。
+    assert "model.safetensors" not in card.inner_text()
+
+
+def test_a_finished_task_can_be_continued(page):
+    """Carrying on is a button, not something the author has to
+    reconstruct by hand."""
+    page.goto(BASE + "/video", wait_until="networkidle")
+    page.wait_for_timeout(1500)
+    card = visible(page, ".job-row").first
+    button = card.locator("button", has_text="从这次继续")
+    assert button.count() == 1, "there is no way to carry on"
