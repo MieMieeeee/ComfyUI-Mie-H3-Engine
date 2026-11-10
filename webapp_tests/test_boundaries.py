@@ -837,3 +837,62 @@ def test_a_junction_inside_the_run_is_not_followed(plugin_root, tmp_path,
     comfy.delete_run_files("take")
     assert keep.is_file(), "the delete walked out through the junction"
     assert not run.exists(), "the run's own folder is still there"
+
+
+def test_the_real_delete_entry_does_not_walk_through_a_junction(plugin_root,
+                                                                tmp_path,
+                                                                monkeypatch):
+    """The way the page deletes: collect the run's files, then delete
+    them one by one. The folder above those files can be a junction,
+    and the files are then another work's files."""
+    from webapp.services import comfy, runner
+    root = tmp_path / "comfyui"
+    chains = root / "output" / "h3_chains"
+    chains.mkdir(parents=True)
+    other = chains / "other_run"
+    (other / "final").mkdir(parents=True)
+    keep = other / "final" / "film.mp4"
+    keep.write_bytes(b"0")
+    junction = chains / "take"
+    if not _make_junction(junction, other):
+        pytest.skip("this machine cannot make a junction")
+    monkeypatch.setattr(comfy.config, "COMFYUI_ROOT", root)
+    # 真实清单里确实有 take：不是伪造的标识。
+    monkeypatch.setattr(runner.comfy, "recent_runs", lambda limit=20: [
+        {"run_name": "take", "status": "success", "video": "",
+         "clips": 1, "shots": 1, "finished_at": 1.0}])
+
+    result = runner.delete_record("disk:take", delete_files=True)
+    assert keep.is_file(), "the other work's film was deleted"
+    assert not junction.exists(), "the link itself was not removed"
+    assert not any("film.mp4" in item for item in result["files_removed"]), \
+        result["files_removed"]
+
+
+def test_a_link_inside_the_run_keeps_the_other_run_alive(plugin_root, tmp_path,
+                                                         monkeypatch):
+    """The run's own folder is real, but one of the folders inside it
+    points at another run. The delete must not follow it."""
+    from webapp.services import comfy, runner
+    root = tmp_path / "comfyui"
+    chains = root / "output" / "h3_chains"
+    chains.mkdir(parents=True)
+    other = chains / "other_run"
+    (other / "final").mkdir(parents=True)
+    keep = other / "final" / "film.mp4"
+    keep.write_bytes(b"0")
+    run = chains / "take"
+    (run / "final").mkdir(parents=True)
+    (run / "final" / "own.mp4").write_bytes(b"0")
+    junction = run / "borrowed"
+    if not _make_junction(junction, other):
+        pytest.skip("this machine cannot make a junction")
+    monkeypatch.setattr(comfy.config, "COMFYUI_ROOT", root)
+    monkeypatch.setattr(runner.comfy, "recent_runs", lambda limit=20: [
+        {"run_name": "take", "status": "success", "video": "",
+         "clips": 1, "shots": 1, "finished_at": 1.0}])
+
+    relpaths = [a["relpath"] for a in comfy.collect_artifacts("take")]
+    runner.delete_record("disk:take", delete_files=True)
+    assert keep.is_file(), "the other work's film was deleted"
+    assert not run.exists(), "the run's own folder is still there"

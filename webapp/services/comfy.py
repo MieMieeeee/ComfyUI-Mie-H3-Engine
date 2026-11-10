@@ -219,7 +219,11 @@ def _walk_output() -> list[dict]:
         root = config.COMFYUI_ROOT / "output" / sub
         if not root.is_dir():
             continue
-        for dirpath, _dirnames, filenames in os.walk(root):
+        for dirpath, dirnames, filenames in os.walk(root):
+            # 链接目录不是这次运行的文件：里面的东西属于它指着的地方。
+            for name in list(dirnames):
+                if _is_link(pathlib.Path(dirpath) / name):
+                    dirnames.remove(name)
             for filename in filenames:
                 path = pathlib.Path(dirpath) / filename
                 try:
@@ -427,6 +431,10 @@ def delete_run_files(run_name: str, relpaths: list = None) -> list:
     # 1) 任务记录里的那几份文件，一份一份按路径删。
     for relpath in (relpaths or []):
         raw = output / str(relpath)
+        # 路径上的任何一段是链接，就不碰它指着的地方：文件本身可以是
+        # 普普通通的一个文件，而它上面的那一级是个 junction。
+        if _link_in_path(raw, output):
+            continue
         if _is_link(raw):
             # 链接：删链接本身，不动它指着的地方。
             if _remove_link(raw):
@@ -449,6 +457,7 @@ def delete_run_files(run_name: str, relpaths: list = None) -> list:
         if _is_link(folder):
             # 这是一个 junction（指向另一个目录的"文件夹"）：看着像
             # 目录，删的却是它指着的那个地方——别人的作品。
+            # 只摘掉链接本身，它下面的东西一件都不碰。
             if _remove_link(folder):
                 removed.append("%s/%s（是个链接，只删了链接本身）"
                                % (sub, name))
@@ -464,6 +473,26 @@ def delete_run_files(run_name: str, relpaths: list = None) -> list:
         shutil.rmtree(resolved, ignore_errors=True)
         removed.append("%s/%s（%d 个文件）" % (sub, name, count))
     return removed
+
+
+def _link_in_path(path: pathlib.Path, root: pathlib.Path) -> bool:
+    """Is any part of this path a link?
+
+    The file itself may be an ordinary file while the folder above it
+    is a junction pointing somewhere else: resolving that path lands
+    on another work's file. The whole path is checked, not just the
+    leaf.
+    """
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return True
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if _is_link(current):
+            return True
+    return False
 
 
 def _is_link(path: pathlib.Path) -> bool:
