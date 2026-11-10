@@ -338,3 +338,25 @@ def test_a_half_written_json_is_unsaved_work(page):
     stored = page.evaluate(
         "() => window.localStorage.getItem('mie-script-draft:new')")
     assert stored and "没写完" in stored, "the raw text was not kept"
+
+
+def test_a_broken_board_says_why_instead_of_going_blank(page, web):
+    """Clicking a board that cannot be read must not leave the pane
+    looking like nothing was clicked."""
+    folder = web / "asset_library" / "storyboards" / "坏剧本"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "坏剧本.h3_asset.json").write_text(
+        json.dumps({"version": 2, "name": "坏剧本"}), encoding="utf-8")
+
+    page.goto(BASE + "/scripts", wait_until="networkidle")
+    page.wait_for_timeout(900)
+    row = row_named(page, "坏剧本")
+    assert row is not None, "the broken board is not even in the list"
+    row.click()
+    page.wait_for_timeout(1200)
+
+    box = visible(page, ".split-detail .validation-box")
+    assert box.count() >= 1, "the pane said nothing about the failure"
+    text = box.first.inner_text()
+    assert "storyboard.json" in text, text
+    assert "坏剧本.h3_asset.json" in text, text

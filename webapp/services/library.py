@@ -221,9 +221,32 @@ def delete_scene(name: str) -> dict:
 # script assets
 # --------------------------------------------------------------------------- #
 
+def unreadable_reason(name: str, reason: str) -> str:
+    """Say what is actually wrong with a board, in a way to act on.
+
+    "missing storyboard.json" on its own leaves the reader guessing. The
+    folder is right there, so the message names what IS in it - a JSON
+    file under another name is usually the very board that is wanted.
+    """
+    if "storyboard.json" not in str(reason):
+        return str(reason)
+    if "missing" not in str(reason) and "not found" not in str(reason):
+        return str(reason)
+    folder = pathlib.Path(library_dir()) / "storyboards" / name
+    others = sorted(p.name for p in folder.glob("*.json")) if folder.is_dir() else []
+    head = ("缺少 storyboard.json：引擎只读 <剧本名>/storyboard.json 这一个文件。")
+    if not others:
+        return head + "这个文件夹里也没有别的 json。"
+    return head + ("这个文件夹里现在只有：%s —— 里面很可能就是这份剧本，"
+                   "只是文件名不对。" % "、".join(others))
+
+
 def get_storyboard(name: str) -> dict:
     """One script asset: its JSON, its preview and its requirements."""
-    cleaned, path = _script_asset.load_storyboard(library_dir(), name)
+    try:
+        cleaned, path = _script_asset.load_storyboard(library_dir(), name)
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(unreadable_reason(name, str(exc))) from exc
     meta = _script_asset.read_storyboard_meta(library_dir(), name)
     return {
         "name": cleaned.get("name", name),
@@ -347,12 +370,13 @@ def list_storyboards_meta() -> list[dict]:
         text = line.strip()
         if text.startswith("skipped ") and ": " in text:
             name, reason = text[len("skipped "):].split(": ", 1)
-            rows.append({"name": name, "error": reason})
+            rows.append({"name": name, "error": unreadable_reason(name, reason)})
     for name in [n for n in result.get("names", "").splitlines() if n.strip()]:
         try:
             cleaned, _path = _script_asset.load_storyboard(library_dir(), name)
         except (ValueError, FileNotFoundError) as exc:
-            rows.append({"name": name, "error": str(exc)})
+            rows.append({"name": name,
+                         "error": unreadable_reason(name, str(exc))})
             continue
         rows.append({
             "name": name,

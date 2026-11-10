@@ -160,7 +160,6 @@ def test_the_name_is_free_again_once_the_run_is_over(plugin_root, monkeypatch):
 # --------------------------------------------------------------------------- #
 # the job log has to keep the provenance
 # --------------------------------------------------------------------------- #
-
 def test_the_fingerprint_is_taken_of_the_library_the_app_uses(plugin_root):
     """The blank default resolves against mie_craft's own idea of where
     the library is - which is not the pack this app is pointed at. A hash
@@ -201,3 +200,44 @@ def test_the_job_log_keeps_what_the_inputs_were(plugin_root):
     restored = runner._load_jobs()
     assert restored["job-1"]["asset_hashes"] == {"character_1": "def456"}
     assert restored["job-1"]["role_assets"] == {"character_1": "甲"}
+
+
+# --------------------------------------------------------------------------- #
+# a board that cannot be read has to say why
+# --------------------------------------------------------------------------- #
+
+def test_a_board_with_the_wrong_file_name_says_what_is_in_the_folder(
+        plugin_root):
+    """"missing storyboard.json" leaves the reader guessing. The folder
+    is right there - and a JSON file under another name is usually the
+    very board that is wanted."""
+    from webapp.services import library
+    folder = plugin_root / "asset_library" / "storyboards" / "坏剧本"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "坏剧本.h3_asset.json").write_text(
+        json.dumps({"version": 2, "name": "坏剧本"}), encoding="utf-8")
+
+    reason = library.unreadable_reason("坏剧本", "missing storyboard.json")
+    assert "storyboard.json" in reason
+    assert "坏剧本.h3_asset.json" in reason, reason
+
+
+def test_a_board_that_is_not_there_at_all_still_explains(plugin_root):
+    from webapp.services import library
+    reason = library.unreadable_reason("没有的剧本", "missing storyboard.json")
+    assert "storyboard.json" in reason
+    assert "没有的剧本.h3_asset.json" not in reason
+
+
+def test_the_list_carries_the_reason(plugin_root):
+    """The list row says "损坏" - the reason has to be in there too, or
+    the badge is just noise."""
+    from webapp.services import library
+    folder = plugin_root / "asset_library" / "storyboards" / "坏剧本"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "坏剧本.h3_asset.json").write_text(
+        json.dumps({"version": 2, "name": "坏剧本"}), encoding="utf-8")
+
+    rows = {row["name"]: row for row in library.list_storyboards_meta()}
+    assert "坏剧本" in rows, rows.keys()
+    assert "storyboard.json" in rows["坏剧本"]["error"]

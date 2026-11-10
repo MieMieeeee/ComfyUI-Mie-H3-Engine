@@ -7,7 +7,13 @@
 const api = {
   async get(url) {
     const response = await fetch(url, { headers: { "Accept": "application/json" } });
-    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      // The server says WHY in the body ("missing storyboard.json").
+      // Throwing away that body leaves the page saying "404 Not Found",
+      // which tells the reader nothing about what to do.
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `${response.status} ${response.statusText}`);
+    }
     return response.json();
   },
   async post(url, body) {
@@ -559,6 +565,7 @@ function scriptsPage() {
     grouping: [],              /* 分镜 = 事件索引的分组 */
     shotDurations: [],         /* 与 grouping 平行；没动过分镜时沿用服务端值 */
     errors: [], warnings: [], okMessage: "",
+    loadError: "",              /* 这份剧本读不出来时的原因（面板上直接说） */
     warnOpen: false,
     baseline: "",              /* 打开/保存时的模型快照（用来算未保存） */
     sourceSnapshot: "",        /* 打开/保存时的中文源文本（镜像陈旧的判据） */
@@ -738,6 +745,7 @@ function scriptsPage() {
       this.errors = []; this.warnings = []; this.okMessage = ""; this.warnOpen = false;
       this.draftOpen = false; this.draftNotes = [];
       this.recoveredDraft = null;
+      this.loadError = "";
       try {
         const data = await api.get(`/api/scripts/${encodeURIComponent(name)}`);
         this.model = normalizeStoryboardModel(data.json);
@@ -759,7 +767,11 @@ function scriptsPage() {
         }
         this.queueValidate();
       } catch (error) {
-        this.okMessage = `读取失败：${error.message}`;
+        // 读不出来要说出来。这个面板在没有 model 的时候只显示一句
+        // "从左侧选择一个剧本"，把错误写进 okMessage 等于没人看见。
+        this.model = null;
+        this.cleaned = null;
+        this.loadError = `读取失败：${error.message}`;
       }
     },
 
@@ -769,6 +781,7 @@ function scriptsPage() {
       this.errors = []; this.warnings = []; this.okMessage = ""; this.warnOpen = false;
       this.draftOpen = false; this.draftNotes = [];
       this.recoveredDraft = null;
+      this.loadError = "";
       this.cleaned = null;
       this.rawText = ""; this.jsonDirty = false;
       this.model = normalizeStoryboardModel({

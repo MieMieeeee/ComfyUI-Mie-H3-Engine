@@ -28,7 +28,7 @@
                   @click="open(item.name)">
             <span class="row-main">
               <span class="cell-strong" x-text="item.name"></span>
-              <span class="badge err" x-show="item.error">损坏</span>
+              <span class="badge err" x-show="item.error" :title="item.error">损坏</span>
             </span>
             <span class="muted small" x-text="metaLine(item)"></span>
           </button>
@@ -39,7 +39,10 @@
 
     <!-- 右：工作台 -->
     <div class="split-detail">
-      <p class="muted" x-show="!model && !draftOpen">从左侧选择一个剧本，或点「＋ 新建」「✨ AI 起草」。</p>
+      <!-- 这份剧本读不出来的时候，得说清楚为什么读不出来：不然这里
+           只有一句"从左侧选择一个剧本"，像是没点中。 -->
+      <div class="validation-box" x-show="loadError" x-text="loadError"></div>
+      <p class="muted" x-show="!model && !draftOpen && !loadError">从左侧选择一个剧本，或点「＋ 新建」「✨ AI 起草」。</p>
 
       <!-- AI 起草表单 -->
       <template x-if="draftOpen">
