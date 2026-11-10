@@ -184,6 +184,79 @@
               <p class="err small" x-show="intake.imageError"
                  x-text="intake.imageError"></p>
               <p class="muted small" x-show="intake.imageBusy">正在处理图片…</p>
+
+              <!-- 另存为参考资产：显式、独立于剧本保存（M3） -->
+              <div class="intake-asset" x-show="intake.image">
+                <button class="btn" type="button" x-show="!intake.assetForm"
+                        @click="intakeOpenAssetForm()">另存为参考资产</button>
+                <template x-if="intake.assetForm && !intake.assetForm.saved">
+                  <div class="intake-asset-form">
+                    <p class="small" style="margin: 0 0 6px">
+                      把这张图存进资产库（角色立绘或场景参考）。这是独立动作：
+                      存不存不影响眼前的草稿，剧本要另行保存。
+                    </p>
+                    <div class="field-row">
+                      <label class="field">
+                        <span>类型</span>
+                        <select class="input" x-model="intake.assetForm.kind">
+                          <option value="character">角色</option>
+                          <option value="scene">场景</option>
+                        </select>
+                      </label>
+                      <label class="field">
+                        <span>名称</span>
+                        <input class="input" x-model="intake.assetForm.name">
+                      </label>
+                    </div>
+                    <label class="field">
+                      <span>参考目标（图里有几个人物时写清这图当谁的参考；全图即目标可写“全图”）</span>
+                      <input class="input" x-model="intake.assetForm.target"
+                             placeholder="例如：蓝外套年轻人（左一）">
+                    </label>
+                    <label class="field" x-show="intake.assetForm.kind === 'character'">
+                      <span>声音说明（角色必填）</span>
+                      <input class="input" x-model="intake.assetForm.voice"
+                             placeholder="例如：低沉男声">
+                    </label>
+                    <label class="field">
+                      <span>描述</span>
+                      <textarea class="input" rows="2"
+                                x-model="intake.assetForm.description"></textarea>
+                    </label>
+                    <p class="err small" x-show="intake.assetForm.error"
+                       x-text="intake.assetForm.error"></p>
+                    <div class="job-actions">
+                      <button class="btn primary" type="button"
+                              :disabled="intake.assetForm.busy"
+                              @click="intakeSaveAsset()"
+                              x-text="intake.assetForm.busy ? '保存中…' : '存入资产库'"></button>
+                      <button class="btn" type="button"
+                              :disabled="intake.assetForm.drafting"
+                              @click="intakeDraftAssetFields()"
+                              x-text="intake.assetForm.drafting ? 'AI 补全中…' : '✨ AI 补全描述'"></button>
+                      <button class="btn" type="button"
+                              :disabled="intake.assetForm.busy"
+                              @click="intake.assetForm = null">取消</button>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="intake.assetForm && intake.assetForm.saved">
+                  <div class="intake-asset-done">
+                    <p class="small" style="margin: 0 0 4px">
+                      ✅ 已入库：<span x-text="intake.assetForm.saved.kind"></span>
+                      「<span x-text="intake.assetForm.saved.name"></span>」。
+                      到 <a :href="'/assets'">资产页</a> 可以查看和继续编辑。
+                    </p>
+                    <p class="muted small" style="margin: 0">
+                      资产入库 ≠ 制作引用：渲染时在制作页按角色显式绑定它。
+                    </p>
+                    <div class="job-actions">
+                      <button class="btn" type="button"
+                              @click="intake.assetForm = null">好的</button>
+                    </div>
+                  </div>
+                </template>
+              </div>
             </div>
 
             <!-- 平台看不了图时的降级：作者的话就是图的内容 -->

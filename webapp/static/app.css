@@ -606,3 +606,9 @@ textarea.input.code {
 .intake-design { margin: 8px 0; }
 .intake-design summary { cursor: pointer; }
 .intake-precheck { margin-top: 10px; }
+
+/* 另存为参考资产：小表单挂在图片区下。 */
+.intake-asset { padding: 4px 0; }
+.intake-asset-form, .intake-asset-done {
+  padding: 8px; border: 1px solid var(--border-subtle); border-radius: 8px;
+}

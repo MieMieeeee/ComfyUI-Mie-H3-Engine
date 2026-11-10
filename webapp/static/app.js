@@ -1689,7 +1689,88 @@ function scriptsPage() {
       s.reading = null; s.needsCaption = false;
       s.caption = ""; s.hasCaption = false;
       s.step = "material";
+      s.assetForm = null;
       this.intakeTouch();
+    },
+
+    /* ---------------- 另存为参考资产（M3：显式、独立、可追溯） -------- */
+
+    intakeOpenAssetForm() {
+      const s = this.intake;
+      if (!s || !s.image) return;
+      s.assetForm = {
+        kind: "character", name: "", target: "", description: "", voice: "",
+        busy: false, error: "", saved: null, drafting: false,
+      };
+    },
+
+    async intakeDraftAssetFields() {
+      const s = this.intake;
+      const form = s && s.assetForm;
+      if (!form || form.drafting) return;
+      if (!form.name.trim()) {
+        form.error = "先写名字，AI 补全按名字和图来写描述。";
+        return;
+      }
+      form.drafting = true;
+      form.error = "";
+      try {
+        const result = await api.post("/api/assets/auto", {
+          kind: form.kind, name: form.name.trim(),
+          hint: form.target.trim(),
+          current: { description: form.description, voice: form.voice },
+          image: s.imageDataUrl,
+        });
+        if (result.description) form.description = result.description;
+        if (result.voice) form.voice = result.voice;
+      } catch (error) {
+        form.error = error.message;
+      } finally {
+        form.drafting = false;
+      }
+    },
+
+    async intakeSaveAsset() {
+      const s = this.intake;
+      const form = s && s.assetForm;
+      if (!form || form.busy) return;      // 重复点击只有一次提交
+      if (!form.name.trim()) {
+        form.error = "名字是空的：资产要有名字才能入库。";
+        return;
+      }
+      if (!form.description.trim()) {
+        form.error = "描述是空的：写一句描述，或点「✨ AI 补全描述」。";
+        return;
+      }
+      form.busy = true;
+      form.error = "";
+      try {
+        const body = new FormData();
+        body.append("name", form.name.trim());
+        body.append("description", form.description);
+        if (form.kind === "character") body.append("voice", form.voice);
+        if (form.target.trim()) {
+          // 多人物图要写清这图当谁的参考：跟描述一起入库可追溯。
+          body.append("description",
+            form.description + (form.description ? "\n" : "")
+            + "（参考目标：" + form.target.trim() + "）");
+        }
+        if (s.imageBlob) body.append("image", s.imageBlob, "intake-reference.jpg");
+        const response = await fetch("/api/assets/" + form.kind, {
+          method: "POST", body,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          form.error = data.error || "保存失败了";
+          return;
+        }
+        form.saved = { kind: form.kind === "scene" ? "场景" : "角色",
+                       name: form.name.trim() };
+      } catch (error) {
+        form.error = error.message;
+      } finally {
+        form.busy = false;
+      }
     },
 
     /* ---------------- 读素材：文字、图片或图文 ------------------------- */

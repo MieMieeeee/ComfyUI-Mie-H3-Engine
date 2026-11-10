@@ -1348,3 +1348,82 @@ def test_the_design_together_flow_also_locks_the_confirmed_events(page):
     assert auto_calls[0]["events"][0]["text"] == "我们去公园吧。"
     # 载入后：编辑器说明这份稿子按几条确认事件生成。
     assert "已确认事件" in page.locator(".split-detail").inner_text()
+
+
+# --------------------------------------------------------------------------- #
+# M3: save the picture as a reference asset - an explicit, separate act
+# --------------------------------------------------------------------------- #
+
+def test_the_picture_can_be_saved_as_a_reference_asset(page):
+    _open_intake(page)
+    page.locator(".intake-pick input[type=file]").set_input_files(
+        [{"name": "pic.png", "mimeType": "image/png", "buffer": png_bytes()}])
+    page.wait_for_timeout(600)
+
+    button(page, "另存为参考资产").click()
+    page.locator(".intake-asset-form").wait_for(state="visible", timeout=5000)
+    page.get_by_label("名称", exact=False).fill("蓝外套年轻人")
+    page.get_by_label("声音说明", exact=False).fill("低沉男声")
+    page.locator(".intake-asset-form textarea").fill("穿蓝色外套的年轻人。")
+    button(page, "存入资产库").click()
+    page.locator(".intake-asset-done").wait_for(state="visible", timeout=8000)
+
+    # 资产页找得到它，图也跟着进去了。
+    listing = api_get("/api/assets")
+    names = [row.get("name") for row in listing.get("characters", [])]
+    assert "蓝外套年轻人" in names, names
+    detail = api_get("/api/assets/character/" + urllib.parse.quote("蓝外套年轻人"))
+    assert detail.get("image", "").startswith("data:image/")
+
+    # 入库是独立动作：图片和素材还在原处，剧本库也没多东西。
+    assert page.locator(".intake-preview img").filter(visible=True).count() == 1
+    scripts = api_get("/api/scripts")["names"]
+    assert "蓝外套年轻人" not in scripts
+    # 反馈说清了“资产入库 ≠ 制作引用”。
+    assert "制作页" in page.locator(".intake-asset-done").inner_text()
+
+
+def test_an_asset_save_without_a_name_is_refused_and_keeps_the_form(page):
+    _open_intake(page)
+    page.locator(".intake-pick input[type=file]").set_input_files(
+        [{"name": "pic.png", "mimeType": "image/png", "buffer": png_bytes()}])
+    page.wait_for_timeout(600)
+    button(page, "另存为参考资产").click()
+    page.locator(".intake-asset-form").wait_for(state="visible", timeout=5000)
+    button(page, "存入资产库").click()
+    page.wait_for_timeout(400)
+    assert "名字" in page.locator(".intake-asset-form .err").inner_text()
+    # 表单还在（素材也在），改好名字就能存。
+    assert page.locator(".intake-asset-form").count() == 1
+    page.get_by_label("名称", exact=False).fill("补上名字")
+    page.get_by_label("声音说明", exact=False).fill("低沉男声")
+    button(page, "存入资产库").click()
+    page.wait_for_timeout(300)
+    # 描述也空着：同样先在表单里说清楚，不放走一个必然失败的请求。
+    assert "描述" in page.locator(".intake-asset-form .err").inner_text()
+    page.locator(".intake-asset-form textarea").fill("中年男人。")
+    button(page, "存入资产库").click()
+    page.locator(".intake-asset-done").wait_for(state="visible", timeout=8000)
+    names = [row.get("name") for row in api_get("/api/assets").get("characters", [])]
+    assert "补上名字" in names, names
+
+
+def test_asset_ai_completion_fills_the_description(page):
+    page.route("**/api/assets/auto", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"description": "A young man in a blue coat.",
+                         "voice": "", "ambience": "", "drafted": ["description"]})))
+    _open_intake(page)
+    page.locator(".intake-pick input[type=file]").set_input_files(
+        [{"name": "pic.png", "mimeType": "image/png", "buffer": png_bytes()}])
+    page.wait_for_timeout(600)
+    button(page, "另存为参考资产").click()
+    page.locator(".intake-asset-form").wait_for(state="visible", timeout=5000)
+    page.get_by_label("名称", exact=False).fill("AI补全目标")
+    button(page, "✨ AI 补全描述").click()
+    page.wait_for_timeout(600)
+    assert page.locator(".intake-asset-form textarea").input_value() \
+        == "A young man in a blue coat."
+    # 补全只是填表：没点“存入资产库”之前库里没有它。
+    names = [row.get("name") for row in api_get("/api/assets").get("characters", [])]
+    assert "AI补全目标" not in names
