@@ -1466,15 +1466,12 @@ function videoPage() {
     height: 544,
     steps: 20,
     duration: 18,
-    jobs: [],
     planPreview: "",
     planError: "",
     message: "",
     statusText: "",
     effectiveRunName: "",
     nextTitle: "",           /* 这一次生成的作品名（第几版） */
-    playingJob: "",         /* 正在播放的那个任务（一次只挂一个播放器） */
-    pollTimer: null,
     submitting: false,
     assetDetails: {},
     executionState: "unknown",  /* 剧本的英文镜像跟不跟得上中文 */
@@ -1489,22 +1486,7 @@ function videoPage() {
         this.script = wanted;
         await this.loadScript();
       }
-      await this.refreshJobs();
-      this.startPolling();
-    },
-
-    /* 有任务在跑就自己刷新：一次失败的提交原来会永远停在 "running"，
-     * 因为页面从提交那一刻起就不再看 ComfyUI 了。 */
-    startPolling() {
-      if (this.pollTimer) return;
-      this.pollTimer = setInterval(() => {
-        if (this.hasActiveJob) this.refreshJobs();
-      }, 3000);
-    },
-
-    get hasActiveJob() {
-      return (this.jobs || []).some(
-        (job) => job.status === "running" || job.status === "queued");
+      await this.refreshCount();
     },
 
     async loadScripts() {
@@ -1657,7 +1639,7 @@ function videoPage() {
           steps: this.steps, duration: this.duration,
         });
         this.message = `已排队（#${record.number}），渲染要几分钟`;
-        await this.refreshJobs();
+        await this.refreshCount();
       } catch (error) {
         this.message = `提交失败：${error.message}`;
       } finally {
@@ -1665,16 +1647,142 @@ function videoPage() {
       }
     },
 
-    async refreshJobs() {
+    /* 这一页只管提交。任务本身在制作历史页。 */
+    async refreshCount() {
       try {
-        const data = await api.get("/api/render/jobs");
-        this.jobs = data.jobs || [];
-        this.statusText = this.jobs.length
-          ? `${this.jobs.length} 个任务`
-          : "";
+        const data = await api.get("/api/render/jobs?per_page=1");
+        const total = data.total || 0;
+        this.statusText = total ? `历史里共 ${total} 条` : "";
       } catch (error) {
         this.statusText = "";
       }
+    },
+
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* 任务卡片：制作页与历史页共用的那几件事                             */
+/* ------------------------------------------------------------------ */
+
+const jobView = {
+  /* 任务状态：说人话。磁盘上只剩片段的运行不是"正在跑"。 */
+  statusLabel(status) {
+    return {
+      success: "完成", error: "失败", running: "运行中", queued: "排队中",
+      partial: "部分产物", interrupted: "已中断", empty: "无产物",
+      unknown: "未知",
+    }[status] || status;
+  },
+
+  statusClass(status) {
+    if (status === "success") return "ok";
+    if (status === "error" || status === "interrupted") return "err";
+    if (status === "running" || status === "queued") return "warn";
+    return "";
+  },
+
+  /* 成片的时长：manifest 里写着，没有就不知道，不编。 */
+  durationText(manifest) {
+    const seconds = manifest && manifest.duration_seconds;
+    if (typeof seconds !== "number" || !isFinite(seconds)) return "";
+    const clips = manifest.clip_count;
+    const shots = clips ? ` · ${clips} 个分镜` : "";
+    return `时长 ${seconds.toFixed(1)} 秒${shots}`;
+  },
+
+  timeText(stamp) {
+    if (!stamp) return "";
+    const date = new Date(stamp * 1000);
+    if (isNaN(date.getTime())) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+      + `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  },
+
+  /* 接着上次那个任务继续：同样的角色绑定、参数，进同一个目录。 */
+  canContinue(job) {
+    if (!job || !job.script || !job.run_name) return false;
+    return ["success", "error", "interrupted", "partial", "empty"].indexOf(
+      job.status) >= 0;
+  },
+};
+
+/* ------------------------------------------------------------------ */
+/* 制作历史                                                          */
+/* ------------------------------------------------------------------ */
+
+function historyPage() {
+  return {
+    items: [],
+    total: 0,
+    page: 1,
+    pages: 1,
+    perPage: 20,
+    filter: "all",
+    loading: false,
+    message: "",
+    statusText: "",
+    playingJob: "",
+    submitting: false,
+    pollTimer: null,
+
+    async init() {
+      await this.load();
+      this.startPolling();
+    },
+
+    /* 有任务在跑就自己刷新：一次失败的提交原来会永远停在 "running"。 */
+    startPolling() {
+      if (this.pollTimer) return;
+      this.pollTimer = setInterval(() => {
+        if (this.hasActiveJob) this.load();
+      }, 3000);
+    },
+
+    get hasActiveJob() {
+      return (this.items || []).some(
+        (job) => job.status === "running" || job.status === "queued");
+    },
+
+    async load() {
+      this.loading = true;
+      try {
+        const query = `/api/render/jobs?page=${this.page}`
+          + `&per_page=${this.perPage}`
+          + (this.filter === "favorite" ? "&favorites=1" : "");
+        const data = await api.get(query);
+        let items = data.items || [];
+        if (this.filter === "running") {
+          items = items.filter((j) => j.status === "running" || j.status === "queued");
+        } else if (this.filter === "done") {
+          items = items.filter((j) => j.status === "success" || j.status === "partial");
+        } else if (this.filter === "failed") {
+          items = items.filter((j) => ["error", "interrupted", "empty"].indexOf(j.status) >= 0);
+        }
+        this.items = items;
+        this.total = data.total || 0;
+        this.page = data.page || 1;
+        this.pages = data.pages || 1;
+        this.statusText = this.total ? `共 ${this.total} 条` : "";
+      } catch (error) {
+        this.message = `读取失败：${error.message}`;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    setFilter(filter) {
+      this.filter = filter;
+      this.page = 1;
+      this.load();
+    },
+
+    goTo(page) {
+      const target = Math.max(1, Math.min(page, this.pages || 1));
+      if (target === this.page) return;
+      this.page = target;
+      this.load();
     },
 
     /* 播放器是点开才挂的：一次挂二十几个，每个都会去拉一次 mp4 的
@@ -1683,11 +1791,48 @@ function videoPage() {
       this.playingJob = job.job_id;
     },
 
-    /* 接着上次那个任务继续：同样的角色绑定、参数，进同一个目录。 */
-    canContinue(job) {
-      if (!job || !job.script || !job.run_name) return false;
-      return ["success", "error", "interrupted", "partial", "empty"].indexOf(
-        job.status) >= 0;
+    async toggleFavorite(job) {
+      try {
+        const data = await api.post("/api/render/favorites",
+          { run_name: job.run_name });
+        job.favorite = !!data.favorite;
+        this.message = data.favorite
+          ? `已收藏：${job.title || job.run_name}`
+          : `已取消收藏：${job.title || job.run_name}`;
+        if (this.filter === "favorite") this.load();
+      } catch (error) {
+        this.message = `收藏失败：${error.message}`;
+      }
+    },
+
+    /* 移出列表：硬盘上的成片不动。 */
+    async removeRecord(job) {
+      if (!window.confirm(
+        `把 ${job.title || job.run_name} 从历史里移出？\n\n`
+        + "硬盘上的成片不会删，只是不再出现在这个列表里。")) return;
+      try {
+        await api.post(`/api/render/jobs/${encodeURIComponent(job.job_id)}/delete`,
+          { files: false });
+        this.message = `已移出：${job.title || job.run_name}（文件还在硬盘上）`;
+        await this.load();
+      } catch (error) {
+        this.message = `移出失败：${error.message}`;
+      }
+    },
+
+    /* 连文件一起删：这一步无法恢复，确认框要说清楚。 */
+    async removeFiles(job) {
+      if (!window.confirm(
+        `删掉 ${job.title || job.run_name} 的成片和全部文件？\n\n`
+        + "这一下是真的删掉硬盘上的文件，没有备份，也找不回来。")) return;
+      try {
+        await api.post(`/api/render/jobs/${encodeURIComponent(job.job_id)}/delete`,
+          { files: true });
+        this.message = `已删除：${job.title || job.run_name}`;
+        await this.load();
+      } catch (error) {
+        this.message = `删除失败：${error.message}`;
+      }
     },
 
     async continueJob(job) {
@@ -1700,14 +1845,14 @@ function videoPage() {
           script: job.script,
           role_assets: job.role_assets || {},
           run_name: job.run_name,
-          width: params.width || this.width,
-          height: params.height || this.height,
-          steps: params.steps || this.steps,
-          duration: params.duration || this.duration,
+          width: params.width || 960,
+          height: params.height || 544,
+          steps: params.steps || 20,
+          duration: params.duration || 18,
           continue_run: true,
         });
         this.message = `已排队（#${record.number}）：接着 ${job.run_name} 继续`;
-        await this.refreshJobs();
+        await this.load();
       } catch (error) {
         this.message = `继续失败：${error.message}`;
       } finally {
@@ -1715,29 +1860,10 @@ function videoPage() {
       }
     },
 
-    /* 成片的时长：manifest 里写着，没有就不知道，不编。 */
-    durationText(manifest) {
-      const seconds = manifest && manifest.duration_seconds;
-      if (typeof seconds !== "number" || !isFinite(seconds)) return "";
-      const clips = manifest.clip_count;
-      const shots = clips ? ` · ${clips} 个分镜` : "";
-      return `时长 ${seconds.toFixed(1)} 秒${shots}`;
-    },
-
-    /* 任务状态：说人话。磁盘上只剩片段的运行不是"正在跑"。 */
-    statusLabel(status) {
-      return {
-        success: "完成", error: "失败", running: "运行中", queued: "排队中",
-        partial: "部分产物", interrupted: "已中断", empty: "无产物",
-        unknown: "未知",
-      }[status] || status;
-    },
-
-    statusClass(status) {
-      if (status === "success") return "ok";
-      if (status === "error" || status === "interrupted") return "err";
-      if (status === "running" || status === "queued") return "warn";
-      return "";
-    },
+    statusLabel(status) { return jobView.statusLabel(status); },
+    statusClass(status) { return jobView.statusClass(status); },
+    durationText(manifest) { return jobView.durationText(manifest); },
+    timeText(stamp) { return jobView.timeText(stamp); },
+    canContinue(job) { return jobView.canContinue(job); },
   };
 }

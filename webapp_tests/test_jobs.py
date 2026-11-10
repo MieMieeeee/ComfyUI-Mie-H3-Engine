@@ -178,5 +178,5 @@ def test_the_page_shows_a_dead_job_as_an_error(clean_jobs, client, monkeypatch):
                         lambda name, index=None: [])
 
     payload = client.get("/api/render/jobs").get_json()
-    job = next(j for j in payload["jobs"] if j["job_id"] == "job-1")
+    job = next(j for j in payload["items"] if j["job_id"] == "job-1")
     assert job["status"] == "interrupted"

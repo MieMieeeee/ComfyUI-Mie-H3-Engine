@@ -533,3 +533,113 @@ def test_a_continuation_keeps_the_name_and_the_inputs(client, monkeypatch):
     assert again["params"]["duration"] == 18
     runner._jobs.clear()
     runner._reserved.clear()
+
+
+# --------------------------------------------------------------------------- #
+# the history is paged, and the author can keep or put away a run
+# --------------------------------------------------------------------------- #
+
+def _make_jobs(client, monkeypatch, count):
+    """A run's worth of job records, on the disk as well."""
+    from webapp.services import runner
+    monkeypatch.setattr(runner.comfy, "submit",
+                        lambda graph, client_id="": {"prompt_id": "p-1",
+                                                     "number": 1})
+    runner._jobs.clear()
+    runner._reserved.clear()
+    for index in range(count):
+        runner._jobs["job-%d" % index] = {
+            "job_id": "job-%d" % index, "number": index, "script": "测试剧本",
+            "run_name": "sb_run_%d" % index, "title": "测试剧本 · 第 %d 版" % index,
+            "attempt": index + 1, "submitted_at": 1000.0 + index,
+            "status": "success", "error": "", "nodes": 33,
+            "role_assets": {}, "params": {"width": 960, "height": 544},
+        }
+    return runner._jobs
+
+
+def test_the_history_is_paged(client, monkeypatch):
+    """The history grows with every render; the page asks for the part
+    it shows."""
+    from webapp.services import runner
+    monkeypatch.setattr(runner.comfy, "recent_runs", lambda limit=20: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
+    _make_jobs(client, monkeypatch, 25)
+
+    first = client.get("/api/render/jobs?page=1&per_page=10").get_json()
+    assert first["total"] == 25, first["total"]
+    assert first["pages"] == 3, first["pages"]
+    assert len(first["items"]) == 10
+
+    third = client.get("/api/render/jobs?page=3&per_page=10").get_json()
+    assert len(third["items"]) == 5
+    # 新的在前：第三页是最旧的那五条。
+    assert third["items"][0]["run_name"] == "sb_run_4", third["items"][0]
+    assert third["items"][-1]["run_name"] == "sb_run_0", \
+        "the oldest run is missing from the last page"
+
+    # 页码越界不会翻车。
+    beyond = client.get("/api/render/jobs?page=99&per_page=10").get_json()
+    assert beyond["page"] == 3, beyond["page"]
+    runner._jobs.clear()
+
+
+def test_a_run_can_be_favourited_and_unfavourited(client, monkeypatch):
+    from webapp.services import history, runner
+    monkeypatch.setattr(runner.comfy, "recent_runs", lambda limit=20: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
+    _make_jobs(client, monkeypatch, 3)
+
+    response = client.post("/api/render/favorites", json={"run_name": "sb_run_1"})
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["favorite"] is True
+    assert history.is_favorite("sb_run_1")
+
+    only = client.get("/api/render/jobs?favorites=1").get_json()
+    assert [j["run_name"] for j in only["items"]] == ["sb_run_1"], only["items"]
+
+    response = client.post("/api/render/favorites", json={"run_name": "sb_run_1"})
+    assert response.get_json()["favorite"] is False
+    runner._jobs.clear()
+
+
+def test_a_run_can_be_taken_out_of_the_history(client, monkeypatch):
+    """Out of the list, but the files stay on disk: a finished film is
+    the one thing here that cannot be written again."""
+    from webapp.services import history, runner
+    monkeypatch.setattr(runner.comfy, "recent_runs", lambda limit=20: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
+    _make_jobs(client, monkeypatch, 3)
+
+    response = client.post("/api/render/jobs/job-1/delete", json={})
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["files_kept"] is True
+
+    listed = client.get("/api/render/jobs").get_json()
+    names = [j["run_name"] for j in listed["items"]]
+    assert "sb_run_1" not in names, names
+    assert history.is_dismissed("sb_run_1")
+    # 记录本身也不在了。
+    assert "job-1" not in runner._jobs
+    runner._jobs.clear()
+
+
+def test_deleting_the_files_is_a_separate_ask(client, monkeypatch):
+    """Removing a row and deleting a film are two different acts."""
+    from webapp.services import runner
+    monkeypatch.setattr(runner.comfy, "recent_runs", lambda limit=20: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
+    removed = []
+    monkeypatch.setattr(runner.comfy, "delete_run_files",
+                        lambda name: removed.append(name) or ["x.mp4"])
+    _make_jobs(client, monkeypatch, 2)
+
+    response = client.post("/api/render/jobs/job-0/delete", json={"files": True})
+    assert response.status_code == 200, response.get_json()
+    assert removed == ["sb_run_0"], removed
+    assert response.get_json()["files_removed"] == ["x.mp4"]
+    runner._jobs.clear()

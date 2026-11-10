@@ -488,3 +488,22 @@ textarea.input.code {
 .advanced-body { margin-top: 10px; }
 .advanced-body .field { margin-bottom: 8px; }
 
+
+/* ---------------------------------------------------------------- */
+/* 制作历史                                                        */
+/* ---------------------------------------------------------------- */
+
+/* 翻页条 */
+.pager {
+  display: flex; align-items: center; gap: 12px; justify-content: center;
+  padding: 14px 0 4px;
+}
+.job-actions { display: flex; gap: 8px; flex-wrap: wrap; flex: 1 1 100%; }
+
+/* 收藏：一个小星星，空心是没收，实心是收了。 */
+.btn.star {
+  padding: 0 6px; font-size: 15px; line-height: 1;
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+}
+.btn.star.starred { color: var(--color-warning); }
+.btn.star:hover { color: var(--color-warning); }

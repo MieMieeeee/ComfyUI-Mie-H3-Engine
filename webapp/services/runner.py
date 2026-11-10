@@ -20,7 +20,7 @@ import time
 import uuid
 
 from webapp import config
-from webapp.services import comfy, library, runname, snapshot, workflow
+from webapp.services import comfy, history, library, runname, snapshot, workflow
 
 #: The submit lock. It covers "look at the queue, then submit" - the
 #: window in which two submissions could interleave. It also covers the
@@ -251,6 +251,23 @@ def job(job_id: str, queued: tuple = None, index: list = None) -> dict:
     if record is None:
         return {"job_id": job_id, "status": "unknown"}
     record = dict(record)
+    outputs = _apply_status(record, queued)
+    _attach_artifacts(record, outputs, index=index)
+    _remember(record)
+    return record
+
+
+def _apply_status(record: dict, queued: tuple = None) -> dict:
+    """What is happening to this run, right now.
+
+    A run that has finished does not change, so it is not asked about
+    again: with fifty runs in the list, asking ComfyUI about each of
+    them on every poll is fifty round trips for nothing.
+    """
+    job_id = record.get("job_id")
+    if record.get("status") in ("success", "error", "interrupted", "partial"):
+        # A finished run: the answer is already on the record.
+        return {}
     entry = comfy.history(job_id)
     if not entry:
         # No history entry: the prompt is either still in flight or it
@@ -269,10 +286,7 @@ def job(job_id: str, queued: tuple = None, index: list = None) -> dict:
             record["error"] = record.get("error") or (
                 "ComfyUI 里已找不到这次运行：可能提交后立刻失败、被中断，"
                 "或历史已被清理。")
-        # 中断的任务，磁盘上可能已经有片段甚至成片：作者要看得见。
-        _attach_artifacts(record, index=index)
-        _remember(record)
-        return record
+        return {}
     status = entry.get("status", {})
     record["status"] = status.get("status_str", "success")
     interrupted = False
@@ -301,9 +315,7 @@ def job(job_id: str, queued: tuple = None, index: list = None) -> dict:
             texts[node_id] = "".join(
                 p if isinstance(p, str) else str(p) for p in pieces)
     record["texts"] = texts
-    _attach_artifacts(record, outputs, index=index)
-    _remember(record)
-    return record
+    return outputs
 
 
 def _attach_artifacts(record: dict, outputs: dict = None,
@@ -337,38 +349,37 @@ def _attach_artifacts(record: dict, outputs: dict = None,
     return record
 
 
-def jobs() -> list[dict]:
-    """Every job this process has started, newest first, plus the runs
-    that are already on disk.
+def all_records() -> list[dict]:
+    """Every run the workbench knows about, newest first, WITHOUT the
+    files.
 
-    The live table is in memory, so a restart empties it - but the renders
-    are on disk and do not go anywhere. They are indexed from the chain
-    directory, so the page keeps showing what was made.
+    The files are the expensive part - the output tree holds thousands
+    of them - and the history only needs them for the page it shows.
     """
     with _jobs_lock:
         records = list(_jobs.values())
-    records.sort(key=lambda r: r.get("submitted_at", 0), reverse=True)
     # One queue read for the whole list: a job ComfyUI has forgotten is
     # not running any more, and saying "running" would be a lie.
     try:
         queued = comfy.queue_ids()
     except Exception:  # noqa: BLE001 - ComfyUI unreachable: keep the list
         queued = (set(), set())
-    # One walk of the output tree for the whole list: the tree holds
-    # thousands of files and the list asks about every run at once.
-    index = comfy.scan_output()
-    live = [job(r["job_id"], queued, index) for r in records]
-    for record in live:
-        record["inputs_changed"] = _inputs_changed(record)
+    live = []
+    for record in records:
+        if history.is_dismissed(record.get("run_name")):
+            continue
+        item = dict(record)
+        _apply_status(item, queued)
+        item["favorite"] = history.is_favorite(item.get("run_name"))
+        item["inputs_changed"] = _inputs_changed(item)
+        live.append(item)
 
-    known = {r["run_name"] for r in live}
+    known = {r.get("run_name") for r in live}
     for run in comfy.recent_runs():
         if run["run_name"] in known:
             continue
-        artifacts = ([{"name": os.path.basename(run["video"]),
-                       "relpath": run["video"], "kind": "video",
-                       "role": "deliverable", "size": 0}]
-                      if run["video"] else [])
+        if history.is_dismissed(run["run_name"]):
+            continue
         live.append({
             # A synthetic id: the disk runs have no prompt id, and an
             # empty one would collide in the page's x-for key.
@@ -379,16 +390,65 @@ def jobs() -> list[dict]:
             "script": "",
             "video": run["video"],
             "clips": run["clips"],
-            "artifacts": artifacts,
-            "deliverable": artifacts[0] if artifacts else None,
-            "segments": [],
-            "audio": [],
-            "technical": [],
-            "manifest": comfy.run_manifest(run["run_name"]),
+            "favorite": history.is_favorite(run["run_name"]),
             "from_disk": True,
             "inputs_changed": [],
         })
+    live.sort(key=lambda r: r.get("submitted_at") or r.get("finished_at") or 0,
+              reverse=True)
     return live
+
+
+def jobs(page: int = 1, per_page: int = 20, favorites_only: bool = False) -> dict:
+    """The task history, ONE PAGE at a time.
+
+    The history grows without bound - every render is a row - and the
+    files of every row make the answer heavy. The list is cut into
+    pages here, and only the rows on the page are given their files.
+    """
+    records = all_records()
+    if favorites_only:
+        records = [r for r in records if r.get("favorite")]
+    total = len(records)
+    per_page = max(1, int(per_page or 20))
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(int(page or 1), pages))
+    window = records[(page - 1) * per_page: page * per_page]
+    # One walk of the output tree for the whole page: the tree holds
+    # thousands of files and the list asks about every run at once.
+    index = comfy.scan_output()
+    for record in window:
+        _attach_artifacts(record, index=index)
+    return {"items": window, "total": total, "page": page, "pages": pages,
+            "per_page": per_page}
+
+
+def delete_record(job_id: str, delete_files: bool = False) -> dict:
+    """Take a run out of the history.
+
+    The record goes, and the run is marked as put away so the engine's
+    output folder does not put it straight back into the list. The
+    FILES stay on disk unless the author asks for them to go as well -
+    a film is the one thing here that cannot be written again.
+    """
+    run_name = ""
+    with _jobs_lock:
+        record = _jobs.get(job_id)
+        if record is not None:
+            run_name = record.get("run_name") or ""
+            _jobs.pop(job_id, None)
+        elif job_id.startswith("disk:"):
+            run_name = job_id[len("disk:"):]
+    if not run_name:
+        raise ValueError("这条任务不在历史里。")
+    history.dismiss(run_name)
+    _save_jobs()
+    removed = []
+    if delete_files:
+        removed = comfy.delete_run_files(run_name)
+    return {"ok": True, "run_name": run_name,
+            "files_removed": removed,
+            "files_kept": not delete_files}
 
 
 def _inputs_changed(record: dict) -> list:

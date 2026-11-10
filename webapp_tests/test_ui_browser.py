@@ -435,7 +435,7 @@ def test_a_broken_character_shows_up_and_can_be_deleted(page, web):
 def test_the_task_card_leads_with_the_finished_film(page):
     """Nineteen files in a flat list answers none of the author's
     questions. The film comes first, in a player, with a download."""
-    page.goto(BASE + "/video", wait_until="networkidle")
+    page.goto(BASE + "/history", wait_until="networkidle")
     page.wait_for_timeout(1500)
     card = visible(page, ".job-row").first
     assert card.count() > 0, "the task list is empty"
@@ -469,8 +469,50 @@ def test_the_task_card_leads_with_the_finished_film(page):
 def test_a_finished_task_can_be_continued(page):
     """Carrying on is a button, not something the author has to
     reconstruct by hand."""
-    page.goto(BASE + "/video", wait_until="networkidle")
+    page.goto(BASE + "/history", wait_until="networkidle")
     page.wait_for_timeout(1500)
     card = visible(page, ".job-row").first
     button = card.locator("button", has_text="从这次继续")
     assert button.count() == 1, "there is no way to carry on"
+
+
+def test_the_history_page_pages_favourites_and_deletes(page, web):
+    """The history is a list the author can work with: page through it,
+    keep the good ones, put the rest away."""
+    page.goto(BASE + "/history", wait_until="networkidle")
+    page.wait_for_timeout(1200)
+
+    assert visible(page, ".job-row").count() >= 1, "the history is empty"
+    card = visible(page, ".job-row").first
+
+    # 收藏：点一下就变实心，再点一下就回去。
+    star = card.locator("button.btn.star")
+    assert star.count() == 1, "there is no way to keep a run"
+    star.click()
+    page.wait_for_timeout(700)
+    assert "★" in card.locator("button.btn.star").inner_text()
+
+    # 只看收藏。
+    page.get_by_role("button", name="★ 收藏").click()
+    page.wait_for_timeout(900)
+    assert visible(page, ".job-row").count() == 1, \
+        "the favourite filter kept the wrong rows"
+
+    # 移出列表：文件不动。
+    page.get_by_role("button", name="★ 收藏").click()
+    page.wait_for_timeout(900)
+    card = visible(page, ".job-row").first
+    card.get_by_role("button", name="🗑️ 移出列表").click()
+    page.wait_for_timeout(1200)
+    assert visible(page, ".job-row").count() == 0, "the run is still there"
+    # 硬盘上的文件还在。
+    run_dir = web / "comfyui" / "output" / "h3_chains" / "sb_demo"
+    assert (run_dir / "final" / "sb_demo.mp4").is_file(), \
+        "the film was deleted along with the entry"
+
+
+def test_the_history_page_has_pages(page, web):
+    page.goto(BASE + "/history", wait_until="networkidle")
+    page.wait_for_timeout(1000)
+    # 只有一条记录时翻页条不出现，但每页条数是可以选的。
+    assert visible(page, ".card select").count() >= 1

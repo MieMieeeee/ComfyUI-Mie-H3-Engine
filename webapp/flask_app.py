@@ -22,7 +22,8 @@ import pathlib
 from flask import Flask, abort, jsonify, render_template, request, send_from_directory
 
 from webapp import config
-from webapp.services import autodraft, comfy, library, llm, runname, runner, theme
+from webapp.services import (autodraft, comfy, history, library, llm,
+                             runname, runner, theme)
 
 
 def create_app() -> Flask:
@@ -69,6 +70,12 @@ def create_app() -> Flask:
     @app.route("/video")
     def video_page():
         return render_template("video.html", **page_context(active="video"))
+
+    @app.route("/history")
+    def history_page():
+        """The task history: what was made, what is still running, what
+        the author wants to keep."""
+        return render_template("history.html", **page_context(active="history"))
 
     # ------------------------------------------------------------------ #
     # theme and status
@@ -387,7 +394,48 @@ def create_app() -> Flask:
 
     @app.route("/api/render/jobs")
     def api_render_jobs():
-        return jsonify({"jobs": runner.jobs()})
+        """The task history, one page at a time.
+
+        The history grows with every render, so it is cut into pages
+        here: the page asks for what it shows, and the files of the
+        other pages are never looked at.
+        """
+        try:
+            page = int(request.args.get("page") or 1)
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            per_page = int(request.args.get("per_page") or 20)
+        except (TypeError, ValueError):
+            per_page = 20
+        favorites = request.args.get("favorites") in ("1", "true", "yes")
+        return jsonify(runner.jobs(page=page, per_page=per_page,
+                                   favorites_only=favorites))
+
+    @app.route("/api/render/jobs/<job_id>/delete", methods=["POST"])
+    def api_render_delete(job_id):
+        """Take a run out of the history.
+
+        The files stay on disk unless the author asks for them to go:
+        a finished film is the one thing here that cannot be written
+        again.
+        """
+        data = request.get_json(silent=True) or {}
+        try:
+            return jsonify(runner.delete_record(
+                job_id, delete_files=bool(data.get("files"))))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 404
+
+    @app.route("/api/render/favorites", methods=["POST"])
+    def api_render_favorite():
+        """Mark or unmark a run as one to keep in sight."""
+        data = request.get_json(silent=True) or {}
+        run_name = str(data.get("run_name") or "")
+        if not run_name:
+            return jsonify({"error": "没说要收藏哪一条。"}), 400
+        state = history.toggle_favorite(run_name)
+        return jsonify({"run_name": run_name, "favorite": state})
 
     @app.route("/api/render/run_name", methods=["POST"])
     def api_render_run_name():

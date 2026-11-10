@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}制作历史 · ComfyUI-Mie{% endblock %}
+
+{% block content %}
+<section class="panel" x-data="historyPage()">
+  <div class="panel-head">
+    <h2>🗂️ 制作历史</h2>
+    <div class="panel-head-actions">
+      <span class="muted" x-text="statusText"></span>
+      <button class="btn" type="button" @click="load()">🔄 刷新</button>
+      <a class="btn" href="/video">🎞️ 去制作</a>
+    </div>
+  </div>
+
+  <p class="muted">
+    每一次生成都是一条记录：成片、版本、状态都在这里。喜欢的可以收藏，
+    不要的可以移出列表 —— 移出列表不会删掉硬盘上的成片。
+  </p>
+
+  <div class="filter-bar">
+    <button class="pill" :class="{ active: filter === 'all' }"
+            @click="setFilter('all')">全部</button>
+    <button class="pill" :class="{ active: filter === 'favorite' }"
+            @click="setFilter('favorite')">★ 收藏</button>
+    <button class="pill" :class="{ active: filter === 'running' }"
+            @click="setFilter('running')">进行中</button>
+    <button class="pill" :class="{ active: filter === 'done' }"
+            @click="setFilter('done')">已完成</button>
+    <button class="pill" :class="{ active: filter === 'failed' }"
+            @click="setFilter('failed')">失败/中断</button>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3 x-text="'共 ' + total + ' 条'"></h3>
+      <div class="panel-head-actions">
+        <label class="field" style="margin: 0;">
+          <span class="muted small">每页</span>
+          <select class="input" x-model.number="perPage" @change="goTo(1)">
+            <option :value="10">10</option>
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <p class="muted" x-show="!loading && !items.length">这里还没有记录。</p>
+    <p class="muted" x-show="loading">正在读…</p>
+
+    <template x-for="j in items" :key="j.job_id || j.run_name">
+      <div class="job-row">
+        <div class="job-head">
+          <div class="cell-strong">
+            <span x-text="j.title || j.run_name"></span>
+            <button class="btn star" type="button"
+                    :class="{ starred: j.favorite }"
+                    @click="toggleFavorite(j)"
+                    :title="j.favorite ? '取消收藏' : '收藏这条'"
+                    x-text="j.favorite ? '★' : '☆'"></button>
+          </div>
+          <div class="muted small">
+            <span x-text="j.script"></span>
+            <span x-show="j.attempt" x-text="' · 第 ' + j.attempt + ' 版'"></span>
+            <span x-show="j.continued" x-text="' · 续跑'"></span>
+            <span x-show="j.from_disk" x-text="' · 磁盘记录'"></span>
+          </div>
+          <div class="muted small" x-show="j.submitted_at"
+               x-text="timeText(j.submitted_at)"></div>
+          <div class="warn small" x-show="(j.inputs_changed || []).length"
+               x-text="'输入已变更：' + j.inputs_changed.join('、') + '（结果可能与提交时不同）'"></div>
+        </div>
+        <span class="badge" :class="statusClass(j.status)" x-text="statusLabel(j.status)"></span>
+
+        <!-- 正式成片。播放器点开才挂：一次挂二十几个，页面会卡住。 -->
+        <template x-if="j.deliverable">
+          <div class="delivery">
+            <template x-if="playingJob === j.job_id">
+              <video class="delivery-player" controls preload="metadata"
+                     :src="'/media/' + j.deliverable.relpath"></video>
+            </template>
+            <div class="delivery-meta">
+              <span class="cell-strong" x-text="j.deliverable.name"></span>
+              <span class="muted small" x-text="durationText(j.manifest)"></span>
+              <button class="btn" type="button" x-show="playingJob !== j.job_id"
+                      @click="playJob(j)">▶ 播放</button>
+              <a class="btn primary" :href="'/media/' + j.deliverable.relpath"
+                 download x-text="'⬇ 下载成片'"></a>
+            </div>
+          </div>
+        </template>
+        <p class="warn small" x-show="!j.deliverable && (j.segments || []).length"
+           x-text="'还没有成片，只有 ' + j.segments.length + ' 个分镜片段。'"></p>
+
+        <details class="preview-block" x-show="(j.segments || []).length">
+          <summary x-text="'分镜片段（' + j.segments.length + '）'"></summary>
+          <div class="job-artifacts">
+            <template x-for="a in (j.segments || [])" :key="a.relpath">
+              <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
+                 x-text="a.name"></a>
+            </template>
+          </div>
+        </details>
+
+        <details class="preview-block" x-show="(j.audio || []).length || (j.technical || []).length">
+          <summary x-text="'声音与技术文件（' + ((j.audio || []).length + (j.technical || []).length) + '）'"></summary>
+          <div class="job-artifacts">
+            <template x-for="a in (j.audio || [])" :key="a.relpath">
+              <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
+                 x-text="a.name"></a>
+            </template>
+            <template x-for="a in (j.technical || [])" :key="a.relpath">
+              <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
+                 x-text="a.name"></a>
+            </template>
+          </div>
+        </details>
+
+        <div class="job-actions">
+          <button class="btn subtle" type="button"
+                  x-show="canContinue(j)" @click="continueJob(j)"
+                  :disabled="submitting"
+                  title="用同样的角色绑定和参数，接着这个任务继续生成">▶ 从这次继续</button>
+          <button class="btn subtle" type="button" @click="removeRecord(j)"
+                  title="从列表里移出这一条；硬盘上的成片不动">🗑️ 移出列表</button>
+          <button class="btn danger" type="button" @click="removeFiles(j)"
+                  x-show="j.run_name"
+                  title="连硬盘上的文件一起删掉，无法恢复">🗑️ 连文件一起删</button>
+        </div>
+
+        <p class="err small" x-show="j.error" x-text="j.error"></p>
+      </div>
+    </template>
+
+    <div class="pager" x-show="pages > 1">
+      <button class="btn" type="button" @click="goTo(page - 1)"
+              :disabled="page <= 1">← 上一页</button>
+      <span class="muted small"
+            x-text="'第 ' + page + ' / ' + pages + ' 页'"></span>
+      <button class="btn" type="button" @click="goTo(page + 1)"
+              :disabled="page >= pages">下一页 →</button>
+    </div>
+  </div>
+
+  <div class="result-box" x-show="message" x-text="message"></div>
+</section>
+{% endblock %}

@@ -7,7 +7,7 @@
     <h2>🎞️ 视频制作</h2>
     <div class="panel-head-actions">
       <span class="muted" x-text="statusText"></span>
-      <button class="btn" type="button" @click="refreshJobs()">🔄 刷新</button>
+      <a class="btn" href="/history">🗂️ 制作历史</a>
     </div>
   </div>
 
@@ -98,91 +98,12 @@
               :disabled="!canSubmit"
               x-text="submitting ? '提交中…' : (missingRoles.length ? '还差 ' + missingRoles.length + ' 个资产' : (staleBlocked ? '先处理上面的镜像问题' : '🎬 开始渲染'))"></button>
       <div class="result-box" x-show="message" x-text="message"></div>
+      <p class="muted small" x-show="message && message.indexOf('已排队') === 0">
+        任务在制作历史页看进度和成片：<a href="/history">🗂️ 打开制作历史</a>
+      </p>
     </div>
 
     <div class="split-detail">
-      <div class="card" x-show="jobs.length">
-        <div class="card-head"><h3>任务</h3></div>
-        <template x-for="j in jobs" :key="j.job_id || j.run_name">
-          <div class="job-row">
-            <div class="job-head">
-              <div class="cell-strong" x-text="j.title || j.run_name"></div>
-              <div class="muted small">
-                <span x-text="j.script"></span>
-                <span x-show="j.attempt" x-text="' · 第 ' + j.attempt + ' 版'"></span>
-                <span x-show="j.continued" x-text="' · 续跑'"></span>
-              </div>
-              <div class="muted small" x-show="j.from_disk">磁盘记录（不是本页提交的）</div>
-              <div class="warn small" x-show="(j.inputs_changed || []).length"
-                   x-text="'输入已变更：' + j.inputs_changed.join('、') + '（结果可能与提交时不同）'"></div>
-            </div>
-            <span class="badge" :class="statusClass(j.status)" x-text="statusLabel(j.status)"></span>
-
-            <!-- 正式成片：这就是作者要拿走的东西。
-                 x-if 而不是 x-show：没有成片的任务不能去求值
-                 j.deliverable.relpath。
-                 播放器是点开才挂的：一次挂二十几个播放器，每个都会去
-                 拉一次 mp4 的元数据，页面会卡住。 -->
-            <template x-if="j.deliverable">
-              <div class="delivery">
-                <template x-if="playingJob === j.job_id">
-                  <video class="delivery-player" controls preload="metadata"
-                         :src="'/media/' + j.deliverable.relpath"></video>
-                </template>
-                <div class="delivery-meta">
-                  <span class="cell-strong" x-text="j.deliverable.name"></span>
-                  <span class="muted small"
-                        x-text="durationText(j.manifest)"></span>
-                  <button class="btn" type="button" x-show="playingJob !== j.job_id"
-                          @click="playJob(j)">▶ 播放</button>
-                  <a class="btn primary" :href="'/media/' + j.deliverable.relpath"
-                     download x-text="'⬇ 下载成片'"></a>
-                </div>
-              </div>
-            </template>
-            <!-- 只有片段没有成片：说清楚差什么。 -->
-            <p class="warn small" x-show="!j.deliverable && (j.segments || []).length"
-               x-text="'还没有成片，只有 ' + j.segments.length + ' 个分镜片段。'"></p>
-
-            <details class="preview-block" x-show="(j.segments || []).length">
-              <summary x-text="'分镜片段（' + j.segments.length + '）'"></summary>
-              <div class="job-artifacts">
-                <template x-for="a in (j.segments || [])" :key="a.relpath">
-                  <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
-                     x-text="a.name"></a>
-                </template>
-              </div>
-            </details>
-
-            <details class="preview-block" x-show="(j.audio || []).length || (j.technical || []).length">
-              <summary x-text="'声音与技术文件（' + ((j.audio || []).length + (j.technical || []).length) + '）'"></summary>
-              <div class="job-artifacts">
-                <template x-for="a in (j.audio || [])" :key="a.relpath">
-                  <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
-                     x-text="a.name"></a>
-                </template>
-                <template x-for="a in (j.technical || [])" :key="a.relpath">
-                  <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
-                     x-text="a.name"></a>
-                </template>
-              </div>
-            </details>
-
-            <!-- 从上次继续：接着原来的任务走，不新开一版。 -->
-            <button class="btn subtle" type="button"
-                    x-show="canContinue(j)" @click="continueJob(j)"
-                    :disabled="submitting"
-                    title="用同样的角色绑定和参数，接着这个任务继续生成">▶ 从这次继续</button>
-
-            <p class="err small" x-show="j.error" x-text="j.error"></p>
-          </div>
-        </template>
-      </div>
-
-      <div class="card" x-show="!jobs.length">
-        <p class="muted">还没有任务。选一个剧本、给每个角色接上资产，然后开始渲染。</p>
-      </div>
-
       <details class="preview-block" x-show="planPreview || planError">
         <summary>计划的角色与要求</summary>
         <pre class="preview-text" x-text="planPreview"></pre>

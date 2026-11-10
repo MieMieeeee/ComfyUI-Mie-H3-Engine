@@ -381,3 +381,40 @@ def recent_runs(limit: int = 20) -> list[dict]:
         })
     runs.sort(key=lambda r: r["finished_at"], reverse=True)
     return runs[:limit]
+
+
+def delete_run_files(run_name: str) -> list:
+    """Remove a run's files from the output tree.
+
+    Only what belongs to THIS run: the run's own directory, and the
+    flat files that carry its name. A run name is a prefix of the next
+    version's name, so "sb_run" must not take "sb_run_v2" with it.
+    """
+    import shutil
+
+    name = str(run_name or "")
+    if not name:
+        return []
+    removed = []
+    output = config.COMFYUI_ROOT / "output"
+    for sub in config.OUTPUT_SUBDIRS:
+        root = output / sub
+        if not root.is_dir():
+            continue
+        # 这次运行自己的目录。
+        for folder in root.iterdir():
+            if not folder.is_dir() or folder.name != name:
+                continue
+            count = sum(1 for p in folder.rglob("*") if p.is_file())
+            shutil.rmtree(folder, ignore_errors=True)
+            removed.append("%s/%s（%d 个文件）" % (sub, name, count))
+        # 平铺目录里带这个名字的文件。
+        for path in root.iterdir():
+            if not path.is_file() or not path.name.startswith(name):
+                continue
+            try:
+                path.unlink()
+            except OSError:
+                continue
+            removed.append("%s/%s" % (sub, path.name))
+    return removed
