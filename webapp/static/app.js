@@ -418,15 +418,28 @@ const SCRIPT_EVENT_NAMES = { dialogue: "对白", action: "动作", enter: "入�
 /* 渲染风险的分级：契约给的是一串长句，这里按英文标记分类定级。
  * err = 内容里确定存在的缺陷（会真的翻车）；warn = 预算/形态风险；
  * info = 弱代理或只在特定条件下成立。 */
+/* 每类风险配一句能照着做的改法：光把诊断丢给模型，它不知道该
+ * 动哪里——诊断说的是"哪里不够"，改法说的是"动什么"。 */
 const WARNING_META = [
-  ["punctuation-only dialogue", "标点台词变提示音", "err"],
-  ["speech and action budget too tight", "慢速塞满会丢句", "warn"],
-  ["shot budget at the floor", "预算贴地", "warn"],
-  ["duration pinned at the feasibility floor", "目标时长零缓冲", "warn"],
-  ["single-speaker continuation clip", "单人续接缺陷入形", "warn"],
-  ["long same-speaker burst", "连珠炮口型漂移", "warn"],
-  ["shouting delivery", "喊叫语速偏慢", "info"],
-  ["text-only crowds", "群像开场泄漏", "info"],
+  ["punctuation-only dialogue", "标点台词变提示音", "err", "model",
+   "把这一句改写成有可发音内容的台词（至少留一个字），不能只留标点"],
+  ["speech and action budget too tight", "慢速塞满会丢句", "warn", "duration",
+   "把这一镜的时长加到装得下这些台词与动作，或者减掉一句台词；"
+   + "不要让最短的那句被丢掉"],
+  ["shot budget at the floor", "预算贴地", "warn", "duration",
+   "把这一镜的时长留出余量（比现在多出至少半秒），别让它压在最低预算上"],
+  ["duration pinned at the feasibility floor", "目标时长零缓冲", "warn",
+   "duration",
+   "把目标时长提高约 1 秒，让每一镜都有缓冲"],
+  ["single-speaker continuation clip", "单人续接缺陷入形", "warn", "model",
+   "把这一镜拆成两镜，或者让画面里可见的角色接上这句台词"],
+  ["long same-speaker burst", "连珠炮口型漂移", "warn", "model",
+   "把同一角色连着说的几句拆散到不同片段（每段不超过 4 句），"
+   + "或者把收尾的反应拆成一个没有台词的第二镜"],
+  ["shouting delivery", "喊叫语速偏慢", "info", "duration",
+   "把目标时长加长一点，给喊叫的收尾留出 1 秒以上"],
+  ["text-only crowds", "群像开场泄漏", "info", "model",
+   "把没有台词的角色从这一镜里去掉，或者给他们各安排一个出场动作"],
 ];
 const WARNING_LEVEL_ORDER = { err: 0, warn: 1, info: 2 };
 
@@ -1280,7 +1293,9 @@ function scriptsPage() {
           character_settings: this.draftForm.character_settings,
           critic: this.draftForm.critic ? "on" : "off",
         };
-        if (this.draftForm.mode === "revise") body.base_asset = this.model;
+        // 底稿要用保存时那份：编辑器里的原始对象带着空的角色描述，
+        // 契约不收空串，修订会直接被拒。
+        if (this.draftForm.mode === "revise") body.base_asset = this.buildPayload();
         const result = await api.post("/api/scripts/auto", body);
         this.model = normalizeStoryboardModel(result.json);
         this.cleaned = result.json;
@@ -1393,16 +1408,66 @@ function scriptsPage() {
       return (this.warnings || []).map((text) => {
         const at = text.lastIndexOf("·");
         const tag = at >= 0 ? text.slice(at + 1).trim() : "";
+        // 标记前的那半句是诊断加建议：它本身就是一条修改要求。
+        const advice = at >= 0 ? text.slice(0, at).trim() : text;
         const meta = WARNING_META.find(([needle]) => tag.includes(needle))
-          || ["", "渲染风险", "warn"];
+          || ["", "渲染风险", "warn", "model", "按诊断把这一处改到没有风险"];
         return {
           text,
+          advice,
           label: meta[1],
           level: meta[2],
+          kind: meta[3] || "model",
+          fix: meta[4] || "",
           shot: (text.match(/^(scene_\d+)\s/) || [])[1] || "",
         };
       }).sort((a, b) => WARNING_LEVEL_ORDER[a.level] - WARNING_LEVEL_ORDER[b.level]
         || (a.shot < b.shot ? -1 : a.shot > b.shot ? 1 : 0));
+    },
+
+    /* 按这条风险的建议改。
+
+       风险的诊断里已经写着该怎么改（"建议提高约 1 秒"），所以这条
+       诊断可以直接当成修改要求交给模型：它重写一版草稿，作者看过
+       再决定要不要存。诊断指出来的事，作者不必自己翻译一遍。 */
+    async fixWarning(warning) {
+      if (this.drafting || !warning) return;
+      // 先问服务端：这条风险是算得出来的，还是需要判断。
+      let plan = null;
+      try {
+        plan = await api.post("/api/scripts/risk/plan",
+          { json: this.buildPayload(), warning: warning.text });
+      } catch (error) {
+        this.errors = [error.message];
+        return;
+      }
+      if (plan.kind === "duration") {
+        // 算得出来的：直接改。不用模型，也不会改错。
+        this.model.target_duration_seconds = plan.target_duration_seconds;
+        if (Array.isArray(plan.shot_durations)
+            && plan.shot_durations.length === (this.shotDurations || []).length) {
+          this.shotDurations = plan.shot_durations.slice();
+        }
+        this.syncDerived();
+        this.queueValidate();
+        this.okMessage = (plan.note || "已经按这条风险改好了")
+          + "（还没存盘：看过再按「💾 保存」）";
+        return;
+      }
+      // 需要判断的：交给模型，诊断和改法都给它。
+      this.startDraft("revise");
+      this.draftForm.concept = plan.request || this.fixRequest(warning);
+      await this.runDraft();
+    },
+
+    /* 一条能照着做的修改要求：诊断说的是"哪里不够"，改法说的是
+       "动什么"，两句都要给模型，其余内容一个字都不要动。 */
+    fixRequest(warning) {
+      const where = warning.shot ? warning.shot + "：" : "";
+      return ("按下面这条渲染风险改这一版，"
+        + "台词、角色、画风、接线都保持原样，只动问题所在的那一处：\n\n"
+        + where + (warning.advice || warning.text || "") + "\n\n"
+        + "改法：" + (warning.fix || "按诊断把这一处改到没有风险"));
     },
 
     get warningChips() {

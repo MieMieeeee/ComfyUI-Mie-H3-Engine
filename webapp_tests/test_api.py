@@ -643,3 +643,73 @@ def test_deleting_the_files_is_a_separate_ask(client, monkeypatch):
     assert removed == ["sb_run_0"], removed
     assert response.get_json()["files_removed"] == ["x.mp4"]
     runner._jobs.clear()
+
+
+# --------------------------------------------------------------------------- #
+# a render risk can be acted on
+# --------------------------------------------------------------------------- #
+
+def _tight_script():
+    """A script whose shot is too short for the line it has to say."""
+    script = json.loads(json.dumps(SCRIPT))
+    line = "这是一句很长很长的台词" * 4
+    script["source_script"] = "甲：" + line
+    script["shots"] = [{"id": "scene_01", "duration_seconds": 6.5, "events": [
+        {"id": "event_001", "type": "dialogue", "character": "character_1",
+         "text": line, "language": "zh"}]}]
+    script["target_duration_seconds"] = 6.5
+    script["execution"] = {
+        "look": "", "setting": "",
+        "visible_state": "Character 1 stands at center.",
+        "voices": {"character_1": "male voice"}, "directions": {},
+    }
+    return script
+
+
+def test_a_tight_shot_is_fixed_by_arithmetic(client):
+    """Some risks are arithmetic: the shot is too short for its line.
+    The app works that out from the contract's own numbers."""
+    from webapp.services import library, riskfix
+    script = _tight_script()
+    warnings = library.validate_storyboard(script)["warnings"]
+    assert warnings, "the fixture does not produce a risk"
+    risky = [w for w in warnings if "budget" in w]
+    assert risky, warnings
+
+    plan = riskfix.plan(script, risky[0])
+    assert plan["kind"] == "duration", plan
+    assert plan["target_duration_seconds"] > script["target_duration_seconds"]
+
+    # 用这个方案改一遍，那条风险就没了。
+    fixed = json.loads(json.dumps(script))
+    fixed["target_duration_seconds"] = plan["target_duration_seconds"]
+    for shot, seconds in zip(fixed["shots"], plan["shot_durations"]):
+        shot["duration_seconds"] = seconds
+    after = library.validate_storyboard(fixed)["warnings"]
+    assert not [w for w in after if "budget" in w], after
+
+
+def test_a_risk_that_needs_a_decision_goes_to_the_model(client):
+    """Splitting a shot or rewriting a line is a decision, not a sum."""
+    from webapp.services import riskfix
+    script = _tight_script()
+    warning = ("scene_01 有同一角色连续 5 句台词的连珠炮：末句口型可能漂到对面角色嘴上"
+               " · long same-speaker burst")
+    plan = riskfix.plan(script, warning)
+    assert plan["kind"] == "model", plan
+    assert "拆散" in plan["request"], plan["request"]
+    assert "scene_01" in plan["request"], plan["request"]
+
+
+def test_the_page_can_ask_what_to_do_about_a_risk(client):
+    from webapp.services import library
+    script = _tight_script()
+    warnings = library.validate_storyboard(script)["warnings"]
+    response = client.post("/api/scripts/risk/plan",
+                           json={"json": script, "warning": warnings[0]})
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    assert data["kind"] in ("duration", "model"), data
+    if data["kind"] == "duration":
+        assert data["target_duration_seconds"] > 0
+        assert len(data["shot_durations"]) == len(script["shots"])

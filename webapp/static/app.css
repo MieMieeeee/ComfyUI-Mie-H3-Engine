@@ -518,3 +518,10 @@ textarea.input.code {
 }
 .event-brief > span:last-child { min-width: 0; overflow-wrap: anywhere; }
 .script-facts { display: flex; gap: 14px; flex-wrap: wrap; }
+
+/* 渲染风险的一行：诊断、位置，和"照着改"的动作。 */
+.risk-row {
+  display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  padding: 3px 0;
+}
+.risk-row .risk-text { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }

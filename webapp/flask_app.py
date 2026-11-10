@@ -23,7 +23,7 @@ from flask import Flask, abort, jsonify, render_template, request, send_from_dir
 
 from webapp import config
 from webapp.services import (autodraft, comfy, history, library, llm,
-                             runname, runner, theme)
+                             riskfix, runname, runner, theme)
 
 
 def create_app() -> Flask:
@@ -300,6 +300,32 @@ def create_app() -> Flask:
         except (FileNotFoundError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 404
         return jsonify(library.confirm_execution(name, script["json"]))
+
+    @app.route("/api/scripts/risk/plan", methods=["POST"])
+    def api_risk_plan():
+        """What to do about one render risk.
+
+        Some risks are arithmetic and the app works them out itself -
+        a shot that is too short for its lines is made longer, with the
+        contract's own numbers. The rest need a decision, and the app
+        hands the model the diagnosis together with the way to fix it.
+        """
+        data = request.get_json(silent=True) or {}
+        payload = data.get("json")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except ValueError as exc:
+                return jsonify({"error": "剧本 JSON 解析不了：%s" % exc}), 400
+        if not isinstance(payload, dict):
+            return jsonify({"error": "没有剧本可改。"}), 400
+        warning = str(data.get("warning") or "")
+        if not warning:
+            return jsonify({"error": "没有说清是哪一条风险。"}), 400
+        try:
+            return jsonify(riskfix.plan(payload, warning))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     @app.route("/api/scripts/<name>/execution/draft", methods=["POST"])
     def api_execution_draft(name):

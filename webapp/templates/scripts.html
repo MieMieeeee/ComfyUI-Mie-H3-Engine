@@ -183,13 +183,22 @@
             </div>
             <ul x-show="warnOpen">
               <template x-for="(w, i) in parsedWarnings" :key="i">
-                <li>
+                <li class="risk-row">
                   <span class="warn-chip mini" :class="w.level" x-text="w.label"></span>
                   <span class="muted small" x-show="w.shot" x-text="w.shot"></span>
-                  <span x-text="w.text"></span>
+                  <span class="risk-text" x-text="w.text"></span>
+                  <button class="btn subtle" type="button" @click="fixWarning(w)"
+                          :disabled="drafting"
+                          :title="w.kind === 'duration'
+                            ? '按这条建议改：时长算得出来，直接改好，不用模型'
+                            : '按这条建议改：交给模型重写一版草稿'">✨ 按这条改</button>
                 </li>
               </template>
             </ul>
+            <p class="muted small" x-show="warnOpen">
+              每条风险后面都有「按这条改」：诊断里已经写着该怎么改，照着改一版草稿，
+              你看过再决定要不要存。
+            </p>
           </div>
           <div class="validation-box ok" x-show="okMessage" x-text="okMessage"></div>
 

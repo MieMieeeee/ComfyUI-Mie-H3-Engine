@@ -602,3 +602,46 @@ def test_the_script_page_opens_the_script_it_was_asked_for(page, web):
               wait_until="networkidle")
     page.wait_for_timeout(1800)
     assert visible(page, ".card-head h3").first.inner_text() == "跳转测试"
+
+
+def test_a_risk_can_be_fixed_in_one_click(page, web):
+    """A render risk that is arithmetic is fixed by arithmetic: the
+    shot was too short for its line, so the shot gets longer. No model,
+    no waiting - and the library is not touched until it is saved."""
+    page.goto(BASE + "/scripts", wait_until="networkidle")
+    page.wait_for_timeout(700)
+    button(page, "＋ 新建").click()
+    page.wait_for_timeout(600)
+    page.get_by_placeholder("剧本名字").fill("风险测试")
+    line = "这是一句很长很长的台词" * 4
+    page.locator(".editor-pane textarea.code").fill("角色1：" + line)
+    page.wait_for_timeout(700)
+    button(page, "💾 保存").click()
+    page.wait_for_timeout(1500)
+
+    # 把这一镜改短一点，让它装不下那句话。
+    page.get_by_role("button", name="✏️ 编辑").click()
+    page.wait_for_timeout(400)
+    page.evaluate("""() => {
+        const app = Alpine.$data(document.querySelector('section[x-data]'));
+        app.shotDurations = [6.5];
+        app.model.target_duration_seconds = 6.5;
+        app.syncDerived();
+        app.queueValidate();
+    }""")
+    page.wait_for_timeout(2000)
+    risk = page.locator(".validation-box.risk")
+    assert risk.count() == 1, "the fixture did not produce a risk"
+    risk.first.get_by_role("button", name="说明").click()
+    page.wait_for_timeout(500)
+
+    before = page.evaluate(
+        "() => Alpine.$data(document.querySelector('section[x-data]')).model.target_duration_seconds")
+    risk.first.locator('.risk-row button', has_text="按这条改").first.click()
+    page.wait_for_timeout(2500)
+
+    after = page.evaluate(
+        "() => Alpine.$data(document.querySelector('section[x-data]')).model.target_duration_seconds")
+    assert after > before, "the shot was not made longer"
+    # 存盘之前，库里那份不能变。
+    assert page.locator(".card-head .badge").filter(visible=True).first.inner_text() == "未保存"
