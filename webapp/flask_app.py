@@ -500,16 +500,21 @@ def create_app() -> Flask:
                                      "用于丢掉迟到的响应",
                             "request_id": request_id, "revision": revision}), 400
         action = str(data.get("action") or "")
-        if action != "read":
+        if action not in ("read", "events"):
             return jsonify({"code": "bad_request",
-                            "error": "action 只能是 read（收到 %r）" % action,
+                            "error": "action 只能是 read 或 events（收到 %r）" % action,
                             "request_id": request_id,
                             "revision": revision}), 400
         try:
-            result = intake.read_materials(
-                str(data.get("text") or ""),
-                (data.get("image") or "") or None,
-                str(data.get("manual_caption") or ""))
+            if action == "read":
+                result = intake.read_materials(
+                    str(data.get("text") or ""),
+                    (data.get("image") or "") or None,
+                    str(data.get("manual_caption") or ""))
+            else:
+                result = {"code": "ok",
+                          "events": intake.structure_events(
+                              str(data.get("text") or ""))}
         except intake.IntakeError as exc:
             return jsonify({"code": exc.code, "error": str(exc),
                             "request_id": request_id,
@@ -520,6 +525,52 @@ def create_app() -> Flask:
                             "request_id": request_id,
                             "revision": revision}), 400
         return jsonify(dict(result, request_id=request_id, revision=revision))
+
+    @app.route("/api/scripts/intake/validate", methods=["POST"])
+    def api_intake_validate():
+        """The deterministic checks on a confirmed event list - no model.
+
+        The serialization into the shared parser's formats, the contract
+        probe the generator itself uses, and the duration arithmetic
+        that holds for every possible grouping: anything provably wrong
+        comes back field by field (which event, which line) BEFORE a
+        long generation is paid for. Nothing is written.
+        """
+        data = request.get_json(silent=True) or {}
+        request_id = str(data.get("request_id") or "")
+        revision = data.get("revision")
+        if not request_id or type(revision) is not int or revision < 0:
+            return jsonify({"code": "bad_request",
+                            "error": "request_id 和 revision（非负整数）都要带",
+                            "request_id": request_id,
+                            "revision": revision}), 400
+        roles = data.get("roles")
+        events = data.get("events")
+        if not isinstance(roles, list) or not isinstance(events, list):
+            return jsonify({"code": "bad_request",
+                            "error": "roles 和 events 要是数组",
+                            "request_id": request_id,
+                            "revision": revision}), 400
+        try:
+            result = intake.validate_submission(
+                roles, events,
+                name=str(data.get("name") or "新剧本"),
+                language=str(data.get("language") or "zh"),
+                shot_count=data.get("shot_count") or 0,
+                target_duration_seconds=float(
+                    data.get("target_duration_seconds") or 20),
+                audio_mode=str(data.get("audio_mode") or "generated"),
+                camera=data.get("camera") or {},
+                look=str(data.get("look") or ""),
+                setting=str(data.get("setting") or ""),
+                scene=str(data.get("scene") or ""),
+                constraints=str(data.get("constraints") or ""),
+                light=str(data.get("light") or "follow_image"),
+                light_text=str(data.get("light_text") or ""))
+        except Exception as exc:  # noqa: BLE001 - a bug is a 500, not a lie
+            raise
+        return jsonify({"code": "ok", "validation": result,
+                        "request_id": request_id, "revision": revision})
 
     @app.route("/api/scripts/auto", methods=["POST"])
     def api_autodraft_script():

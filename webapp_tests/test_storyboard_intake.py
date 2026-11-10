@@ -456,3 +456,200 @@ def test_a_reading_writes_nothing_to_the_library(client, monkeypatch):
     response = _post_read(client, monkeypatch, stub)
     assert response.status_code == 200, response.get_json()
     assert client.get("/api/scripts").get_json()["names"] == []
+
+
+# --------------------------------------------------------------------------- #
+# M2: action=events - structuring the text into roles and events
+# --------------------------------------------------------------------------- #
+
+def _post_events(client, monkeypatch, stub=None, **overrides):
+    from webapp.services import autodraft
+    if stub is not None:
+        monkeypatch.setattr(autodraft, "_connector", lambda: stub)
+    body = {
+        "request_id": "req-2",
+        "revision": 5,
+        "action": "events",
+        "text": "",
+    }
+    body.update(overrides)
+    return client.post("/api/scripts/intake", json=body)
+
+
+def test_role_labelled_text_is_parsed_without_a_model_call(client, monkeypatch):
+    """Text that is already role-labelled event lines goes through the
+    shared parser deterministically - no model, no rewrites (§4.1)."""
+    stub = ReadingStub(replies=["{}"])
+    text = ("小明：今天天气不错。\n"
+            "小红动作：她站起来看向窗外。\n"
+            "小明 [en]：Hello there.")
+    response = _post_events(client, monkeypatch, stub, text=text)
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    assert data["code"] == "ok"
+    events = data["events"]
+    assert events["mode"] == "parsed"
+    assert not stub.calls, "already-parseable text must not reach a model"
+    assert [r["name"] for r in events["roles"]] == ["小明", "小红"]
+    assert [e["text"] for e in events["events"]] == [
+        "今天天气不错。", "她站起来看向窗外。", "Hello there."]
+    assert [e["type"] for e in events["events"]] == [
+        "dialogue", "action", "dialogue"]
+    assert events["events"][2]["language"] == "en"
+    # 原文片段映射：每条事件认领自己所在的整行（「小明：今天天气不错。」
+    # 整行 10 个字符），角色标签不算“没分配的内容”。
+    assert events["events"][0]["span"] == [0, 10]
+    assert events["unmapped"] == []
+    assert not any(e["addition"] for e in events["events"])
+
+
+def test_plain_text_gets_model_proposals_with_piece_mapping(client, monkeypatch):
+    stub = ReadingStub(replies=[json.dumps({
+        "roles": [{"name": "小明", "presence": "on_screen", "position": "left"},
+                  {"name": "小红", "presence": "on_screen", "position": "right"}],
+        "events": [
+            {"role": 0, "type": "dialogue", "text": "今天天气不错。",
+             "language": "zh", "source": "小明说：\u201c今天天气不错。\u201d"},
+            {"role": 1, "type": "action", "text": "她站起来看向窗外。",
+             "language": "zh", "source": "小红站起来，看向窗外"},
+            {"role": 0, "type": "dialogue", "text": "我们去公园吧。",
+             "language": "zh", "source": ""},
+        ],
+    }, ensure_ascii=False)])
+    text = "小明说：\u201c今天天气不错。\u201d\n小红站起来，看向窗外。\n两人商量着出门。"
+    response = _post_events(client, monkeypatch, stub, text=text)
+    assert response.status_code == 200, response.get_json()
+    events = response.get_json()["events"]
+    assert events["mode"] == "proposed"
+    assert events["events"][0]["span"] is not None    # 原文片段被找到
+    assert events["events"][2]["addition"] is True    # 模型补写，默认待确认
+    assert events["events"][2]["span"] is None
+    # 没被任何事件认领的原文片段单独报出来（§4.1 未分配片段）。
+    unmapped_texts = [piece["text"] for piece in events["unmapped"]]
+    assert any("两人商量" in t for t in unmapped_texts), unmapped_texts
+    assert not any("今天天气不错" in t for t in unmapped_texts)
+
+
+def test_a_model_reply_with_a_bad_role_reference_is_refused(client, monkeypatch):
+    stub = ReadingStub(replies=[json.dumps({
+        "roles": [{"name": "小明", "presence": "on_screen", "position": "left"}],
+        "events": [{"role": 5, "type": "dialogue", "text": "hi",
+                    "language": "zh", "source": ""}],
+    }, ensure_ascii=False)])
+    response = _post_events(client, monkeypatch, stub, text="一段故事")
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "bad_reply"
+
+
+def test_events_for_empty_text_is_a_field_error(client, monkeypatch):
+    response = _post_events(client, monkeypatch, text="   ")
+    assert response.status_code == 400
+    assert not response.get_json().get("events")
+
+
+# --------------------------------------------------------------------------- #
+# M2: POST /api/scripts/intake/validate - deterministic checks, no model
+# --------------------------------------------------------------------------- #
+
+def _post_validate(client, **overrides):
+    body = {
+        "request_id": "req-3",
+        "revision": 7,
+        "roles": [
+            {"name": "小明", "presence": "on_screen", "position": "left"},
+            {"name": "小红", "presence": "on_screen", "position": "right"},
+        ],
+        "events": [
+            {"role": 0, "type": "dialogue", "text": "今天天气不错。", "language": "zh"},
+            {"role": 1, "type": "action", "text": "她站起来看向窗外。", "language": "zh"},
+        ],
+        "name": "确认稿", "language": "zh", "shot_count": 0,
+        "target_duration_seconds": 20, "audio_mode": "generated",
+        "camera": {"framing": "medium_shot", "movement": "locked",
+                   "perspective": "observer"},
+        "look": "", "setting": "", "scene": "", "constraints": "",
+        "light": "follow_image", "light_text": "",
+    }
+    body.update(overrides)
+    return client.post("/api/scripts/intake/validate", json=body)
+
+
+def test_validate_normalizes_and_reports_the_serialized_source(client):
+    response = _post_validate(client)
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    assert data["code"] == "ok"
+    result = data["validation"]
+    assert result["ok"] is True
+    assert result["source_script"] == (
+        "character_1 dialogue：今天天气不错。\n"
+        "character_2 action：她站起来看向窗外。")
+    assert [e["id"] for e in result["events"]] == ["event_001", "event_002"]
+    assert result["roles"][0]["id"] == "character_1"
+
+
+def test_validate_names_the_offending_line(client):
+    response = _post_validate(client, events=[
+        {"role": 0, "type": "dialogue", "text": "第一行", "language": "zh"},
+        {"role": 9, "type": "dialogue", "text": "坏引用", "language": "zh"},
+    ])
+    assert response.status_code == 200, response.get_json()
+    result = response.get_json()["validation"]
+    assert result["ok"] is False
+    assert result["errors"]
+    assert result["errors"][0]["event_index"] == 1
+    assert "角色" in result["errors"][0]["message"]
+
+
+def test_validate_refuses_shot_count_above_events_before_any_model(client):
+    response = _post_validate(client, shot_count=5)
+    assert response.status_code == 200
+    result = response.get_json()["validation"]
+    assert result["ok"] is False
+    assert any("shot_count" in e["message"] for e in result["errors"])
+
+
+def test_validate_flags_an_internal_newline_as_a_field_error(client):
+    response = _post_validate(client, events=[
+        {"role": 0, "type": "dialogue", "text": "第一行\n第二行", "language": "zh"},
+    ])
+    assert response.status_code == 200
+    result = response.get_json()["validation"]
+    assert result["ok"] is False
+    assert any("换行" in e["message"] for e in result["errors"])
+    assert result["errors"][0]["event_index"] == 0
+
+
+def test_validate_reports_a_provable_duration_conflict(client):
+    # 足够多、足够长的事件塞进 1 秒的目标时长是可证明不可行的
+    # （H3 网格的每镜下限），要在调用模型之前就说清楚。
+    many = [{"role": 0, "type": "dialogue", "text": "这是一句需要慢慢说的台词" * 12,
+             "language": "zh"} for _ in range(30)]
+    response = _post_validate(client, events=many, shot_count=0,
+                              target_duration_seconds=1)
+    assert response.status_code == 200
+    result = response.get_json()["validation"]
+    assert result["ok"] is False
+    assert result["errors"], "a provably impossible duration must be refused"
+
+
+def test_validate_rejects_an_unknown_camera_without_a_model(client):
+    response = _post_validate(client, camera={"framing": "dutch",
+                                              "movement": "locked",
+                                              "perspective": "observer"})
+    assert response.status_code == 200
+    result = response.get_json()["validation"]
+    assert result["ok"] is False
+    assert any("camera" in e["message"] for e in result["errors"])
+
+
+def test_validate_without_request_id_is_refused(client):
+    response = client.post("/api/scripts/intake/validate",
+                           json={"revision": 1})
+    assert response.status_code == 400
+
+
+def test_validate_writes_nothing_to_the_library(client):
+    response = _post_validate(client)
+    assert response.status_code == 200
+    assert client.get("/api/scripts").get_json()["names"] == []

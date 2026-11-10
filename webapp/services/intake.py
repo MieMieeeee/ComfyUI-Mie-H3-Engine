@@ -319,3 +319,381 @@ def read_materials(text: str, image_data_url: str = None,
         raise IntakeError(classify_provider_error(exc), str(exc)) from exc
     reading = _parse_reading(raw)
     return {"code": "ok", "reading": dict(reading, vision="", basis="text")}
+
+
+# --------------------------------------------------------------------------- #
+# action=events: structure the text into roles and event lines
+# --------------------------------------------------------------------------- #
+
+#: One line that already looks like the shared parser's event format:
+#: a role label, an optional type, an optional language tag, a colon.
+_LABELLED_LINE = re.compile(
+    r"^\s*(?P<name>[^\s：:|，,、]{1,40}?)\s*"
+    r"(?:(?P<kind>动作|对白|入场|离场)\s*)?"
+    r"(?:\[(?P<lang>zh|en)\]\s*)?[：:]\s*(?P<text>\S.*)$")
+
+_EVENTS_SYSTEM = (
+    "你把一段普通的故事文字整理成短剧的事件稿。输出一个 JSON 对象，"
+    "不要输出任何其他文字：\n"
+    '{"roles": [{"name": "…", "presence": "on_screen|off_screen",'
+    ' "position": "left|right|center|none", "voice": ""}],'
+    '\n "events": [{"role": 0, "type": "dialogue|action|enter|exit",'
+    ' "text": "…", "language": "zh|en", "source": "…"}]}\n'
+    "规则：\n"
+    "- roles 是故事里实际开口或行动的人物，1..8 个，按出场顺序；"
+    "旁白也算一个角色（presence 用 off_screen，position 用 none）。"
+    "name 是人物名字（不超过 40 字，不要带标点）。\n"
+    "- events 按发生顺序，1..200 条。role 是这条事件属于第几个角色"
+    "（从 0 数）。台词用 dialogue，无声动作用 action，登场用 enter，"
+    "退场用 exit。\n"
+    "- text 是这一条的内容：台词就写台词本身（不加引号、不带角色名），"
+    "动作写成一句描述。每条一段，不要换行。\n"
+    "- source 写这句话（或这个动作）在原文里对应的片段，逐字摘录；"
+    "原文里没有、由你补写的，source 留空字符串——补写会单独标出来等作者确认。\n"
+    "- 原文的叙述、场景说明不要硬塞进事件；没有对应事件的片段会被单独列出。\n"
+    "- language：这句是英文就写 en，否则 zh。\n"
+    "输出只有这个 JSON 对象。"
+)
+
+
+def try_labelled_parse(text: str):
+    """The deterministic fast path (§4.1): text that is already
+    role-labelled event lines parses with the SHARED parser, and the
+    model is never asked to rewrite what the author already wrote.
+
+    Returns (roles, events, spans) or None when any line is not
+    label-shaped - then the text is ordinary prose and needs the model.
+    """
+    from mie_craft.script.contract import parse_roles, parse_script
+
+    names, spans = [], []
+    offset = 0
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            match = _LABELLED_LINE.match(line)
+            if not match:
+                return None
+            name = match.group("name").strip()
+            if not name:
+                return None
+            if name not in names:
+                names.append(name)
+            # 事件认领的是整行（含角色标签）：标签不是“没分配的故事内容”。
+            spans.append((offset, offset + len(line)))
+        else:
+            spans.append(None)
+        offset += len(line) + 1
+    if not names:
+        return None
+    settings = "\n".join("角色%d：%s" % (number, name)
+                         for number, name in enumerate(names, 1))
+    try:
+        roles = parse_roles(len(names), settings)
+        events = parse_script(text, roles, "zh")
+    except ValueError:
+        return None
+    event_spans = [span for span in spans if span is not None]
+    return roles, events, event_spans
+
+
+def _ui_roles(roles: list) -> list:
+    return [{"ui_id": "r%d" % number, **{
+        "name": role.get("name") or "",
+        "presence": role.get("presence") or "on_screen",
+        "initially_visible": role.get("initially_visible", True),
+        "position": role.get("position") or "center",
+        "voice": role.get("voice") or "",
+    }} for number, role in enumerate(roles, 1)]
+
+
+def _mapped_pieces(text: str, spans: list) -> list:
+    """The pieces of the source no event claimed (§4.1 未分配片段)."""
+    claimed = sorted(span for span in spans if span)
+    pieces, cursor = [], 0
+
+    def unclaimed(block_text):
+        block = block_text.strip()
+        if block and not block.startswith("#"):   # a comment is not content
+            pieces.append({"text": block[:200]})
+
+    for start, end in claimed:
+        if start > cursor:
+            unclaimed(text[cursor:start])
+        cursor = max(cursor, end)
+    if cursor < len(text):
+        unclaimed(text[cursor:])
+    return pieces
+
+
+def _parse_model_events(raw: str, text: str) -> dict:
+    """Check the model's proposal field by field; map pieces to spans."""
+    from webapp.services.autodraft import _json_object
+
+    try:
+        payload = _json_object(raw)
+    except ValueError as exc:
+        raise IntakeError("bad_reply", str(exc)) from exc
+    raw_roles = payload.get("roles")
+    raw_events = payload.get("events")
+    if not isinstance(raw_roles, list) or not 1 <= len(raw_roles) <= 8:
+        raise IntakeError("bad_reply", "模型没有给出 1..8 个角色")
+    if not isinstance(raw_events, list) or not 1 <= len(raw_events) <= 200:
+        raise IntakeError("bad_reply", "模型没有给出 1..200 条事件")
+
+    roles = []
+    for row in raw_roles:
+        if not isinstance(row, dict):
+            raise IntakeError("bad_reply", "角色的每一项要是一个对象")
+        presence = row.get("presence") or "on_screen"
+        if presence not in ("on_screen", "off_screen"):
+            raise IntakeError("bad_reply",
+                              "角色状态只能是 on_screen/off_screen：%r" % presence)
+        roles.append({
+            "name": str(row.get("name") or "").strip()[:40],
+            "presence": presence,
+            "initially_visible": row.get("initially_visible",
+                                         presence == "on_screen"),
+            "position": str(row.get("position") or ""),
+            "voice": str(row.get("voice") or "")[:200],
+        })
+    if not any(role["name"] for role in roles):
+        raise IntakeError("bad_reply", "模型没有给出任何角色名字")
+
+    events, spans = [], []
+    cursor = 0
+    for number, row in enumerate(raw_events):
+        if not isinstance(row, dict):
+            raise IntakeError("bad_reply", "事件的每一项要是一个对象")
+        index = row.get("role")
+        if type(index) is not int or not 0 <= index < len(roles):
+            raise IntakeError(
+                "bad_reply",
+                "第 %d 条事件引用的角色不存在（role 要是 0..%d 的序号）"
+                % (number + 1, len(roles) - 1))
+        kind = str(row.get("type") or "")
+        if kind not in ("dialogue", "action", "enter", "exit"):
+            raise IntakeError(
+                "bad_reply", "第 %d 条事件的类型无法识别：%r" % (number + 1, kind))
+        body = str(row.get("text") or "").strip().replace("\n", " ")
+        if not body:
+            raise IntakeError("bad_reply", "第 %d 条事件是空的" % (number + 1))
+        language = str(row.get("language") or "zh")
+        if language not in ("zh", "en"):
+            language = "zh"
+        source = str(row.get("source") or "").strip()
+        span = None
+        if source:
+            found = text.find(source, cursor)
+            if found < 0:              # maybe it appears earlier
+                found = text.find(source)
+            if found >= 0:
+                span = [found, found + len(source)]
+                cursor = max(cursor, found + len(source))
+        events.append({
+            "ui_id": "e%d_%d" % (number + 1, len(events) + 1),
+            "role_ui_id": "r%d" % (index + 1),
+            "type": kind, "text": body[:2000], "language": language,
+            "span": span, "addition": span is None,
+        })
+        if span:
+            spans.append(span)
+    return {"roles": _ui_roles(roles), "events": events,
+            "unmapped": _mapped_pieces(text, spans)}
+
+
+def structure_events(text: str) -> dict:
+    """Turn the author's text into an editable event list.
+
+    Already-labelled lines go through the shared parser with no model
+    (the author wrote event lines; nobody rewrites them). Ordinary
+    prose gets model PROPOSALS - every event carries the source piece
+    it came from, and pieces nobody claimed are listed so the author
+    can assign, mark as scene notes, or drop the keep-mark.
+    """
+    text = str(text or "").strip()
+    if not text:
+        raise IntakeError("bad_request", "文字是空的：写一段故事再整理", 400)
+    if len(text) > 30000:
+        raise IntakeError("bad_request", "文字太长：最多 30000 字", 400)
+
+    parsed = try_labelled_parse(text)
+    if parsed is not None:
+        roles, events, spans = parsed
+        ui_roles = _ui_roles(roles)
+        return {
+            "mode": "parsed",
+            "roles": ui_roles,
+            "events": [{
+                "ui_id": "e%d_%d" % (number, number),
+                "role_ui_id": ui_roles[int(event["character"].split("_")[1]) - 1]["ui_id"],
+                "type": event["type"], "text": event["text"],
+                "language": event["language"],
+                "span": [span[0], span[1]],
+                "addition": False,
+            } for number, (event, span) in enumerate(zip(events, spans), 1)],
+            "unmapped": _mapped_pieces(text, spans),
+        }
+
+    connector = _connector()
+    user_text = "整理这段故事文字：\n\n" + text
+    try:
+        raw = connector.invoke([
+            {"role": "system", "content": _EVENTS_SYSTEM},
+            {"role": "user", "content": user_text},
+        ], max_tokens=8192)
+        raw = str(raw or "")
+    except Exception as exc:  # noqa: BLE001 - classified below
+        raise IntakeError(classify_provider_error(exc), str(exc)) from exc
+    result = _parse_model_events(raw, text)
+    return dict(result, mode="proposed")
+
+
+# --------------------------------------------------------------------------- #
+# POST /api/scripts/intake/validate: deterministic checks, no model
+# --------------------------------------------------------------------------- #
+
+#: The H3 grid's per-shot ceiling and the overlap slack: with at most 20
+#: shots and a 22-frame overlap, NO grouping can buy more than about
+#: this many seconds of total duration below the summed content floor -
+#: which is what makes a duration conflict PROVABLE before grouping
+#: exists (the generator's own probe deliberately claims less).
+_PROVABLE_SLACK_SECONDS = 18.0
+
+_SHOT_CEILING_SECONDS = 30.0
+
+
+def validate_submission(roles: list, events: list, *, name: str,
+                        language: str, shot_count: int,
+                        target_duration_seconds: float, audio_mode: str,
+                        camera: dict, look: str, setting: str, scene: str,
+                        constraints: str, light: str, light_text: str) -> dict:
+    """The deterministic half of the checks, with field-level answers.
+
+    Everything here is provable without a model: the serialization, the
+    shared parser, the header contract (via the same probe the
+    generator uses) and duration arithmetic on the content floor.
+    """
+    from mie_craft.script.contract import (allocate_frames, estimate_shot_seconds,
+                                           parse_roles, parse_script, validate_v2)
+    from webapp.services.autodraft import (_event_line, _role_settings_line,
+                                           _round_trip_problems)
+
+    errors = []
+
+    def header_error(message):
+        errors.append({"event_index": None, "message": message})
+
+    if not isinstance(roles, list) or not 1 <= len(roles) <= 8:
+        header_error("角色数要在 1..8 个")
+        roles = roles if isinstance(roles, list) else []
+    if not isinstance(events, list) or not 1 <= len(events) <= 200:
+        header_error("事件数要在 1..200 条")
+        events = events if isinstance(events, list) else []
+    language = language if language in ("zh", "en") else "zh"
+
+    settings_lines = []
+    for number, role in enumerate(roles, 1):
+        try:
+            settings_lines.append(_role_settings_line(number, role))
+        except ValueError as exc:
+            errors.append({"event_index": None,
+                           "message": str(exc)})
+    source_lines = []
+    for number, event in enumerate(events, 1):
+        try:
+            source_lines.append(_event_line(number, event, len(roles), language))
+        except ValueError as exc:
+            errors.append({"event_index": number - 1, "message": str(exc)})
+    if errors:
+        return {"ok": False, "errors": errors, "warnings": [],
+                "roles": [], "events": [], "source_script": ""}
+
+    settings = "\n".join(settings_lines)
+    source = "\n".join(source_lines)
+    try:
+        parsed_roles = parse_roles(len(roles), settings)
+        parsed_events = parse_script(source, parsed_roles, language)
+    except ValueError as exc:
+        return {"ok": False,
+                "errors": [{"event_index": None, "message": str(exc)}],
+                "warnings": [], "roles": [], "events": [],
+                "source_script": source}
+    for problem in _round_trip_problems(events, parsed_events, language):
+        errors.append(problem)
+
+    try:
+        shots_wanted = int(shot_count) if shot_count else 0
+    except (TypeError, ValueError):
+        shots_wanted = -1
+    if shots_wanted not in range(0, min(20, len(events)) + 1):
+        errors.append({"event_index": None,
+                       "message": "段数（分镜数）shot_count 要么是 0（自动），"
+                                  "要么是 1..20 且不超过事件数（现在有 %d 条事件）"
+                                  % len(events)})
+        shots_wanted = 0
+
+    # The header contract, checked exactly the way the generator probes
+    # it - camera enums, light, scene, name, duration range, ... .
+    duration = float(target_duration_seconds or 20)
+    header = {"version": 2, "name": str(name or "新剧本"), "language": language,
+              "roles": parsed_roles,
+              "camera": {"framing": str((camera or {}).get("framing") or "medium_shot"),
+                         "movement": str((camera or {}).get("movement") or "locked"),
+                         "perspective": str((camera or {}).get("perspective") or "observer")},
+              "look": str(look or ""), "setting": str(setting or ""),
+              "constraints": str(constraints or ""),
+              "target_duration_seconds": duration,
+              "continuation_overlap_frames": 22,
+              "source_script": source}
+    if str(scene or "").strip():
+        header["scene"] = str(scene).strip()
+    if str(light or "follow_image") != "follow_image":
+        header["light"] = str(light)
+    if str(light or "") == "custom":
+        header["light_text"] = str(light_text or "")
+    probe_count = shots_wanted or min(len(parsed_events), 20)
+    groups = [parsed_events[i * len(parsed_events) // probe_count:
+                            (i + 1) * len(parsed_events) // probe_count]
+              for i in range(probe_count)]
+    probe = dict(header, shots=[{"id": "scene_%02d" % (i + 1),
+                                 "duration_seconds":
+                                     min(30, duration / probe_count + 1),
+                                 "events": group}
+                                for i, group in enumerate(groups)])
+    try:
+        validate_v2(probe, _check_timing=False, _check_execution=False)
+    except ValueError as exc:
+        header_error(str(exc))
+
+    # Duration arithmetic that holds for EVERY grouping (the content
+    # floor is additive; no grouping can beat it by more than the
+    # overlap slack), so it can block the model call.
+    if isinstance(events, list) and events:
+        floors = [estimate_shot_seconds({"events": [event]})
+                  for event in parsed_events]
+        for number, floor in enumerate(floors, 1):
+            if floor > _SHOT_CEILING_SECONDS:
+                errors.append({
+                    "event_index": number - 1,
+                    "message": "第 %d 条事件按语速下限估算约 %.0f 秒，超过单镜 "
+                               "30 秒上限：精简这条，或拆成几条"
+                               % (number, floor)})
+        total_floor = sum(floors)
+        if total_floor - _PROVABLE_SLACK_SECONDS > duration:
+            errors.append({
+                "event_index": None,
+                "message": "这些事件按语速下限估算共约 %.0f 秒，目标时长只有 "
+                           "%.0f 秒：加长目标时长，或精简事件"
+                           % (total_floor, duration)})
+
+    return {
+        "ok": not errors,
+        "errors": errors,
+        "warnings": [],
+        "roles": parsed_roles,
+        "events": parsed_events,
+        "source_script": source,
+        "counts": {"roles": len(parsed_roles), "events": len(parsed_events),
+                   "shot_count": shots_wanted},
+    }

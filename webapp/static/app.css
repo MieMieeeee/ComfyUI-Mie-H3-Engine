@@ -577,3 +577,32 @@ textarea.input.code {
   .intake-preview img { width: 96px; max-height: 96px; }
   .intake-item .btn { padding: 2px 8px; }
 }
+
+/* 事件稿：角色卡一行、事件行一条、未分配片段一张卡。 */
+.intake-role, .intake-event {
+  display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap;
+}
+.intake-role-name { flex: 2 1 110px; min-width: 0; }
+.intake-role-voice { flex: 3 1 150px; min-width: 0; }
+.intake-event { position: relative; flex: 1 1 100%; padding: 2px 0; }
+.intake-event-no {
+  flex: none; min-width: 20px; text-align: right;
+  color: var(--text-muted); font-size: 12px; padding-top: 8px;
+}
+.intake-event-role { flex: 1 1 120px; min-width: 0; }
+.intake-event-type { flex: 1 1 84px; min-width: 0; }
+.intake-event-text { flex: 4 1 220px; min-width: 0; }
+.intake-event-lang { flex: 0 1 58px; min-width: 0; }
+.intake-event-tools { display: flex; gap: 4px; }
+.intake-event-tools .btn { padding: 2px 8px; }
+.intake-event-error { flex: 1 1 100%; margin: 0; }
+.intake-addition-check { flex: 1 1 100%; }
+.input-err { border-color: var(--color-error); }
+
+.intake-piece {
+  padding: 8px; border: 1px dashed var(--border-subtle); border-radius: 8px;
+}
+.intake-piece.handled { opacity: 0.6; }
+.intake-design { margin: 8px 0; }
+.intake-design summary { cursor: pointer; }
+.intake-precheck { margin-top: 10px; }

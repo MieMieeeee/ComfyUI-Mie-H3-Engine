@@ -116,13 +116,44 @@
             <label class="field">
               <span>文字（一段点子、一个故事或几句台词草稿都行）</span>
               <textarea class="input" rows="4" x-model="intake.text"
-                        @input="intakeTouch()"
+                        @input="intakeTextPolicyHint()"
                         placeholder="例如：外卖员发现客人养的猫会自己开门，两人成了朋友。"></textarea>
             </label>
 
-            <p class="muted small" style="margin: 2px 0 8px">
-              文字规则：允许改编 —— AI 可调整情节和台词。
-            </p>
+            <div class="intake-policy">
+              <span class="small"><strong>生成方式</strong></span>
+              <div class="filter-bar">
+                <button class="pill" type="button"
+                        :class="{ active: intake.flowMode === 'direct' }"
+                        @click="intake.flowMode = 'direct'; intakeTouch()">直接出一版</button>
+                <button class="pill" type="button"
+                        :class="{ active: intake.flowMode === 'guided' }"
+                        @click="intake.flowMode = 'guided'; intakeTouch()">一起设计</button>
+              </div>
+              <p class="muted small" style="margin: 2px 0 0"
+                 x-text="intake.flowMode === 'direct'
+                   ? '一次生成完整草稿，检查后再改。'
+                   : '先整理角色和事件，逐条确认后按确认稿生成。'"></p>
+            </div>
+
+            <div class="intake-policy">
+              <span class="small"><strong>文字规则</strong></span>
+              <div class="filter-bar">
+                <button class="pill" type="button"
+                        :class="{ active: intake.textPolicy === 'adapt' }"
+                        @click="intake.textPolicy = 'adapt'; intake.policyChosen = true; intakeTouch()">允许改编</button>
+                <button class="pill" type="button"
+                        :class="{ active: intake.textPolicy === 'keep' }"
+                        @click="intake.textPolicy = 'keep'; intake.policyChosen = true; intakeTouch()">保留原台词</button>
+              </div>
+              <p class="muted small" style="margin: 2px 0 0"
+                 x-text="intake.textPolicy === 'adapt'
+                   ? 'AI 可调整情节和台词。'
+                   : '已确认的事件逐字进入成片剧本：模型只分镜和配执行描述，不改你的字。'"></p>
+              <p class="muted small" x-show="intake.policyChosen === false && intake.textPolicy === 'keep'">
+                已识别 <span x-text="intake.policyHintLines || 0"></span> 行角色事件，预选了「保留原台词」；不合适就换。
+              </p>
+            </div>
 
             <div class="intake-image">
               <template x-if="!intake.image">
@@ -241,9 +272,212 @@
             </div>
           </template>
 
+          <!-- 事件稿：角色卡 + 事件行 + 未分配片段 + 整体设计 + 预检 -->
+          <template x-if="intake.step === 'events' && intake.eventDraft">
+            <div class="intake-events">
+              <p class="muted small" x-show="intake.eventDraft.mode === 'parsed'">
+                原文已经是角色事件行：直接按共享解析器读入，没有经过模型改写。
+              </p>
+              <p class="muted small" x-show="intake.eventDraft.mode === 'proposed'">
+                这是模型的整理建议：逐条核对，补写的台词（标着「补写」）默认不参与，
+                勾选才算确认。
+              </p>
+
+              <!-- 角色 -->
+              <div class="intake-group">
+                <span class="small"><strong>角色</strong>（改名会同步到所有事件；删角色前先处理它的事件）</span>
+                <template x-for="(role, index) in intake.eventDraft.roles" :key="role.ui_id">
+                  <div class="intake-role">
+                    <input class="input intake-role-name" x-model="role.name"
+                           @change="intakeTouchEvents()"
+                           :aria-label="'角色 ' + (index + 1) + ' 名字'">
+                    <select class="input" x-model="role.presence"
+                            @change="if (role.presence === 'off_screen') { role.initially_visible = false; role.position = 'none'; } else { role.initially_visible = true; } intakeTouchEvents()"
+                            :aria-label="'角色 ' + (index + 1) + ' 画面内外'">
+                      <option value="on_screen">画面内</option>
+                      <option value="off_screen">画外</option>
+                    </select>
+                    <select class="input" x-model="role.position"
+                            x-show="role.presence === 'on_screen'"
+                            @change="intakeTouchEvents()"
+                            :aria-label="'角色 ' + (index + 1) + ' 位置'">
+                      <option value="left">左侧</option>
+                      <option value="center">中间</option>
+                      <option value="right">右侧</option>
+                    </select>
+                    <input class="input intake-role-voice" x-model="role.voice"
+                           @change="intakeTouchEvents()"
+                           placeholder="声音说明（可选）"
+                           :aria-label="'角色 ' + (index + 1) + ' 声音'">
+                    <button class="btn" type="button"
+                            @click="intakeRemoveRole(index)"
+                            :aria-label="'删除角色 ' + (index + 1)">删</button>
+                  </div>
+                </template>
+                <button class="btn" type="button" @click="intakeAddRole()">＋ 加一个角色</button>
+              </div>
+
+              <!-- 事件行 -->
+              <div class="intake-group">
+                <span class="small">
+                  <strong>事件</strong>
+                  <span class="muted" x-text="'（' + intakeVisibleEvents.length + ' 条；按发生顺序，生成时逐字锁定）'"></span>
+                </span>
+                <template x-for="(event, index) in intakeVisibleEvents" :key="event.ui_id">
+                  <div class="intake-event">
+                    <span class="intake-event-no" x-text="index + 1"></span>
+                    <select class="input intake-event-role" :value="event.role"
+                            @change="intakeSetEvent(event, 'role', Number($event.target.value))"
+                            :aria-label="'事件 ' + (index + 1) + ' 角色'">
+                      <template x-for="(role, rIndex) in intake.eventDraft.roles" :key="role.ui_id">
+                        <option :value="rIndex" x-text="(rIndex + 1) + '·' + (role.name || '未命名')"></option>
+                      </template>
+                    </select>
+                    <select class="input intake-event-type" :value="event.type"
+                            @change="intakeSetEvent(event, 'type', $event.target.value)"
+                            :aria-label="'事件 ' + (index + 1) + ' 类型'">
+                      <option value="dialogue">台词</option>
+                      <option value="action">动作</option>
+                      <option value="enter">入场</option>
+                      <option value="exit">离场</option>
+                    </select>
+                    <textarea class="input intake-event-text" rows="1" x-model="event.text"
+                              @change="intakeTouchEvents()"
+                              :class="{ 'input-err': intakeEventError(index) }"
+                              :aria-label="'事件 ' + (index + 1) + ' 内容'"></textarea>
+                    <select class="input intake-event-lang" :value="event.language"
+                            @change="intakeSetEvent(event, 'language', $event.target.value)"
+                            :aria-label="'事件 ' + (index + 1) + ' 语言'">
+                      <option value="zh">zh</option>
+                      <option value="en">en</option>
+                    </select>
+                    <div class="intake-event-tools">
+                      <button class="btn" type="button" title="上移" :disabled="index === 0"
+                              @click="intakeMoveEvent(index, -1)"
+                              :aria-label="'事件 ' + (index + 1) + ' 上移'">↑</button>
+                      <button class="btn" type="button" title="下移"
+                              :disabled="index === intakeVisibleEvents.length - 1"
+                              @click="intakeMoveEvent(index, 1)"
+                              :aria-label="'事件 ' + (index + 1) + ' 下移'">↓</button>
+                      <button class="btn" type="button" title="复制"
+                              @click="intakeDuplicateEvent(index)"
+                              :aria-label="'复制事件 ' + (index + 1)">⧉</button>
+                      <button class="btn" type="button" title="删除"
+                              @click="intakeRemoveEvent(index)"
+                              :aria-label="'删除事件 ' + (index + 1)">删</button>
+                    </div>
+                    <label class="inline-check intake-addition-check"
+                           x-show="event.addition">
+                      <input type="checkbox" :checked="event.included"
+                             @change="intakeToggleAddition(event)">
+                      补写，确认采用
+                    </label>
+                    <p class="err small intake-event-error"
+                       x-show="intakeEventError(index)"
+                       x-text="intakeEventError(index)"></p>
+                  </div>
+                </template>
+                <button class="btn" type="button" @click="intakeAddEvent()">＋ 加一条事件</button>
+              </div>
+
+              <!-- 未分配的原文片段：保留台词路径的关口 -->
+              <div class="intake-group" x-show="intake.eventDraft.unmapped.length">
+                <span class="small"><strong>还没认领的原文片段</strong>（每条都要处理：加成事件、记为场景说明，或解除保留）</span>
+                <template x-for="piece in intake.eventDraft.unmapped" :key="piece.ui_id">
+                  <div class="intake-piece" :class="{ handled: piece.handled }">
+                    <p class="small" style="margin: 0" x-text="piece.text"></p>
+                    <div class="job-actions" x-show="!piece.handled">
+                      <button class="btn" type="button"
+                              @click="intakeAssignPiece(piece)">加成一条事件</button>
+                      <button class="btn" type="button"
+                              @click="intakePieceToScene(piece)">记为场景说明</button>
+                      <button class="btn" type="button"
+                              @click="intakeDropPiece(piece)">解除保留</button>
+                    </div>
+                    <p class="muted small" style="margin: 0" x-show="piece.handled"
+                       x-text="piece.handledHow === 'event' ? '已加成事件'
+                         : piece.handledHow === 'scene' ? '已记入场景说明'
+                         : '已解除保留（不进剧本）'"></p>
+                  </div>
+                </template>
+              </div>
+
+              <!-- 整体设计（全局画面参数；script 模式会锁定它们） -->
+              <details class="intake-design">
+                <summary class="small"><strong>整体设计</strong>（场景与世界观的说明；这些是全剧本的全局设置）</summary>
+                <label class="field">
+                  <span>场景描述（scene）</span>
+                  <textarea class="input" rows="2" x-model="intake.design.scene"
+                            @change="intakeTouchEvents()"></textarea>
+                </label>
+                <div class="field-row">
+                  <label class="field">
+                    <span>世界观（setting）</span>
+                    <input class="input" x-model="intake.design.setting" @change="intakeTouchEvents()">
+                  </label>
+                  <label class="field">
+                    <span>画面风格（look）</span>
+                    <input class="input" x-model="intake.design.look" @change="intakeTouchEvents()">
+                  </label>
+                </div>
+                <label class="field">
+                  <span>导演要求（constraints）</span>
+                  <input class="input" x-model="intake.design.constraints" @change="intakeTouchEvents()">
+                </label>
+                <div class="field-row">
+                  <label class="field">
+                    <span>默认景别</span>
+                    <select class="input" x-model="intake.design.camera.framing" @change="intakeTouchEvents()">
+                      <option value="medium_shot">中景</option>
+                      <option value="medium_close_up">中近景</option>
+                      <option value="close_up">近景</option>
+                      <option value="wide_shot">全景</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>默认运动</span>
+                    <select class="input" x-model="intake.design.camera.movement" @change="intakeTouchEvents()">
+                      <option value="locked">固定</option>
+                      <option value="slow_zoom_in">缓推</option>
+                      <option value="slow_zoom_out">缓拉</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>默认视角</span>
+                    <select class="input" x-model="intake.design.camera.perspective" @change="intakeTouchEvents()">
+                      <option value="observer">旁观</option>
+                      <option value="first_person">第一人称</option>
+                    </select>
+                  </label>
+                </div>
+              </details>
+
+              <!-- 预检结果（生成参数沿用下方表单） -->
+              <div class="intake-precheck">
+                <div class="job-actions">
+                  <button class="btn" type="button" @click="intakeValidate()">重新预检</button>
+                  <span class="badge" x-show="intake.validateState.checked"
+                        :class="intake.validateState.ok ? 'ok' : 'err'"
+                        x-text="intake.validateState.ok ? '预检通过' : '预检有问题'"></span>
+                </div>
+                <template x-if="intake.validateState.checked">
+                  <div>
+                    <p class="err small" x-show="intake.validateState.errors.length"
+                       x-text="intakeHeaderErrors.map((e) => e.message).join('；')"></p>
+                    <p class="muted small" x-show="!intake.validateState.errors.length">
+                      事件 <span x-text="intakeVisibleEvents.length"></span> 条、
+                      角色 <span x-text="intake.eventDraft.roles.length"></span> 个：
+                      按确认内容生成时逐字锁定，模型只做分镜和执行描述。
+                    </p>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+
           <!-- 生成参数：material 和 understanding 阶段可改 -->
           <div class="intake-form"
-               x-show="intake.step === 'material' || intake.step === 'understanding'">
+               x-show="intake.step === 'material' || intake.step === 'understanding' || intake.step === 'events'">
             <div class="field-row">
               <label class="field">
                 <span>名字</span>
@@ -321,6 +555,16 @@
 
       <template x-if="!draftOpen && model">
         <div class="card">
+          <!-- script 路径的草稿：确认稿被改动时明说（§7） -->
+          <p class="muted small" style="margin: 0 0 6px"
+             x-show="intakeConfirmed && !confirmedEventsDrifted"
+             x-text="'这份草稿按 ' + intakeConfirmed.count + ' 条已确认事件逐字生成；改事件前先想清楚。'"></p>
+          <p class="err small" style="margin: 0 0 6px"
+             x-show="confirmedEventsDrifted">
+            ⚠ 事件被改过：这份稿子已经偏离当初确认的
+            <span x-text="intakeConfirmed ? intakeConfirmed.count : 0"></span>
+            条事件。保存时存的是现在这份（改过的），确认稿不再作数。
+          </p>
           <div class="card-head">
             <h3 x-text="model.name || '（未命名）'"></h3>
             <div class="panel-head-actions">

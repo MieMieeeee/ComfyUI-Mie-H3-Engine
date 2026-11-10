@@ -707,6 +707,20 @@ function scriptsPage() {
       return this.isDirty ? "未保存" : "已保存";
     },
 
+    /* 已确认事件的当前指纹（编辑器 parse 出来的事件序列化）。 */
+    get confirmedEventsSignature() {
+      if (!this.intakeConfirmed || !this.parseEvents.length) return "";
+      return JSON.stringify(this.parseEvents.map((event) => [
+        Number((event.character || "character_0").split("_")[1]) - 1,
+        event.type, event.text, event.language]));
+    },
+
+    /* script 路径的草稿被载入后，作者又改了事件：提示确认稿已偏离。 */
+    get confirmedEventsDrifted() {
+      if (!this.intakeConfirmed || !this.parseEvents.length) return false;
+      return this.confirmedEventsSignature !== this.intakeConfirmed.signature;
+    },
+
     /* 只记基线，不动草稿：打开一份剧本时用它，之后还要去读草稿。
        注意：不动 sourceSnapshot —— 那是"镜像对上的是哪一版源文本"的
        记号，只有镜像本身被更新或确认时才该动它。 */
@@ -727,6 +741,7 @@ function scriptsPage() {
         this.intakeResume = null;
         this.intakeClearStash();
       }
+      this.intakeConfirmed = null;
     },
 
     /* 中文源文本的指纹：英文镜像描述的就是它。 */
@@ -1400,21 +1415,30 @@ function scriptsPage() {
     intakeResume: null,      /* 暂存里找到的上次会话，等人决定 */
     intakeResumed: false,    /* 已恢复/已放弃，别再问 */
     intakeLoaded: false,     /* 载入过 intake 草稿：保存转正后收摊 */
+    intakeValidateSeq: 0,    /* 预检自己的序号（不抢占请求序号） */
+    intakeConfirmed: null,   /* 载入时的已确认事件（指纹 + 条数） */
 
     openIntake() {
       this.errors = []; this.okMessage = "";
       if (!this.intake) {
         this.intake = {
-          step: "material",     /* material|reading|understanding|generating|candidate */
+          step: "material",   /* material|reading|understanding|events|generating|candidate */
           revision: 1,
           requestSeq: 0,
+          flowMode: "direct",       /* 直接出一版 | 一起设计 */
           text: "", textPolicy: "adapt", policyChosen: false,
+          policyHintLines: 0,
           image: null, imageDataUrl: "", imageBusy: false, imageError: "",
           caption: "", hasCaption: false, needsCaption: false,
           reading: null, readBusy: false, readError: "",
-          form: { name: "新剧本", shot_count: 2, language: "zh",
+          eventDraft: null,   /* {mode, roles, events, unmapped, design} */
+          validateState: { ok: null, errors: [], checked: false },
+          form: { name: "新剧本", shot_count: 0, language: "zh",
                   target_duration_seconds: 20, audio_mode: "generated",
                   critic: true },
+          design: { scene: "", setting: "", look: "", constraints: "",
+                    camera: { framing: "medium_shot", movement: "locked",
+                              perspective: "observer" } },
           genBusy: false, genError: "", waited: 0, timer: null,
           candidate: null,      /* {json, notes, revision, forScript} */
           stashFailed: false,
@@ -1445,8 +1469,31 @@ function scriptsPage() {
         return { label: "取消等待", run: () => this.intakeCancelRunning(),
                  disabled: false };
       }
+      if (s.step === "events") {
+        // 保留台词路径：没分配完的原文片段、没确认的补写，都先处理。
+        const pending = this.intakePendingPieces + this.intakeUnconfirmedAdditions;
+        if (pending > 0) {
+          return { label: "先处理上面的原文片段（剩 " + pending + " 条）",
+                   run: () => {}, disabled: true };
+        }
+        const state = s.validateState;
+        if (!state.checked) {
+          return { label: "预检中…", run: () => {}, disabled: true };
+        }
+        if (!state.ok) {
+          return { label: "先修正上面标出的问题", run: () => this.intakeValidate(),
+                   disabled: false };
+        }
+        return { label: "按已确认内容生成", run: () => this.intakeGenerate(),
+                 disabled: s.genBusy };
+      }
       if (s.step === "understanding") {
         const blocked = this.intakeUnresolvedConflicts > 0;
+        if (this.intakeNeedsEvents) {
+          return { label: blocked ? "先处理上面的图文冲突" : "整理角色与事件",
+                   run: () => this.intakeStructure(),
+                   disabled: blocked || s.readBusy };
+        }
         return { label: blocked ? "先处理上面的图文冲突" : "生成分镜草稿",
                  run: () => this.intakeGenerate(),
                  disabled: blocked || s.genBusy };
@@ -1455,30 +1502,46 @@ function scriptsPage() {
         return { label: "载入编辑器", run: () => this.intakeLoadCandidate(),
                  disabled: false };
       }
-      // material：有图先解读，纯文字直接生成。
+      // material：保留台词 / 一起设计要先整理；有图先解读；纯文字+允许改编直接生成。
+      const needsEvents = this.intakeNeedsEvents;
       if (s.needsCaption) {
-        // 平台看不了图：图注写好就按图注解读；不写图注也可以只按文字生成。
+        // 平台看不了图：图注写好就按图注解读；不写图注也可以只按文字走。
         return s.caption.trim()
           ? { label: "按图注解读", run: () => this.intakeRead(), disabled: false }
-          : { label: "生成分镜草稿", run: () => this.intakeGenerate(),
-              disabled: !s.text.trim() };
+          : (needsEvents
+              ? { label: "整理角色与事件", run: () => this.intakeStructure(),
+                  disabled: !s.text.trim() }
+              : { label: "生成分镜草稿", run: () => this.intakeGenerate(),
+                  disabled: !s.text.trim() });
       }
       if (s.image) {
         return { label: "解读图片", run: () => this.intakeRead(), disabled: false };
       }
-      return { label: "生成分镜草稿", run: () => this.intakeGenerate(),
-               disabled: !s.text.trim() };
+      return needsEvents
+        ? { label: "整理角色与事件", run: () => this.intakeStructure(),
+            disabled: !s.text.trim() }
+        : { label: "生成分镜草稿", run: () => this.intakeGenerate(),
+            disabled: !s.text.trim() };
+    },
+
+    /* 什么时候需要事件稿：保留原台词（keep）或一起设计（guided）。 */
+    get intakeNeedsEvents() {
+      const s = this.intake;
+      return !!s && (s.textPolicy === "keep" || s.flowMode === "guided");
     },
 
     get intakeSecondary() {
       const s = this.intake;
       if (!s) return null;
-      if (s.step === "material" && !s.image && s.text.trim()) {
+      if (s.step === "material" && !s.image && s.text.trim()
+          && !this.intakeNeedsEvents) {
         return { label: "先看看 AI 的理解", run: () => this.intakeRead() };
       }
-      if (s.step === "understanding") {
+      if (s.step === "understanding" || s.step === "events") {
         return { label: "返回修改素材", run: () => {
-          s.step = "material"; this.intakeTouch();
+          s.step = "material";
+          s.eventDraft = null;
+          this.intakeTouch();
         } };
       }
       if (s.step === "candidate") {
@@ -1500,14 +1563,54 @@ function scriptsPage() {
         material: "第 1 步 · 素材",
         reading: "正在理解素材",
         understanding: "第 2 步 · 确认理解",
+        events: "第 3 步 · 角色与事件",
         generating: "正在生成草稿",
         candidate: "草稿待载入",
       }[s.step] || s.step;
     },
 
+    /* 未分配的原文片段：没处理（分配/标场景/解除）的才算“剩”。 */
+    get intakePendingPieces() {
+      const draft = this.intake && this.intake.eventDraft;
+      if (!draft) return 0;
+      return (draft.unmapped || []).filter((p) => !p.handled).length;
+    },
+
+    /* 补写的台词还没表态（要么勾上确认，要么删掉）也算没处理完。 */
+    get intakeUnconfirmedAdditions() {
+      const draft = this.intake && this.intake.eventDraft;
+      if (!draft) return 0;
+      return (draft.events || []).filter((e) => e.addition && !e.included
+                                         && !e.removed).length;
+    },
+
+    get intakeValidateOk() {
+      const state = this.intake && this.intake.validateState;
+      return !!(state && state.checked && state.ok);
+    },
+
     intakeCaptionInput() {
       const s = this.intake;
       if (s && s.caption.trim()) s.hasCaption = true;
+      this.intakeTouch();
+    },
+
+    /* 原文看着已经是角色事件行（每行都以「角色：」开头）且用户还没
+       手选规则时，预选「保留原台词」并说明为什么（计划 §2）；
+       用户选过一次之后，选择就是用户的。 */
+    intakeTextPolicyHint() {
+      const s = this.intake;
+      if (!s) return;
+      const lines = s.text.split("\n")
+        .map((t) => t.trim())
+        .filter((t) => t && !t.startsWith("#"));
+      const labelled = lines.filter((t) =>
+        /^[^\s：:，,]{1,40}(\s*(动作|对白|入场|离场))?\s*(\[(zh|en)\])?\s*[：:]/.test(t));
+      const looksLabelled = lines.length > 0 && labelled.length === lines.length;
+      if (!s.policyChosen) {
+        s.textPolicy = looksLabelled ? "keep" : "adapt";
+        s.policyHintLines = looksLabelled ? lines.length : 0;
+      }
       this.intakeTouch();
     },
 
@@ -1668,6 +1771,270 @@ function scriptsPage() {
       this.intakeTouch();
     },
 
+    /* ---------------- 事件稿：整理、编辑、预检 ------------------------- */
+
+    /* 整理角色与事件。已经像事件行的文字在服务端走共享解析器直接
+       解析（不经过模型）；普通故事文字由模型给建议，补写单独标出。 */
+    async intakeStructure() {
+      const s = this.intake;
+      if (!s || s.readBusy) return;
+      if (!s.text.trim()) {
+        s.readError = "文字是空的：写一段故事再整理。";
+        return;
+      }
+      s.readError = "";
+      s.step = "reading";
+      s.readBusy = true;
+      const seq = ++s.requestSeq;
+      try {
+        const { status, data } = await this.intakePost("/api/scripts/intake", {
+          request_id: "req-" + seq + "-" + Date.now(),
+          revision: s.revision, action: "events",
+          text: s.text,
+        });
+        if (seq !== s.requestSeq) return;
+        if (status !== 200 || !data.events) {
+          s.step = s.reading ? "understanding" : "material";
+          s.readError = data.error || "整理失败了";
+          return;
+        }
+        this.intakeAdoptEvents(data.events);
+        s.step = "events";
+        s.validateState = { ok: null, errors: [], checked: false };
+        this.intakeStash();
+        this.intakeValidate();   // 进页面先预检一遍，别等用户点
+      } catch (error) {
+        if (seq !== s.requestSeq) return;
+        s.step = s.reading ? "understanding" : "material";
+        s.readError = error.message;
+      } finally {
+        s.readBusy = false;
+      }
+    },
+
+    /* 服务端的事件稿落进会话：角色保 ui_id，事件保角色序号。 */
+    intakeAdoptEvents(incoming) {
+      const s = this.intake;
+      const roles = (incoming.roles || []).map((role, index) => ({
+        ui_id: role.ui_id || "r" + (index + 1),
+        name: role.name || "",
+        presence: role.presence === "off_screen" ? "off_screen" : "on_screen",
+        initially_visible: role.initially_visible !== false,
+        position: role.position || (role.presence === "off_screen" ? "none" : "center"),
+        voice: role.voice || "",
+      }));
+      const indexOf = (uiId) => Math.max(0, roles.findIndex((r) => r.ui_id === uiId));
+      const events = (incoming.events || []).map((event, index) => ({
+        ui_id: event.ui_id || "e" + (index + 1),
+        role: indexOf(event.role_ui_id),
+        type: event.type || "dialogue",
+        text: event.text || "",
+        language: event.language === "en" ? "en" : "zh",
+        addition: !!event.addition,
+        included: !event.addition,     /* 补写默认不勾：等作者确认 */
+        removed: false,
+      }));
+      const unmapped = (incoming.unmapped || []).map((piece, index) => ({
+        ui_id: "u" + (index + 1), text: piece.text || "",
+        handled: false, handledHow: "", handledTo: -1,
+      }));
+      s.eventDraft = { mode: incoming.mode || "proposed",
+                       roles, events, unmapped };
+    },
+
+    get intakeVisibleEvents() {
+      const draft = this.intake && this.intake.eventDraft;
+      if (!draft) return [];
+      return draft.events.filter((e) => !e.removed);
+    },
+
+    intakeTouchEvents() {
+      // 事件稿一变，预检结果就过期了：标过期，并安排一次自动重查。
+      const s = this.intake;
+      if (!s) return;
+      s.validateState = { ok: null, errors: [], checked: false };
+      this.intakeTouch();
+      if (this.intakeValidateTimer) clearTimeout(this.intakeValidateTimer);
+      this.intakeValidateTimer = setTimeout(() => {
+        this.intakeValidateTimer = null;
+        if (this.intake && this.intake.step === "events") this.intakeValidate();
+      }, 700);
+    },
+
+    intakeSetEvent(event, field, value) {
+      event[field] = value;
+      if (field === "type" || field === "role" || field === "language") {
+        this.intakeTouchEvents();
+      }
+    },
+
+    intakeMoveEvent(index, delta) {
+      const draft = this.intake && this.intake.eventDraft;
+      const list = draft ? draft.events : [];
+      const target = index + delta;
+      if (target < 0 || target >= list.length) return;
+      const [row] = list.splice(index, 1);
+      list.splice(target, 0, row);
+      this.intakeTouchEvents();
+    },
+
+    intakeDuplicateEvent(index) {
+      const draft = this.intake && this.intake.eventDraft;
+      if (!draft) return;
+      const copy = Object.assign({}, draft.events[index], {
+        ui_id: draft.events[index].ui_id + "_c" + Date.now() % 1000,
+        addition: false, included: true,
+      });
+      draft.events.splice(index + 1, 0, copy);
+      this.intakeTouchEvents();
+    },
+
+    intakeRemoveEvent(index) {
+      const draft = this.intake && this.intake.eventDraft;
+      if (!draft) return;
+      const event = draft.events[index];
+      if (event.addition) event.removed = true;   // 补写删掉就是“不要”
+      else draft.events.splice(index, 1);
+      this.intakeTouchEvents();
+    },
+
+    intakeAddEvent() {
+      const draft = this.intake && this.intake.eventDraft;
+      if (!draft || !draft.roles.length) return;
+      draft.events.push({
+        ui_id: "enew_" + Date.now() % 10000,
+        role: 0, type: "dialogue", text: "", language: "zh",
+        addition: false, included: true, removed: false,
+      });
+      this.intakeTouchEvents();
+    },
+
+    intakeToggleAddition(event) {
+      event.included = !event.included;
+      this.intakeTouchEvents();
+    },
+
+    intakeAddRole() {
+      const draft = this.intake && this.intake.eventDraft;
+      if (!draft) return;
+      draft.roles.push({
+        ui_id: "rnew_" + Date.now() % 10000,
+        name: "", presence: "on_screen", initially_visible: true,
+        position: "center", voice: "",
+      });
+      this.intakeTouchEvents();
+    },
+
+    intakeRemoveRole(index) {
+      const draft = this.intake && this.intake.eventDraft;
+      if (!draft) return;
+      if (draft.events.some((e) => !e.removed && e.role === index)) {
+        this.intake.validateState = {
+          ok: false, checked: true,
+          errors: [{ event_index: null,
+                     message: "这个角色还有事件在引用：先处理那些事件（改角色或删掉），再删角色" }],
+        };
+        return;
+      }
+      draft.roles.splice(index, 1);
+      draft.events.forEach((e) => {
+        if (e.role > index) e.role -= 1;
+      });
+      this.intakeTouchEvents();
+    },
+
+    /* 未分配片段的三条出路（§4.1）：并进事件 / 记为场景说明 / 解除保留。 */
+    intakeAssignPiece(piece) {
+      const draft = this.intake && this.intake.eventDraft;
+      if (!draft || !draft.roles.length) return;
+      draft.events.push({
+        ui_id: "ep_" + Date.now() % 10000,
+        role: 0, type: "dialogue", text: piece.text,
+        language: "zh", addition: false, included: true, removed: false,
+      });
+      piece.handled = true; piece.handledHow = "event";
+      this.intakeTouchEvents();
+    },
+
+    intakePieceToScene(piece) {
+      const s = this.intake;
+      if (!s) return;
+      s.design.scene = (s.design.scene
+        ? s.design.scene + "\n" + piece.text : piece.text);
+      piece.handled = true; piece.handledHow = "scene";
+      this.intakeTouchEvents();
+    },
+
+    intakeDropPiece(piece) {
+      piece.handled = true; piece.handledHow = "dropped";
+      this.intakeTouchEvents();
+    },
+
+    async intakeValidate() {
+      const s = this.intake;
+      const draft = s && s.eventDraft;
+      if (!s || !draft) return;
+      const roles = draft.roles.map((r) => ({
+        name: r.name, presence: r.presence,
+        initially_visible: r.initially_visible, position: r.position,
+        voice: r.voice,
+      }));
+      const events = this.intakeVisibleEvents
+        .filter((e) => e.included)
+        .map((e) => ({ role: e.role, type: e.type, text: e.text,
+                       language: e.language }));
+      // 预检用自己的序号：生成流程内部也会预检（§5 生成前重验），
+      // 抢占请求序号会让在途生成作废。
+      const seq = ++this.intakeValidateSeq;
+      try {
+        const { status, data } = await this.intakePost(
+          "/api/scripts/intake/validate", {
+            request_id: "reqv-" + seq + "-" + Date.now(),
+            revision: s.revision,
+            roles, events,
+            name: s.form.name, language: s.form.language,
+            shot_count: Number(s.form.shot_count) || 0,
+            target_duration_seconds: Number(s.form.target_duration_seconds) || 20,
+            audio_mode: s.form.audio_mode,
+            camera: s.design.camera,
+            look: s.design.look, setting: s.design.setting,
+            scene: s.design.scene, constraints: s.design.constraints,
+            light: "follow_image", light_text: "",
+          });
+        if (seq !== this.intakeValidateSeq) return;
+        if (status !== 200) {
+          s.validateState = { ok: false, checked: true,
+                              errors: [{ event_index: null,
+                                         message: data.error || "预检没有通过" }] };
+          return;
+        }
+        s.validateState = {
+          ok: !!data.validation.ok, checked: true,
+          errors: data.validation.errors || [],
+        };
+      } catch (error) {
+        if (seq !== this.intakeValidateSeq) return;
+        s.validateState = { ok: false, checked: true,
+                            errors: [{ event_index: null,
+                                       message: error.message }] };
+      }
+    },
+
+    /* 错误定位：第 index 条事件（可见列表里的）对应哪一行。 */
+    intakeEventError(index) {
+      const state = this.intake && this.intake.validateState;
+      if (!state || !state.checked) return "";
+      const rows = state.errors.filter((e) => e.event_index === index);
+      return rows.map((e) => e.message).join("；");
+    },
+
+    get intakeHeaderErrors() {
+      const state = this.intake && this.intake.validateState;
+      if (!state || !state.checked) return [];
+      return state.errors.filter((e) => e.event_index === null
+                                 || e.event_index === undefined);
+    },
+
     intakeCancelRunning() {
       const s = this.intake;
       if (!s) return;
@@ -1676,7 +2043,7 @@ function scriptsPage() {
       s.requestSeq += 1;
       if (s.step === "reading") { s.step = "material"; s.readBusy = false; }
       if (s.step === "generating") {
-        s.step = s.reading ? "understanding" : "material";
+        s.step = s.genFrom || (s.reading ? "understanding" : "material");
         s.genBusy = false;
         if (s.timer) { clearInterval(s.timer); s.timer = null; }
       }
@@ -1721,12 +2088,71 @@ function scriptsPage() {
     async intakeGenerate() {
       const s = this.intake;
       if (!s || s.genBusy) return;
-      const concept = this.intakeConcept();
-      if (!concept.trim()) {
-        s.genError = "素材是空的：写一段文字，或放一张图并解读。";
-        return;
+      // 保留台词 / 一起设计走 script 模式：结构化确认稿逐事件锁定；
+      // 允许改编的直接路径还是 concept（把素材组织成一段概念）。
+      const scriptMode = s.step === "events" || this.intakeNeedsEvents;
+      let body = null;
+      let backStep = s.reading ? "understanding" : "material";
+      if (scriptMode) {
+        const draft = s.eventDraft;
+        if (!draft || !this.intakeVisibleEvents.length) {
+          s.genError = "事件稿是空的：先整理角色与事件。";
+          return;
+        }
+        if (this.intakePendingPieces > 0
+            || this.intakeUnconfirmedAdditions > 0) {
+          s.genError = "还有没处理的原文片段或补写台词。";
+          return;
+        }
+        // 生成前在服务端再验一次（计划 §5：前端标记不能替代校验）。
+        await this.intakeValidate();
+        if (!this.intakeValidateOk) {
+          backStep = "events";
+          s.step = "events";
+          s.genError = "";
+          return;
+        }
+        body = {
+          mode: "script",
+          roles: draft.roles.map((r) => ({
+            name: r.name, presence: r.presence,
+            initially_visible: r.initially_visible, position: r.position,
+            voice: r.voice,
+          })),
+          events: this.intakeVisibleEvents
+            .filter((e) => e.included)
+            .map((e) => ({ role: e.role, type: e.type, text: e.text,
+                           language: e.language })),
+          name: s.form.name || "新剧本",
+          shot_count: Number(s.form.shot_count) || 0,
+          language: s.form.language,
+          target_duration_seconds: Number(s.form.target_duration_seconds) || 20,
+          audio_mode: s.form.audio_mode,
+          critic: s.form.critic ? "on" : "off",
+          camera: s.design.camera,
+          look: s.design.look, setting: s.design.setting,
+          scene: s.design.scene, constraints: s.design.constraints,
+          light: "follow_image", light_text: "",
+        };
+      } else {
+        const concept = this.intakeConcept();
+        if (!concept.trim()) {
+          s.genError = "素材是空的：写一段文字，或放一张图并解读。";
+          return;
+        }
+        body = {
+          mode: "concept", concept,
+          name: s.form.name || "新剧本",
+          shot_count: Number(s.form.shot_count) || 2,
+          language: s.form.language,
+          target_duration_seconds: Number(s.form.target_duration_seconds) || 20,
+          audio_mode: s.form.audio_mode,
+          critic: s.form.critic ? "on" : "off",
+        };
       }
       s.genError = "";
+      s.genFrom = scriptMode ? "events"
+        : (s.reading ? "understanding" : "material");
       s.step = "generating";
       s.genBusy = true;
       s.waited = 0;
@@ -1736,18 +2162,10 @@ function scriptsPage() {
       const revision = s.revision;
       const forScript = this.selected;
       try {
-        const { status, data } = await this.intakePost("/api/scripts/auto", {
-          mode: "concept", concept,
-          name: s.form.name || "新剧本",
-          shot_count: Number(s.form.shot_count) || 2,
-          language: s.form.language,
-          target_duration_seconds: Number(s.form.target_duration_seconds) || 20,
-          audio_mode: s.form.audio_mode,
-          critic: s.form.critic ? "on" : "off",
-        });
+        const { status, data } = await this.intakePost("/api/scripts/auto", body);
         if (seq !== s.requestSeq) return;
         if (status !== 200) {
-          s.step = s.reading ? "understanding" : "material";
+          s.step = scriptMode ? "events" : backStep;
           s.genError = data.error || "生成失败了";
           return;
         }
@@ -1759,7 +2177,7 @@ function scriptsPage() {
         if (!this.isDirty && revision === s.revision) this.intakeLoadCandidate();
       } catch (error) {
         if (seq !== s.requestSeq) return;
-        s.step = s.reading ? "understanding" : "material";
+        s.step = scriptMode ? "events" : backStep;
         s.genError = error.message;
       } finally {
         s.genBusy = false;
@@ -1777,6 +2195,18 @@ function scriptsPage() {
       }
       this.applyDraftResult(s.candidate.json, s.candidate.notes, "从图片或文字起草");
       this.intakeLoaded = true;
+      // script 路径的草稿带着确认稿：编辑器要能说出“你改过确认的事件”。
+      const draft = s.eventDraft;
+      if (draft && this.intakeVisibleEvents.length) {
+        this.intakeConfirmed = {
+          count: this.intakeVisibleEvents.filter((e) => e.included).length,
+          signature: JSON.stringify(
+            this.intakeVisibleEvents.filter((e) => e.included)
+              .map((e) => [e.role, e.type, e.text, e.language])),
+        };
+      } else {
+        this.intakeConfirmed = null;
+      }
       s.candidate = null;
       s.step = s.reading ? "understanding" : "material";
       this.intakeOpen = false;
@@ -1816,14 +2246,18 @@ function scriptsPage() {
       const meta = {
         schema_version: 1, updated_at: Date.now(),
         step: s.step === "reading" || s.step === "generating"
-          ? (s.reading ? "understanding" : "material") : s.step,
-        text: s.text, textPolicy: s.textPolicy, caption: s.caption,
+          ? (s.eventDraft ? "events"
+             : (s.reading ? "understanding" : "material")) : s.step,
+        flowMode: s.flowMode, textPolicy: s.textPolicy,
+        text: s.text, caption: s.caption,
         hasCaption: s.hasCaption,
         reading: s.reading ? {
           vision: s.reading.vision, basis: s.reading.basis,
           observed: s.reading.observed, proposed: s.reading.proposed,
           conflicts: s.reading.conflicts,
         } : null,
+        eventDraft: s.eventDraft,
+        design: s.design,
         form: s.form,
         candidate: null,   /* 候选不暂存：它要么载入，要么重来 */
       };
@@ -1861,12 +2295,18 @@ function scriptsPage() {
       this.openIntake();
       const s = this.intake;
       s.text = meta.text || "";
-      s.textPolicy = meta.textPolicy || "adapt";
+      s.flowMode = meta.flowMode === "guided" ? "guided" : "direct";
+      s.textPolicy = meta.textPolicy === "keep" ? "keep" : "adapt";
       s.caption = meta.caption || "";
       s.hasCaption = !!meta.hasCaption;
       s.reading = meta.reading || null;
+      if (meta.eventDraft && Array.isArray(meta.eventDraft.events)) {
+        s.eventDraft = meta.eventDraft;
+      }
+      if (meta.design) s.design = Object.assign(s.design, meta.design);
       s.form = Object.assign(s.form, meta.form || {});
-      s.step = meta.reading ? "understanding" : "material";
+      s.step = s.eventDraft ? "events"
+        : (meta.reading ? "understanding" : "material");
       if (meta.reading && Array.isArray(meta.reading.conflicts)) {
         s.reading.conflicts = meta.reading.conflicts.map((c) => ({
           id: c.id, field: c.field || "", image: c.image || "",

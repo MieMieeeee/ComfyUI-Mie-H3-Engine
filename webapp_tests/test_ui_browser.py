@@ -1131,3 +1131,220 @@ def test_the_intake_card_works_on_a_narrow_screen(page):
     overflow = page.evaluate(
         "document.documentElement.scrollWidth - document.documentElement.clientWidth")
     assert overflow <= 1, "the page scrolls sideways on a 390px viewport"
+
+
+# --------------------------------------------------------------------------- #
+# M2: keep-the-words and design-together paths (real page; the labelled
+# fast path even uses the REAL intake endpoint - it needs no model)
+# --------------------------------------------------------------------------- #
+
+def _stub_intake_events(page, body):
+    def handler(route):
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps(body))
+    page.route("**/api/scripts/intake", handler)
+
+
+def test_labelled_lines_keep_their_words_end_to_end(page):
+    """Already role-labelled text parses deterministically (no model),
+    and the confirmed events go to the generator's script mode."""
+    asset = _stub_asset("逐字稿")
+    auto_calls, validate_calls = [], []
+    _stub_validate(page, asset)
+
+    def auto_handler(route):
+        auto_calls.append(json.loads(route.request.post_data))
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"json": asset, "notes": []}))
+    page.route("**/api/scripts/auto", auto_handler)
+
+    def validate_handler(route):
+        validate_calls.append(json.loads(route.request.post_data))
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"code": "ok", "validation": {
+                          "ok": True, "errors": [], "warnings": [],
+                          "roles": [], "events": [], "source_script": "",
+                          "counts": {}}}))
+    page.route("**/api/scripts/intake/validate", validate_handler)
+
+    _open_intake(page)
+    page.locator(".intake-card .intake-material textarea").first.fill(
+        "小明：今天天气不错。\n小红动作：她站起来看向窗外。")
+    page.wait_for_timeout(300)
+    # 规则自动预选「保留原台词」并说明原因。
+    assert "保留原台词" in page.locator(".intake-card").inner_text()
+    assert "已识别 2 行" in page.locator(".intake-card").inner_text()
+
+    button(page, "整理角色与事件").click()
+    page.locator(".intake-events").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(600)   # the real endpoint answers; auto precheck runs
+    assert "没有经过模型改写" in page.locator(".intake-events").inner_text()
+    # 角色和事件都在，逐字。
+    assert page.locator(".intake-role-name").first.input_value() == "小明"
+    texts = [row.input_value() for row in
+             page.locator(".intake-event-text").all()]
+    assert texts == ["今天天气不错。", "她站起来看向窗外。"]
+
+    button(page, "按已确认内容生成").click()
+    page.wait_for_timeout(900)
+    # script 模式：结构化角色与事件，逐字锁定。
+    assert auto_calls and auto_calls[0]["mode"] == "script"
+    assert auto_calls[0]["roles"][0]["name"] == "小明"
+    assert [e["text"] for e in auto_calls[0]["events"]] == [
+        "今天天气不错。", "她站起来看向窗外。"]
+    # 生成前真的预检过。
+    assert validate_calls, "the precheck never ran"
+
+
+def test_plain_text_proposals_wait_for_confirmation(page):
+    asset = _stub_asset()
+    auto_calls = []
+    _stub_validate(page, asset)
+
+    def auto_handler(route):
+        auto_calls.append(json.loads(route.request.post_data))
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"json": asset, "notes": []}))
+    page.route("**/api/scripts/auto", auto_handler)
+    page.route("**/api/scripts/intake/validate", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"code": "ok", "validation": {
+            "ok": True, "errors": [], "warnings": [],
+            "roles": [], "events": [], "source_script": "", "counts": {}}})))
+    _stub_intake_events(page, {"code": "ok", "events": {
+        "mode": "proposed",
+        "roles": [
+            {"ui_id": "r1", "name": "小明", "presence": "on_screen",
+             "initially_visible": True, "position": "left", "voice": ""},
+            {"ui_id": "r2", "name": "小红", "presence": "on_screen",
+             "initially_visible": True, "position": "right", "voice": ""}],
+        "events": [
+            {"ui_id": "e1", "role_ui_id": "r1", "type": "dialogue",
+             "text": "今天天气不错。", "language": "zh",
+             "span": [0, 9], "addition": False},
+            {"ui_id": "e2", "role_ui_id": "r1", "type": "dialogue",
+             "text": "我们去公园吧。", "language": "zh",
+             "span": None, "addition": True},
+        ],
+        "unmapped": [{"text": "两人商量着出门。"}],
+    }})
+
+    _open_intake(page)
+    page.locator(".intake-card .intake-material textarea").first.fill(
+        "小明说今天天气不错。两人商量着出门。")
+    button(page, "保留原台词").click()   # 手选：这是作者的选择
+    page.wait_for_timeout(200)
+    button(page, "整理角色与事件").click()
+    page.locator(".intake-events").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(400)
+
+    primary = page.locator(".auto-actions .btn.primary")
+    # 有未处理的原文片段、有未确认的补写：不许生成，且说清剩几条。
+    assert "先处理上面的原文片段" in primary.inner_text()
+    assert primary.is_disabled()
+
+    # 补写先不勾（默认不参与），处理掉未分配片段。
+    page.locator(".intake-piece").get_by_role("button", name="解除保留").click()
+    page.wait_for_timeout(300)
+    assert "先处理上面的原文片段" in primary.inner_text()   # 补写还没表态
+
+    # 勾掉补写（=不要它）：两句都清了。
+    page.locator(".intake-addition-check input[type=checkbox]").filter(
+        visible=True).first.check()
+    page.wait_for_timeout(1500)   # debounce + the automatic precheck
+    assert primary.inner_text().strip() == "按已确认内容生成"
+
+    primary.click()
+    page.wait_for_timeout(800)
+    assert auto_calls and auto_calls[0]["mode"] == "script"
+    texts = [e["text"] for e in auto_calls[0]["events"]]
+    assert "我们去公园吧。" in texts          # 勾了 = 确认采用，参与生成
+    assert "两人商量着出门。" not in texts   # 解除保留的片段不进剧本
+
+
+def test_event_rows_reorder_and_validate_names_the_line(page):
+    asset = _stub_asset()
+    validate_calls = []
+    _stub_validate(page, asset)
+    page.route("**/api/scripts/auto", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"json": asset, "notes": []})))
+
+    def validate_handler(route):
+        validate_calls.append(json.loads(route.request.post_data))
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"code": "ok", "validation": {
+                          "ok": False,
+                          "errors": [{"event_index": 1,
+                                      "message": "第 2 条事件里有换行"}],
+                          "warnings": [], "roles": [], "events": [],
+                          "source_script": "", "counts": {}}}))
+    page.route("**/api/scripts/intake/validate", validate_handler)
+
+    _open_intake(page)
+    page.locator(".intake-card .intake-material textarea").first.fill(
+        "小明：第一句。\n小明：第二句。")
+    page.wait_for_timeout(300)
+    button(page, "整理角色与事件").click()
+    page.locator(".intake-events").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(600)
+
+    # 下移第一句：顺序变了，预检请求里事件顺序也要跟着变。
+    page.locator(".intake-event").nth(0).get_by_role("button", name="下移").click()
+    page.wait_for_timeout(200)
+    button(page, "重新预检").click()
+    page.wait_for_timeout(500)
+    assert validate_calls, "no precheck request went out"
+    assert [e["text"] for e in validate_calls[-1]["events"]] == [
+        "第二句。", "第一句。"]
+
+    # 预检失败：错误定位到具体行，主按钮变成“先修正”，生成不发生。
+    primary = page.locator(".auto-actions .btn.primary")
+    assert primary.inner_text().strip() == "先修正上面标出的问题"
+    assert page.locator(".intake-event-error").filter(visible=True).count() >= 1
+    assert "换行" in page.locator(".intake-event-error").filter(
+        visible=True).first.inner_text()
+    primary.click()          # 再预检一次：问题还在，还是不许生成
+    page.wait_for_timeout(500)
+    assert page.locator(".intake-candidate").count() == 0
+
+def test_the_design_together_flow_also_locks_the_confirmed_events(page):
+    """一起设计：先整理角色与事件再生成——确认稿同样走 script 模式。"""
+    asset = _stub_asset()
+    auto_calls = []
+    _stub_validate(page, asset)
+
+    def auto_handler(route):
+        body = json.loads(route.request.post_data)
+        auto_calls.append(body)
+        # 真服务器会逐字带回确认事件（核心校验强制）；stub 也一样，
+        # 不然编辑器的“确认稿没被改”提示会误报。
+        confirmed = dict(asset, name="一起设计稿")
+        confirmed["source_script"] = "角色1：" + body["events"][0]["text"]
+        confirmed["shots"][0]["events"][0]["text"] = body["events"][0]["text"]
+        if body.get("roles"):
+            confirmed["roles"][0]["name"] = body["roles"][0]["name"] or "甲"
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"json": confirmed, "notes": []}))
+    page.route("**/api/scripts/auto", auto_handler)
+    page.route("**/api/scripts/intake/validate", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"code": "ok", "validation": {
+            "ok": True, "errors": [], "warnings": [],
+            "roles": [], "events": [], "source_script": "", "counts": {}}})))
+
+    _open_intake(page)
+    button(page, "一起设计").click()
+    page.wait_for_timeout(200)
+    page.locator(".intake-card .intake-material textarea").first.fill(
+        "小明：我们去公园吧。")
+    # 允许改编也行：一起设计的事件确认后就是锁定的确认稿。
+    button(page, "整理角色与事件").click()
+    page.locator(".intake-events").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(1500)   # automatic precheck
+    button(page, "按已确认内容生成").click()
+    page.wait_for_timeout(900)
+    assert auto_calls and auto_calls[0]["mode"] == "script"
+    assert auto_calls[0]["events"][0]["text"] == "我们去公园吧。"
+    # 载入后：编辑器说明这份稿子按几条确认事件生成。
+    assert "已确认事件" in page.locator(".split-detail").inner_text()

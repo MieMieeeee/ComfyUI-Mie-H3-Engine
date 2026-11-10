@@ -168,6 +168,38 @@ def _event_line(number: int, event: dict, role_count: int,
     return "character_%d %s%s：%s" % (role + 1, kind, tag, text)
 
 
+def _round_trip_problems(events: list, parsed: list,
+                         language: str) -> list:
+    """Field-level differences between confirmed and parsed-back events.
+
+    Shared by the generator path (which raises on any problem) and the
+    validate path (which reports each problem with its line number).
+    """
+    problems = []
+    for number, (event, back) in enumerate(zip(events, parsed), 1):
+        expected_role = "character_%d" % (int(event.get("role")) + 1)
+        found = []
+        if back["character"] != expected_role:
+            found.append("角色变成了 %s" % back["character"])
+        if back["type"] != event.get("type"):
+            found.append("类型变成了 %s" % back["type"])
+        if back["text"] != str(event.get("text") or "").strip():
+            found.append("文字被改写")
+        if back["language"] != str(event.get("language") or language):
+            found.append("语言变成了 %s" % back["language"])
+        if found:
+            problems.append({"event_index": number - 1,
+                             "message": "第 %d 条事件写进事件稿后走了样：%s。原文：「%s」"
+                                        % (number, "、".join(found),
+                                           str(event.get("text") or "")[:60])})
+    if len(parsed) != len(events):
+        problems.append({
+            "event_index": None,
+            "message": "事件稿往返不一致：确认了 %d 条，解析回来 %d 条"
+                       % (len(events), len(parsed))})
+    return problems
+
+
 def _round_trip(source: str, count: int, settings: str, events: list,
                 language: str) -> list:
     """Serialize, parse back, and prove nothing was lost on the way.
@@ -182,26 +214,9 @@ def _round_trip(source: str, count: int, settings: str, events: list,
 
     roles = parse_roles(count, settings)
     parsed = parse_script(source, roles, language)
-    for number, (event, back) in enumerate(zip(events, parsed), 1):
-        expected_role = "character_%d" % (int(event.get("role")) + 1)
-        problems = []
-        if back["character"] != expected_role:
-            problems.append("角色变成了 %s" % back["character"])
-        if back["type"] != event.get("type"):
-            problems.append("类型变成了 %s" % back["type"])
-        if back["text"] != str(event.get("text") or "").strip():
-            problems.append("文字被改写")
-        if back["language"] != str(event.get("language") or language):
-            problems.append("语言变成了 %s" % back["language"])
-        if problems:
-            raise ValueError(
-                "第 %d 条事件写进事件稿后走了样：%s。原文：「%s」"
-                % (number, "、".join(problems),
-                   str(event.get("text") or "")[:60]))
-    if len(parsed) != len(events):
-        raise ValueError(
-            "事件稿往返不一致：确认了 %d 条，解析回来 %d 条"
-            % (len(events), len(parsed)))
+    problems = _round_trip_problems(events, parsed, language)
+    if problems:
+        raise ValueError(problems[0]["message"])
     return parsed
 
 
