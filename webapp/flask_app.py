@@ -309,6 +309,8 @@ def create_app() -> Flask:
         a shot that is too short for its lines is made longer, with the
         contract's own numbers. The rest need a decision, and the app
         hands the model the diagnosis together with the way to fix it.
+
+        Nothing is changed here: this is the answer, not the action.
         """
         data = request.get_json(silent=True) or {}
         payload = data.get("json")
@@ -319,11 +321,66 @@ def create_app() -> Flask:
                 return jsonify({"error": "剧本 JSON 解析不了：%s" % exc}), 400
         if not isinstance(payload, dict):
             return jsonify({"error": "没有剧本可改。"}), 400
-        warning = str(data.get("warning") or "")
-        if not warning:
+        warnings = data.get("warnings")
+        if warnings is None:
+            warning = str(data.get("warning") or "")
+            warnings = [warning] if warning else []
+        if not warnings:
             return jsonify({"error": "没有说清是哪一条风险。"}), 400
         try:
-            return jsonify(riskfix.plan(payload, warning))
+            result = riskfix.plan_all(payload, warnings)
+            if len(warnings) == 1:
+                # 一条风险一个答案：页面上那一行问的就是这一条。
+                result.update(riskfix.plan(payload, warnings[0]))
+            return jsonify(result)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/scripts/risk/fix", methods=["POST"])
+    def api_risk_fix():
+        """Act on render risks - all of them, or the one that was named.
+
+        The order is the whole point: the arithmetic first, so the
+        model is handed a board that already fits, and the arithmetic
+        once more afterwards, because the model rewrote the words and
+        the budget has to be measured on what it wrote.
+
+        Nothing is written to the library here. The result comes back
+        as a draft and lands in the editor; the author looks at it and
+        saves it like any other change.
+        """
+        data = request.get_json(silent=True) or {}
+        payload = data.get("json")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except ValueError as exc:
+                return jsonify({"error": "剧本 JSON 解析不了：%s" % exc}), 400
+        if not isinstance(payload, dict):
+            return jsonify({"error": "没有剧本可改。"}), 400
+        warnings = data.get("warnings")
+        if warnings is None:
+            warning = str(data.get("warning") or "")
+            warnings = [warning] if warning else []
+        warnings = [str(w) for w in warnings if str(w).strip()]
+        if not warnings:
+            return jsonify({"error": "没有说清是哪一条风险。"}), 400
+
+        def revise(request_text, board):
+            """Hand the diagnosis to the model, on the board that fits."""
+            drafted = autodraft.storyboard(
+                "revise", request_text,
+                base_asset=board,
+                name=str(board.get("name") or "新剧本"),
+                language=str(board.get("language") or "zh"),
+                target_duration_seconds=float(
+                    board.get("target_duration_seconds") or 20),
+                audio_mode=str(board.get("audio_mode") or "generated"),
+                critic="on")
+            return drafted["json"]
+
+        try:
+            return jsonify(riskfix.fix_all(payload, warnings, revise=revise))
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 

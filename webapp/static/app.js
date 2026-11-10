@@ -594,6 +594,7 @@ function scriptsPage() {
     recoveredDraft: null,      /* 本地找到的草稿，等人决定恢复还是丢弃 */
     draftOpen: false,
     drafting: false,
+    fixing: false,              /* 正在按风险改：可能是模型在写，等一会儿 */
     draftNotes: [],
     draftForm: { mode: "concept", concept: "", name: "新剧本", shot_count: 2,
                  language: "zh", target_duration_seconds: 20,
@@ -1408,13 +1409,10 @@ function scriptsPage() {
       return (this.warnings || []).map((text) => {
         const at = text.lastIndexOf("·");
         const tag = at >= 0 ? text.slice(at + 1).trim() : "";
-        // 标记前的那半句是诊断加建议：它本身就是一条修改要求。
-        const advice = at >= 0 ? text.slice(0, at).trim() : text;
         const meta = WARNING_META.find(([needle]) => tag.includes(needle))
           || ["", "渲染风险", "warn", "model", "按诊断把这一处改到没有风险"];
         return {
           text,
-          advice,
           label: meta[1],
           level: meta[2],
           kind: meta[3] || "model",
@@ -1431,43 +1429,57 @@ function scriptsPage() {
        诊断可以直接当成修改要求交给模型：它重写一版草稿，作者看过
        再决定要不要存。诊断指出来的事，作者不必自己翻译一遍。 */
     async fixWarning(warning) {
-      if (this.drafting || !warning) return;
-      // 先问服务端：这条风险是算得出来的，还是需要判断。
-      let plan = null;
-      try {
-        plan = await api.post("/api/scripts/risk/plan",
-          { json: this.buildPayload(), warning: warning.text });
-      } catch (error) {
-        this.errors = [error.message];
-        return;
-      }
-      if (plan.kind === "duration") {
-        // 算得出来的：直接改。不用模型，也不会改错。
-        this.model.target_duration_seconds = plan.target_duration_seconds;
-        if (Array.isArray(plan.shot_durations)
-            && plan.shot_durations.length === (this.shotDurations || []).length) {
-          this.shotDurations = plan.shot_durations.slice();
-        }
-        this.syncDerived();
-        this.queueValidate();
-        this.okMessage = (plan.note || "已经按这条风险改好了")
-          + "（还没存盘：看过再按「💾 保存」）";
-        return;
-      }
-      // 需要判断的：交给模型，诊断和改法都给它。
-      this.startDraft("revise");
-      this.draftForm.concept = plan.request || this.fixRequest(warning);
-      await this.runDraft();
+      if (this.fixing || this.drafting || !warning) return;
+      await this.applyRiskFix([warning.text]);
     },
 
-    /* 一条能照着做的修改要求：诊断说的是"哪里不够"，改法说的是
-       "动什么"，两句都要给模型，其余内容一个字都不要动。 */
-    fixRequest(warning) {
-      const where = warning.shot ? warning.shot + "：" : "";
-      return ("按下面这条渲染风险改这一版，"
-        + "台词、角色、画风、接线都保持原样，只动问题所在的那一处：\n\n"
-        + where + (warning.advice || warning.text || "") + "\n\n"
-        + "改法：" + (warning.fix || "按诊断把这一处改到没有风险"));
+    /* 一份剧本常常有好几条风险：一次全改，别让人一条条点。 */
+    async fixAllWarnings() {
+      if (this.fixing || this.drafting) return;
+      const warnings = this.parsedWarnings.map((w) => w.text);
+      if (!warnings.length) return;
+      await this.applyRiskFix(warnings);
+    },
+
+    /* 一次改完：服务端先按契约算时长，再把要判断的合成一次请求交给
+       模型，最后按模型写出来的台词重算时长。
+
+       顺序在服务端是有道理的：模型看到的是已经装得下的那一版，改
+       完再算一次时长，才知道它写出来的台词够不够时间。在页面这边
+       分两步做，第二步会把第一步的时长改覆盖掉——所以一次做完。 */
+    async applyRiskFix(warnings) {
+      if (this.fixing) return;
+      this.fixing = true;
+      this.errors = []; this.okMessage = "";
+      try {
+        const result = await api.post("/api/scripts/risk/fix",
+          { json: this.buildPayload(), warnings: warnings });
+        this.adoptFixedBoard(result.json);
+        const notes = (result.notes || []).filter(Boolean);
+        let message = notes.length ? notes.join(" ")
+          : "已经按这些风险改好了";
+        message += "（还没存盘：看过再按「💾 保存」）";
+        const left = (result.remaining || []).length;
+        if (left) message += " 还有 " + left + " 条没消掉，页面上写着原因。";
+        this.okMessage = message;
+      } catch (error) {
+        this.errors = [error.message];
+      } finally {
+        this.fixing = false;
+      }
+    },
+
+    /* 改好的稿子整个换进来：分镜结构和分镜时长都按服务端算好的来，
+       不然模型拆开的那一镜会在这里又被合回去。 */
+    adoptFixedBoard(board) {
+      if (!board) return;
+      this.model = normalizeStoryboardModel(board);
+      this.cleaned = board;
+      this.rawText = "";
+      this.jsonDirty = false;
+      this.syncDerived();
+      this.adoptGroupingFromShots();
+      this.queueValidate();
     },
 
     get warningChips() {

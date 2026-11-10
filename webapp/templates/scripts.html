@@ -178,6 +178,10 @@
                         @click="warnOpen = !warnOpen"
                         x-text="chip.label + ' ×' + chip.count"></button>
               </template>
+              <button class="btn primary" type="button" @click="fixAllWarnings()"
+                      :disabled="fixing || drafting || !parsedWarnings.length"
+                      :title="fixing ? '正在改：要判断的那几条要等模型写完' : '按每一条风险的建议，把这一版一次性改好'"
+                      x-text="fixing ? '正在改…' : '✨ 全部按建议改'"></button>
               <button class="btn subtle" type="button" @click="warnOpen = !warnOpen"
                       x-text="warnOpen ? '收起' : '说明'"></button>
             </div>
@@ -188,16 +192,17 @@
                   <span class="muted small" x-show="w.shot" x-text="w.shot"></span>
                   <span class="risk-text" x-text="w.text"></span>
                   <button class="btn subtle" type="button" @click="fixWarning(w)"
-                          :disabled="drafting"
-                          :title="w.kind === 'duration'
+                          :disabled="fixing || drafting"
+                          :title="(w.kind === 'duration'
                             ? '按这条建议改：时长算得出来，直接改好，不用模型'
-                            : '按这条建议改：交给模型重写一版草稿'">✨ 按这条改</button>
+                            : '按这条建议改：交给模型重写一版草稿') + '&#10;' + w.fix">✨ 按这条改</button>
                 </li>
               </template>
             </ul>
             <p class="muted small" x-show="warnOpen">
-              每条风险后面都有「按这条改」：诊断里已经写着该怎么改，照着改一版草稿，
-              你看过再决定要不要存。
+              每条风险后面都有「按这条改」，上面还有「全部按建议改」：能算出来的
+              直接改时长（不用模型），要判断的合成一次交给模型重写一版草稿
+              （要等它写完）。改动都停在编辑器里，你看过再存。
             </p>
           </div>
           <div class="validation-box ok" x-show="okMessage" x-text="okMessage"></div>

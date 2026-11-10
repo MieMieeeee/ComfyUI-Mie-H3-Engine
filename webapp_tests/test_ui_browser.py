@@ -604,24 +604,29 @@ def test_the_script_page_opens_the_script_it_was_asked_for(page, web):
     assert visible(page, ".card-head h3").first.inner_text() == "跳转测试"
 
 
-def test_a_risk_can_be_fixed_in_one_click(page, web):
-    """A render risk that is arithmetic is fixed by arithmetic: the
-    shot was too short for its line, so the shot gets longer. No model,
-    no waiting - and the library is not touched until it is saved."""
+def _write_a_script(page, name, lines):
+    """A saved script whose source is the given lines."""
     page.goto(BASE + "/scripts", wait_until="networkidle")
     page.wait_for_timeout(700)
     button(page, "＋ 新建").click()
     page.wait_for_timeout(600)
-    page.get_by_placeholder("剧本名字").fill("风险测试")
-    line = "这是一句很长很长的台词" * 4
-    page.locator(".editor-pane textarea.code").fill("角色1：" + line)
+    page.get_by_placeholder("剧本名字").fill(name)
+    page.locator(".editor-pane textarea.code").fill("\n".join(lines))
     page.wait_for_timeout(700)
     button(page, "💾 保存").click()
     page.wait_for_timeout(1500)
-
-    # 把这一镜改短一点，让它装不下那句话。
     page.get_by_role("button", name="✏️ 编辑").click()
     page.wait_for_timeout(400)
+
+
+def test_a_risk_can_be_fixed_in_one_click(page, web):
+    """A render risk that is arithmetic is fixed by arithmetic: the
+    shot was too short for its lines, so the shot gets longer. No model,
+    no waiting - and the library is not touched until it is saved."""
+    line = "这是一句需要慢慢说的台词"
+    _write_a_script(page, "风险测试", ["角色1：" + line for _ in range(3)])
+
+    # 把这一镜改短一点，让它装不下那几句话。
     page.evaluate("""() => {
         const app = Alpine.$data(document.querySelector('section[x-data]'));
         app.shotDurations = [6.5];
@@ -643,5 +648,51 @@ def test_a_risk_can_be_fixed_in_one_click(page, web):
     after = page.evaluate(
         "() => Alpine.$data(document.querySelector('section[x-data]')).model.target_duration_seconds")
     assert after > before, "the shot was not made longer"
+    # 风险没了，而且这一版契约还收得住。
+    assert not visible(page, ".validation-box.risk").count(), "the risk is still there"
+    assert not visible(page, ".validation-box.err").count(), "the contract refuses the result"
+    # 存盘之前，库里那份不能变。
+    assert page.locator(".card-head .badge").filter(visible=True).first.inner_text() == "未保存"
+
+
+def test_every_risk_of_a_script_can_be_fixed_at_once(page, web):
+    """「全部按建议改」: one click, every risk, one board.
+
+    Two shots, both too short for their lines: the button has to fix
+    both, not the one that happens to be first.
+    """
+    line = "这是一句需要慢慢说的台词"
+    _write_a_script(page, "全改测试", ["角色1：" + line for _ in range(6)])
+
+    # 拆成两镜，每镜三句，都给得太短。
+    page.evaluate("""() => {
+        const app = Alpine.$data(document.querySelector('section[x-data]'));
+        app.grouping = [[0, 1, 2], [3, 4, 5]];
+        app.shotDurations = [6, 6];
+        app.model.target_duration_seconds = 12;
+        app.syncDerived();
+        app.queueValidate();
+    }""")
+    page.wait_for_timeout(2000)
+    risk = page.locator(".validation-box.risk")
+    assert risk.count() == 1, "the fixture did not produce a risk"
+    assert "×2" in risk.first.inner_text(), risk.first.inner_text()
+
+    before = page.evaluate(
+        "() => Alpine.$data(document.querySelector('section[x-data]')).model.target_duration_seconds")
+    risk.first.get_by_role("button", name="全部按建议改").click()
+    page.wait_for_timeout(3000)
+
+    after = page.evaluate(
+        "() => Alpine.$data(document.querySelector('section[x-data]')).model.target_duration_seconds")
+    assert after > before, "the film was not made longer"
+    # 算得出来的两条都消了。
+    assert "慢速塞满会丢句" not in risk.first.inner_text(), risk.first.inner_text()
+    # 剩下的那条要模型判断：这台机器上没有配模型，页面得说实话，
+    # 不能假装全改好了。
+    assert "单人续接缺陷入形" in risk.first.inner_text(), risk.first.inner_text()
+    assert "需要判断的那几条没有改" in message(page, ".validation-box.ok"), \
+        message(page, ".validation-box.ok")
+    assert not visible(page, ".validation-box.err").count(), "the contract refuses the result"
     # 存盘之前，库里那份不能变。
     assert page.locator(".card-head .badge").filter(visible=True).first.inner_text() == "未保存"

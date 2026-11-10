@@ -649,14 +649,23 @@ def test_deleting_the_files_is_a_separate_ask(client, monkeypatch):
 # a render risk can be acted on
 # --------------------------------------------------------------------------- #
 
+#: A line long enough to need a slow delivery.
+TIGHT_LINE = "这是一句需要慢慢说的台词"
+
+
 def _tight_script():
-    """A script whose shot is too short for the line it has to say."""
+    """A script whose shot is too short for the lines it has to say.
+
+    Three lines, one shot: a shot that holds more than one line is not
+    capped the way a lone line is, so the clock can still settle this
+    one.
+    """
     script = json.loads(json.dumps(SCRIPT))
-    line = "这是一句很长很长的台词" * 4
-    script["source_script"] = "甲：" + line
+    script["source_script"] = "\n".join("甲：" + TIGHT_LINE for _ in range(3))
     script["shots"] = [{"id": "scene_01", "duration_seconds": 6.5, "events": [
-        {"id": "event_001", "type": "dialogue", "character": "character_1",
-         "text": line, "language": "zh"}]}]
+        {"id": "event_%03d" % (index + 1), "type": "dialogue",
+         "character": "character_1", "text": TIGHT_LINE, "language": "zh"}
+        for index in range(3)]}]
     script["target_duration_seconds"] = 6.5
     script["execution"] = {
         "look": "", "setting": "",
@@ -666,8 +675,24 @@ def _tight_script():
     return script
 
 
+def _one_long_line_script():
+    """A script whose ONE line is too long for the shot it is in.
+
+    The contract caps a lone dialogue line near its own floor, so this
+    one cannot be given the room it needs: it has to be split.
+    """
+    script = json.loads(json.dumps(SCRIPT))
+    line = "这是一句很长很长的台词" * 4
+    script["source_script"] = "甲：" + line
+    script["shots"] = [{"id": "scene_01", "duration_seconds": 6.5, "events": [
+        {"id": "event_001", "type": "dialogue", "character": "character_1",
+         "text": line, "language": "zh"}]}]
+    script["target_duration_seconds"] = 6.5
+    return script
+
+
 def test_a_tight_shot_is_fixed_by_arithmetic(client):
-    """Some risks are arithmetic: the shot is too short for its line.
+    """Some risks are arithmetic: the shot is too short for its lines.
     The app works that out from the contract's own numbers."""
     from webapp.services import library, riskfix
     script = _tight_script()
@@ -680,13 +705,35 @@ def test_a_tight_shot_is_fixed_by_arithmetic(client):
     assert plan["kind"] == "duration", plan
     assert plan["target_duration_seconds"] > script["target_duration_seconds"]
 
-    # 用这个方案改一遍，那条风险就没了。
+    # 用这个方案改一遍，那条风险就没了 —— 而且这一版契约还收。
     fixed = json.loads(json.dumps(script))
     fixed["target_duration_seconds"] = plan["target_duration_seconds"]
     for shot, seconds in zip(fixed["shots"], plan["shot_durations"]):
         shot["duration_seconds"] = seconds
-    after = library.validate_storyboard(fixed)["warnings"]
-    assert not [w for w in after if "budget" in w], after
+    after = library.validate_storyboard(fixed)
+    assert after["ok"], after["errors"]
+    assert not [w for w in after["warnings"] if "budget" in w], after["warnings"]
+
+
+def test_a_lone_long_line_is_not_stretched_past_the_contract(client):
+    """The contract caps a lone dialogue line near its own floor, so a
+    line that is too long has to be split. The app says so instead of
+    handing back a board the contract rejects."""
+    from webapp.services import library, riskfix
+    script = _one_long_line_script()
+    warnings = library.validate_storyboard(script)["warnings"]
+    risky = [w for w in warnings if "budget" in w]
+    assert risky, warnings
+
+    plan = riskfix.plan(script, risky[0])
+    assert plan["kind"] == "model", plan
+    assert "拆成两句" in plan["request"], plan["request"]
+
+    # 就算按算出来的时长改下去，这一版契约也得收得住。
+    fixed = riskfix.fix_all(script, warnings)
+    after = library.validate_storyboard(fixed["json"])
+    assert after["ok"], after["errors"]
+    assert after["warnings"], "the risk is still there - and the page says so"
 
 
 def test_a_risk_that_needs_a_decision_goes_to_the_model(client):
@@ -713,3 +760,105 @@ def test_the_page_can_ask_what_to_do_about_a_risk(client):
     if data["kind"] == "duration":
         assert data["target_duration_seconds"] > 0
         assert len(data["shot_durations"]) == len(script["shots"])
+
+
+def test_every_risk_of_one_script_is_planned_in_one_go(client):
+    """One script, several risks: one plan, one request to the model -
+    not a request per risk."""
+    from webapp.services import library, riskfix
+    script = _tight_script()
+    warnings = library.validate_storyboard(script)["warnings"]
+    burst = ("scene_01 有同一角色连续 5 句台词的连珠炮：末句口型可能漂到对面角色嘴上"
+             " · long same-speaker burst")
+    every = list(warnings) + [burst]
+
+    plan = riskfix.plan_all(script, every)
+    assert plan["count"] == len(every)
+    assert plan["duration"] is not None, "the clock can settle part of it"
+    assert plan["model"] is not None, "the rest needs a decision"
+    assert "拆散" in plan["model"]["request"], plan["model"]["request"]
+    # 两条风险合成一次请求：改法出现两次，但只有一段要求。
+    assert plan["model"]["request"].count("按下面这") == 1, plan["model"]["request"]
+
+
+def test_the_page_can_fix_every_risk_at_once(client):
+    """The button behind 「全部按建议改」.
+
+    The arithmetic lands, the rest is asked for in one request, and
+    nothing is written to the library: the result is a draft.
+    """
+    from webapp.services import library
+    script = _tight_script()
+    warnings = library.validate_storyboard(script)["warnings"]
+    response = client.post("/api/scripts/risk/fix",
+                           json={"json": script, "warnings": warnings})
+    assert response.status_code == 200, response.get_json()
+    data = response.get_json()
+    after = library.validate_storyboard(data["json"])
+    assert after["ok"], after["errors"]
+    assert data["json"]["target_duration_seconds"] > script["target_duration_seconds"]
+    assert library.list_storyboards() == [], "the library must not be touched"
+
+
+def test_the_arithmetic_runs_before_the_model_and_again_after_it(client):
+    """The order is the whole point: the model is handed a board that
+    already fits, and the time it wrote is measured afterwards."""
+    from webapp.services import library, riskfix
+    script = _one_long_line_script()
+    warnings = library.validate_storyboard(script)["warnings"]
+    seen = {"requests": []}
+
+    def fake_model(request, board):
+        """The model splits the long line into three shorter ones."""
+        seen["requests"].append(request)
+        seen["target"] = board["target_duration_seconds"]
+        line = board["shots"][0]["events"][0]["text"]
+        parts = [line[index:index + 15] for index in range(0, len(line), 15)]
+        out = json.loads(json.dumps(board))
+        out["source_script"] = "\n".join("甲：" + part for part in parts)
+        out["shots"] = [
+            {"id": "scene_%02d" % (index + 1), "duration_seconds": 6.0,
+             "events": [{"id": "event_%03d" % (index + 1), "type": "dialogue",
+                         "character": "character_1", "text": part, "language": "zh"}]}
+            for index, part in enumerate(parts)]
+        return out
+
+    fixed = riskfix.fix_all(script, warnings, revise=fake_model)
+    assert seen["requests"], "the model was never asked"
+    assert "拆成两句" in seen["requests"][0], seen["requests"][0]
+    assert seen["target"] > 0
+
+    after = library.validate_storyboard(fixed["json"])
+    assert after["ok"], after["errors"]
+    assert len(fixed["json"]["shots"]) == 3, "the model's split was thrown away"
+    # 改完再算一次时长：每一镜都装得下那句话了。
+    assert not [w for w in after["warnings"] if "budget" in w], after["warnings"]
+    # 模型拆镜带出了新的风险（续接那一镜只有一个人说话），它被问了一遍。
+    assert len(seen["requests"]) == 2, seen["requests"]
+    # 这一版只有一个角色：续接的那一镜必然整镜都是他说话，改法要说清楚。
+    assert "画面里没有人可以接这句" in seen["requests"][1], seen["requests"][1]
+
+
+def test_a_rewrite_that_drops_the_lines_is_not_taken(client):
+    """Fixing a risk is not rewriting the script: a model that loses
+    the author's lines has not fixed anything."""
+    from webapp.services import library, riskfix
+    script = _one_long_line_script()
+    warnings = library.validate_storyboard(script)["warnings"]
+
+    def careless_model(request, board):
+        """The model 'shortens' the line by throwing most of it away."""
+        out = json.loads(json.dumps(board))
+        out["source_script"] = "甲：这句话很短"
+        out["shots"] = [{"id": "scene_01", "duration_seconds": 6.0, "events": [
+            {"id": "event_001", "type": "dialogue", "character": "character_1",
+             "text": "这句话很短", "language": "zh"}]}]
+        return out
+
+    fixed = riskfix.fix_all(script, warnings, revise=careless_model)
+    after = library.validate_storyboard(fixed["json"])
+    assert after["ok"], after["errors"]
+    assert len(fixed["json"]["shots"][0]["events"]) == 1
+    assert "这是一句很长很长的台词" in fixed["json"]["source_script"], \
+        "the author's line was thrown away"
+    assert any("少了内容" in note for note in fixed["notes"]), fixed["notes"]
