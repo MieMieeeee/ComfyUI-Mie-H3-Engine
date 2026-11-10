@@ -385,7 +385,8 @@ def create_app() -> Flask:
                 height=int(data.get("height") or 544),
                 steps=int(data.get("steps") or 20),
                 duration=int(data.get("duration") or 18),
-                continue_run=bool(data.get("continue_run")))
+                continue_run=bool(data.get("continue_run")),
+                continue_from=str(data.get("continue_from") or ""))
         except (FileNotFoundError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
         except comfy.ComfyUnavailable as exc:
@@ -409,8 +410,9 @@ def create_app() -> Flask:
         except (TypeError, ValueError):
             per_page = 20
         favorites = request.args.get("favorites") in ("1", "true", "yes")
+        status = str(request.args.get("status") or "")
         return jsonify(runner.jobs(page=page, per_page=per_page,
-                                   favorites_only=favorites))
+                                   favorites_only=favorites, status=status))
 
     @app.route("/api/render/jobs/<job_id>/delete", methods=["POST"])
     def api_render_delete(job_id):
@@ -449,13 +451,8 @@ def create_app() -> Flask:
         """
         data = request.get_json(silent=True) or {}
         script = str(data.get("script") or "")
-        attempt = runner.next_attempt(script) if script else 1
-        return jsonify({
-            "run_name": runname.effective_run_name(
-                str(data.get("run_name") or ""), script, attempt),
-            "attempt": attempt,
-            "title": runname.work_title(script, attempt),
-        })
+        return jsonify(runner.planned_run_name(
+            script, str(data.get("run_name") or "")))
 
     @app.route("/api/render/<job_id>")
     def api_render_job(job_id):

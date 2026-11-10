@@ -516,3 +516,40 @@ def test_the_history_page_has_pages(page, web):
     page.wait_for_timeout(1000)
     # 只有一条记录时翻页条不出现，但每页条数是可以选的。
     assert visible(page, ".card select").count() >= 1
+
+
+def test_a_new_mirror_is_not_confirmed_against_a_moved_source(page, web):
+    """Applying a fresh English mirror, then changing the Chinese and
+    saving, must NOT confirm the mirror: it was written for the
+    Chinese as it was, and the Chinese has moved on."""
+    page.goto(BASE + "/scripts", wait_until="networkidle")
+    page.wait_for_timeout(700)
+    button(page, "＋ 新建").click()
+    page.wait_for_timeout(600)
+    page.get_by_placeholder("剧本名字").fill("镜像测试")
+    page.locator(".editor-pane textarea.code").fill("角色1：你好")
+    page.wait_for_timeout(600)
+    button(page, "💾 保存").click()
+    page.wait_for_timeout(1200)
+
+    # 打开高级区，把执行镜像当成"刚换过"的样子：记下源文本指纹。
+    page.evaluate("""() => {
+        const app = Alpine.$data(document.querySelector('section[x-data]'));
+        app.executionApplied = app.sourceSignature();
+    }""")
+    applied = page.evaluate(
+        "() => Alpine.$data(document.querySelector('section[x-data]')).executionApplied")
+    assert applied, "the source signature was empty"
+
+    # 改中文：源文本动了。
+    page.get_by_role("button", name="✏️ 编辑").click()
+    page.wait_for_timeout(300)
+    ta = page.locator(".editor-pane textarea.code").first
+    ta.fill(ta.input_value() + "\n角色1动作：他点了点头。")
+    page.wait_for_timeout(900)
+    button(page, "💾 保存").click()
+    page.wait_for_timeout(1500)
+
+    # 存盘不该把过期镜像确认掉。问服务端：它有没有把"确认"记下来。
+    data = api_get("/api/scripts/%E9%95%9C%E5%83%8F%E6%B5%8B%E8%AF%95")
+    assert data["execution_state"] != "confirmed",         "the mirror was confirmed against a source it was not written for"

@@ -635,7 +635,7 @@ def test_deleting_the_files_is_a_separate_ask(client, monkeypatch):
                         lambda name, index=None: [])
     removed = []
     monkeypatch.setattr(runner.comfy, "delete_run_files",
-                        lambda name: removed.append(name) or ["x.mp4"])
+                        lambda name, relpaths=None: removed.append(name) or ["x.mp4"])
     _make_jobs(client, monkeypatch, 2)
 
     response = client.post("/api/render/jobs/job-0/delete", json={"files": True})

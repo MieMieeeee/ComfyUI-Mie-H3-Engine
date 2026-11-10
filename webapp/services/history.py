@@ -104,3 +104,39 @@ def undismiss(run_name: str) -> None:
     names = [str(n) for n in (data.get("dismissed") or []) if n]
     data["dismissed"] = [n for n in names if n != name]
     _write(data)
+
+
+# --------------------------------------------------------------------------- #
+# the version counter
+# --------------------------------------------------------------------------- #
+
+def last_attempt(script_name: str) -> int:
+    """The highest version number this script has been given."""
+    attempts = _read().get("attempts") or {}
+    try:
+        return int(attempts.get(str(script_name)) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def claim_attempt(script_name: str, number: int) -> None:
+    """Record the version number a run has taken.
+
+    The counter only ever goes up. Taking a run out of the list must
+    not hand its number to the next one: that would reuse its folder
+    on disk - and the new run would hide behind the old one's "put
+    away" mark, so the author would never see it.
+    """
+    name = str(script_name or "")
+    if not name:
+        return
+    data = _read()
+    attempts = dict(data.get("attempts") or {})
+    try:
+        current = int(attempts.get(name) or 0)
+    except (TypeError, ValueError):
+        current = 0
+    if int(number) > current:
+        attempts[name] = int(number)
+        data["attempts"] = attempts
+        _write(data)

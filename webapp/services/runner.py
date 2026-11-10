@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import threading
 import time
 import uuid
@@ -101,19 +102,82 @@ def next_attempt(script_name: str) -> int:
     """Which version of this script comes next.
 
     Every generation of one script is its own run, with its own folder
-    on disk and its own result to keep. The number counts the runs this
-    app has started for the script, so it survives a restart (the job
-    table is on disk).
+    on disk and its own result to keep. The number comes from a counter
+    of its own, so it never goes back: taking a run out of the list
+    must not hand its number to the next one, because that would reuse
+    its folder and hide the new run behind the old one's "put away"
+    mark.
     """
     with _jobs_lock:
         used = [record.get("attempt") or 0 for record in _jobs.values()
                 if record.get("script") == script_name]
-    return (max(used) if used else 0) + 1
+    highest = max(used) if used else 0
+    return max(highest, history.last_attempt(script_name)) + 1
+
+
+def _name_in_use(run_name: str) -> bool:
+    """Is this run name being used right now?"""
+    if run_name in _reserved:
+        return True
+    with _jobs_lock:
+        for record in _jobs.values():
+            if (record.get("run_name") == run_name
+                    and record.get("status") in ("running", "queued")):
+                return True
+    return False
+
+
+def _name_used_before(run_name: str) -> bool:
+    """Has a run with this name been here before?"""
+    with _jobs_lock:
+        for record in _jobs.values():
+            if record.get("run_name") == run_name:
+                return True
+    try:
+        return any(run["run_name"] == run_name
+                   for run in comfy.recent_runs())
+    except Exception:  # noqa: BLE001 - the disk is not the point here
+        return False
+
+
+def _effective_run_name(script_name: str, run_name: str, attempt: int) -> str:
+    """The technical name this generation gets.
+
+    A name the author typed is the author's: it is used as it is. But
+    a name that has been used before would write into the folder of
+    the run that is already there, and overwrite it - so it gets its
+    version number instead. A name that is in use RIGHT NOW is left
+    alone, for the same-name check to refuse.
+    """
+    typed = runname.safe_run_name(run_name)
+    if typed:
+        if _name_in_use(typed):
+            return typed
+        if _name_used_before(typed):
+            return runname.versioned_run_name(typed, attempt)
+        return typed
+    return runname.effective_run_name("", script_name, attempt)
+
+
+def planned_run_name(script_name: str, run_name: str = "") -> dict:
+    """The name and version a submission WOULD use right now.
+
+    The page shows this, so it has to come from the same place the
+    submission gets its name from - otherwise the page promises one
+    thing and the run gets another.
+    """
+    attempt = next_attempt(script_name)
+    return {
+        "run_name": _effective_run_name(script_name, run_name, attempt),
+        "attempt": attempt,
+        "title": runname.work_title(script_name, attempt),
+    }
 
 
 def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
            width: int = 960, height: int = 544, steps: int = 20,
-           duration: int = 18, continue_run: bool = False) -> dict:
+           duration: int = 18, continue_run: bool = False,
+           continue_from: str = "") -> dict:
     """Build the workflow for a script and queue it.
 
     Returns the job record. The render itself takes minutes; the caller
@@ -123,32 +187,63 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
     wants to carry on from where it stopped, into the same folder. Every
     other submission is a new version, with its own folder, so the
     previous result stays where it was.
+
+    ``continue_from`` names the task to carry on from. Its inputs are
+    the ones that task was given - the script it had pinned, its roles,
+    its parameters - not whatever the library holds now: continuing a
+    run means continuing THAT run.
     """
-    script = library.get_storyboard(script_name)
     client_id = "mie-web-%s" % uuid.uuid4().hex[:12]
+    original = None
+    if continue_run and continue_from:
+        with _jobs_lock:
+            original = _jobs.get(continue_from)
+        if original is None:
+            raise ValueError("找不到要继续的那个任务了，它可能已经被移出历史。")
+        script_name = original.get("script") or script_name
+        role_assets = original.get("role_assets") or role_assets
+        params = original.get("params") or {}
+        width = params.get("width", width)
+        height = params.get("height", height)
+        steps = params.get("steps", steps)
+        duration = params.get("duration", duration)
+        run_name = original.get("run_name") or run_name
+        # 原任务固定的那份剧本：不是资产库里现在这份。
+        script = {"json": _script_from_snapshot(
+            original.get("snapshot_dir"), script_name)}
+    else:
+        script = library.get_storyboard(script_name)
 
     # Everything that can collide is inside one critical section: the
     # name check, the reservation, the snapshot and the queueing. Two
     # requests with the same name used to both pass the check and both
     # land in the queue, and they write one folder.
     with _submit_lock:
-        attempt = 1 if continue_run else next_attempt(script_name)
+        attempt = (original.get("attempt") or 1) if original \
+            else next_attempt(script_name)
+        if not original:
+            history.claim_attempt(script_name, attempt)
         # One name for both the graph and the job record: the engine
         # takes it verbatim, so the record and the run on disk must
         # agree. A continuation keeps the old name exactly - that is
         # what makes it a continuation.
-        effective = (runname.safe_run_name(run_name)
-                     if continue_run
-                     else runname.effective_run_name(
-                         run_name, script_name, attempt))
+        if continue_run:
+            effective = runname.safe_run_name(run_name)
+        else:
+            effective = _effective_run_name(script_name, run_name, attempt)
         _refuse_a_duplicate(effective, script_name)
         _reserve(effective, script_name)
         try:
             # The loader reads the library when the prompt RUNS, so the
             # script is pinned into a snapshot now: editing it while this
             # waits in the queue must not change what gets rendered.
-            snapshot_dir = snapshot.write_script_snapshot(
-                effective, script_name, script["json"])
+            # A continuation keeps the ORIGINAL snapshot - it is the same
+            # run, and it must see the same script.
+            if original:
+                snapshot_dir = original.get("snapshot_dir") or ""
+            else:
+                snapshot_dir = snapshot.write_script_snapshot(
+                    effective, script_name, script["json"])
             graph = workflow.build(
                 script_name, script["json"], role_assets, run_name=effective,
                 width=width, height=height, steps=steps, duration=duration,
@@ -370,6 +465,9 @@ def all_records() -> list[dict]:
             continue
         item = dict(record)
         _apply_status(item, queued)
+        # 状态变了要写回任务表：页面说"已中断"，而内部还以为是
+        # "排队中"，同名检查就会把"从这次继续"挡下来。
+        _remember(item)
         item["favorite"] = history.is_favorite(item.get("run_name"))
         item["inputs_changed"] = _inputs_changed(item)
         live.append(item)
@@ -399,16 +497,33 @@ def all_records() -> list[dict]:
     return live
 
 
-def jobs(page: int = 1, per_page: int = 20, favorites_only: bool = False) -> dict:
+#: Which statuses each filter means.
+STATUS_FILTERS = {
+    "running": ("running", "queued"),
+    "done": ("success", "partial"),
+    "failed": ("error", "interrupted", "empty"),
+}
+
+
+def jobs(page: int = 1, per_page: int = 20, favorites_only: bool = False,
+         status: str = "") -> dict:
     """The task history, ONE PAGE at a time.
 
     The history grows without bound - every render is a row - and the
     files of every row make the answer heavy. The list is cut into
     pages here, and only the rows on the page are given their files.
+
+    The filter is applied BEFORE the page is cut: filtering after it
+    would hide the runs that are on a later page, and the total would
+    still count them.
     """
     records = all_records()
+    active = sum(1 for r in records if r.get("status") in ("running", "queued"))
     if favorites_only:
         records = [r for r in records if r.get("favorite")]
+    wanted = STATUS_FILTERS.get(str(status or ""))
+    if wanted:
+        records = [r for r in records if r.get("status") in wanted]
     total = len(records)
     per_page = max(1, int(per_page or 20))
     pages = max(1, (total + per_page - 1) // per_page)
@@ -420,7 +535,7 @@ def jobs(page: int = 1, per_page: int = 20, favorites_only: bool = False) -> dic
     for record in window:
         _attach_artifacts(record, index=index)
     return {"items": window, "total": total, "page": page, "pages": pages,
-            "per_page": per_page}
+            "per_page": per_page, "active": active}
 
 
 def delete_record(job_id: str, delete_files: bool = False) -> dict:
@@ -430,6 +545,10 @@ def delete_record(job_id: str, delete_files: bool = False) -> dict:
     output folder does not put it straight back into the list. The
     FILES stay on disk unless the author asks for them to go as well -
     a film is the one thing here that cannot be written again.
+
+    The version number is NOT given back: the next generation of this
+    script gets a fresh number, so it cannot land in the folder of the
+    run that was just put away.
     """
     run_name = ""
     with _jobs_lock:
@@ -445,7 +564,12 @@ def delete_record(job_id: str, delete_files: bool = False) -> dict:
     _save_jobs()
     removed = []
     if delete_files:
-        removed = comfy.delete_run_files(run_name)
+        # 删的是这一次的文件清单，不是"名字开头像"的文件：另一个
+        # 版本的名字是这一个的前缀，按前缀删会把它一起删掉。
+        relpaths = [a.get("relpath") for a in
+                    comfy.collect_artifacts(run_name)
+                    if a.get("relpath")]
+        removed = comfy.delete_run_files(run_name, relpaths)
     return {"ok": True, "run_name": run_name,
             "files_removed": removed,
             "files_kept": not delete_files}
@@ -495,3 +619,28 @@ def plan_preview(script_name: str, role_assets: dict[str, str]) -> dict:
 # render that failed before the restart is still on the list - with the
 # failure - instead of vanishing without a trace.
 _jobs.update(_load_jobs())
+
+
+def _script_from_snapshot(snapshot_dir: str, script_name: str) -> dict:
+    """The script a task had pinned, read back from its snapshot.
+
+    A continuation has to see the script the original task was given.
+    Reading the library instead would quietly change what is being
+    rendered - and the run's folder would hold a mix of two different
+    scripts.
+    """
+    from mie_craft.assets import script_asset as _script_asset
+
+    folder = str(snapshot_dir or "")
+    if not folder:
+        raise ValueError("这个任务没有固定剧本快照，无法原样继续："
+                         "请从剧本页重新发起一次生成。")
+    if not pathlib.Path(folder).is_dir():
+        raise ValueError("这个任务固定的那份剧本已经不在了，无法原样继续："
+                         "请从剧本页重新发起一次生成。")
+    try:
+        cleaned, _path = _script_asset.load_storyboard(folder, script_name)
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError("读不回这个任务固定的那份剧本，无法原样继续：%s"
+                         % exc) from exc
+    return cleaned

@@ -60,10 +60,20 @@ def effective_run_name(requested: str, script_name: str, attempt: int = 0) -> st
     """
     typed = safe_run_name(requested)
     base = typed if typed else base_run_name(script_name)
-    if attempt and int(attempt) > 1:
-        suffix = "_v%d" % int(attempt)
-        base = base[:96 - len(suffix)].strip("._-") + suffix
+    if attempt and int(attempt) > 0:
+        return versioned_run_name(base, attempt)
     return base
+
+
+def versioned_run_name(base: str, attempt: int) -> str:
+    """The name with its version number on the end.
+
+    Every generation of a script is its own folder on disk, and the
+    number is what tells them apart.
+    """
+    suffix = "_v%d" % max(1, int(attempt))
+    stem = base[:96 - len(suffix)].strip("._-")
+    return (stem or "sb_web") + suffix
 
 
 def work_title(script_name: str, attempt: int) -> str:

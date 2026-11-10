@@ -15,7 +15,7 @@ import threading
 import pytest
 
 from webapp import config
-from webapp.services import runner, snapshot
+from webapp.services import runner, snapshot, workflow
 
 from test_library import SCRIPT
 
@@ -105,6 +105,30 @@ def test_two_submissions_with_one_name_cannot_both_get_through(plugin_root,
     for thread in threads:
         thread.join(timeout=10)
 
+    # 两次提交是两个版本，本来就各有各的目录，都该通过。
+    assert len(results) == 2, [r.get("run_name") for r in results]
+    assert not errors, errors
+    names = {r["run_name"] for r in results}
+    assert len(names) == 2, names
+
+    # 真正要挡的是同一个名字：它写同一个目录。
+    runner._jobs.clear()
+    runner._reserved.clear()
+    results.clear()
+    errors.clear()
+
+    def attempt_same():
+        try:
+            results.append(runner.submit("测试剧本", {"character_1": "甲"},
+                                         run_name="fixed_name"))
+        except ValueError as exc:
+            errors.append(str(exc))
+
+    threads = [threading.Thread(target=attempt_same) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
     assert len(results) == 1, "both submissions were accepted"
     assert errors and "同名" in errors[0], errors
     runner._jobs.clear()
@@ -458,3 +482,198 @@ def test_one_version_does_not_collect_another_versions_files(
     second = {a["name"] for a in comfy.collect_artifacts("sb_run_v2")}
     assert first == {"sb_run.mp4"}, first
     assert second == {"sb_run_v2.mp4"}, second
+
+
+# --------------------------------------------------------------------------- #
+# a re-review found six things; these are their reproductions
+# --------------------------------------------------------------------------- #
+
+def test_deleting_one_version_leaves_the_next_one_alone(plugin_root, tmp_path,
+                                                         monkeypatch):
+    """The flat directory holds "<run>_<date>.mp4". Deleting "take" must
+    not take "take_v2" with it - the name is a prefix of the other's."""
+    from webapp.services import comfy
+    flat = tmp_path / "output" / "live_storyboards"
+    flat.mkdir(parents=True)
+    (flat / "take.mp4").write_bytes(b"0")
+    (flat / "take_v2.mp4").write_bytes(b"0")
+    (flat / "take_v20.mp4").write_bytes(b"0")
+    (flat / "take_2026-11-10.mp4").write_bytes(b"0")
+    (flat / "take_v2_2026-11-10.mp4").write_bytes(b"0")
+    monkeypatch.setattr(comfy.config, "COMFYUI_ROOT", tmp_path)
+
+    # 应用走的就是这条路：先收这次任务的清单，再按清单删。
+    relpaths = [a["relpath"] for a in comfy.collect_artifacts("take")]
+    assert sorted(relpaths) == ["live_storyboards/take.mp4",
+                                 "live_storyboards/take_2026-11-10.mp4"], relpaths
+    removed = comfy.delete_run_files("take", relpaths)
+    left = sorted(p.name for p in flat.iterdir())
+    assert "take_v2.mp4" in left, left
+    assert "take_v20.mp4" in left, left
+    assert "take_v2_2026-11-10.mp4" in left, left
+    assert "take.mp4" not in left, left
+    assert "take_2026-11-10.mp4" not in left, left
+    assert removed, "nothing was removed"
+
+
+def test_the_version_number_never_goes_back(plugin_root, monkeypatch):
+    """Taking the second version out of the list must not hand its
+    number to the next one: that would reuse its folder on disk."""
+    from webapp.services import history, library, runner
+    monkeypatch.setattr(library, "get_storyboard", lambda name: {"json": SCRIPT})
+    runner._jobs.clear()
+    runner._reserved.clear()
+    monkeypatch.setattr(runner.comfy, "submit",
+                        lambda graph, client_id="": {"prompt_id": "p-1",
+                                                     "number": 1})
+
+    runner.submit("测试剧本", {"character_1": "甲"})
+    second = runner.submit("测试剧本", {"character_1": "甲"})
+    assert second["attempt"] == 2, second
+
+    runner.delete_record(second["job_id"])
+    third = runner.submit("测试剧本", {"character_1": "甲"})
+    assert third["attempt"] == 3, \
+        "the number was given back and the old folder would be reused"
+    assert third["run_name"] != second["run_name"]
+    assert not history.is_dismissed(third["run_name"]), \
+        "the new run hides behind the old one's put-away mark"
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+
+def test_the_history_writes_the_status_back_to_the_job_table(plugin_root,
+                                                              monkeypatch):
+    """The page says the run is over; the job table has to agree, or the
+    same-name check refuses to let the author carry on."""
+    from webapp.services import library, runner
+    monkeypatch.setattr(library, "get_storyboard", lambda name: {"json": SCRIPT})
+    monkeypatch.setattr(runner.comfy, "submit",
+                        lambda graph, client_id="": {"prompt_id": "p-1",
+                                                     "number": 1})
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+    record = runner.submit("测试剧本", {"character_1": "甲"})
+    assert runner._jobs[record["job_id"]]["status"] == "queued"
+
+    # ComfyUI 现在说这次运行被中断了。
+    monkeypatch.setattr(runner.comfy, "history", lambda pid: {
+        "status": {"status_str": "error", "messages": [
+            ["execution_interrupted", {"node_id": "13"}]]}, "outputs": {}})
+    monkeypatch.setattr(runner.comfy, "queue_ids", lambda: (set(), set()))
+    monkeypatch.setattr(runner.comfy, "recent_runs", lambda limit=20: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
+
+    listed = runner.jobs()
+    assert listed["items"][0]["status"] == "interrupted", listed["items"][0]
+    assert runner._jobs[record["job_id"]]["status"] == "interrupted", \
+        "the job table still thinks it is queued"
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+
+def test_the_status_filter_is_applied_before_the_page(plugin_root,
+                                                       monkeypatch):
+    """Filtering after the page was cut would hide the runs that are on
+    a later page."""
+    from webapp.services import runner
+    monkeypatch.setattr(runner.comfy, "recent_runs", lambda limit=20: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
+    monkeypatch.setattr(runner.comfy, "history", lambda pid: {})
+    monkeypatch.setattr(runner.comfy, "queue_ids", lambda: ({"job-8"}, set()))
+    runner._jobs.clear()
+    for index in range(9):
+        runner._jobs["job-%d" % index] = {
+            "job_id": "job-%d" % index, "number": index, "script": "测试剧本",
+            "run_name": "sb_run_%d" % index, "attempt": index + 1,
+            "submitted_at": 1000.0 + index, "status": "success",
+            "error": "", "nodes": 33, "role_assets": {},
+        }
+    # 跑着的那个排在最后一页。
+    runner._jobs["job-8"]["status"] = "running"
+
+    filtered = runner.jobs(page=1, per_page=5, status="running")
+    assert filtered["total"] == 1, filtered["total"]
+    assert len(filtered["items"]) == 1
+    assert filtered["items"][0]["run_name"] == "sb_run_8"
+    # 全局在跑的数量与筛选无关。
+    assert filtered["active"] == 1, filtered["active"]
+    runner._jobs.clear()
+
+
+def test_a_continuation_uses_the_script_the_task_had_pinned(plugin_root,
+                                                               monkeypatch):
+    """Carrying on means carrying on THAT run: the script it had pinned,
+    not whatever the library holds now."""
+    from webapp.services import library, runner
+    monkeypatch.setattr(library, "get_storyboard", lambda name: {"json": SCRIPT})
+    monkeypatch.setattr(runner.comfy, "submit",
+                        lambda graph, client_id="": {"prompt_id": "p-1",
+                                                     "number": 1})
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+    original = runner.submit("测试剧本", {"character_1": "甲"})
+
+    # 历史页轮询：ComfyUI 说这次运行被中断了，任务表要跟着改。
+    monkeypatch.setattr(runner.comfy, "history", lambda pid: {
+        "status": {"status_str": "error", "messages": [
+            ["execution_interrupted", {"node_id": "13"}]]}, "outputs": {}})
+    monkeypatch.setattr(runner.comfy, "queue_ids", lambda: (set(), set()))
+    monkeypatch.setattr(runner.comfy, "recent_runs", lambda limit=20: [])
+    monkeypatch.setattr(runner.comfy, "collect_artifacts",
+                        lambda name, index=None: [])
+    runner.jobs()
+    assert runner._jobs[original["job_id"]]["status"] == "interrupted"
+
+    pinned = json.loads(json.dumps(SCRIPT))
+    pinned["look"] = "第一版的画风"
+
+    # 资产库里的剧本后来改了。
+    changed = json.loads(json.dumps(SCRIPT))
+    changed["look"] = "改过的画风"
+    monkeypatch.setattr(library, "get_storyboard",
+                        lambda name: {"json": changed})
+
+    continued = runner.submit("测试剧本", {"character_1": "甲"},
+                              run_name=original["run_name"],
+                              continue_run=True, continue_from=original["job_id"])
+    assert continued["run_name"] == original["run_name"]
+    assert continued["attempt"] == original["attempt"], \
+        "a continuation is the same version, not a new one"
+
+    # 图里带的是原任务固定的那份剧本。
+    graph = workflow.build("测试剧本", pinned, {"character_1": "甲"},
+                           run_name=original["run_name"],
+                           library_dir=original["snapshot_dir"])
+    loader = graph["900"]
+    assert loader["inputs"]["library_dir"] == original["snapshot_dir"]
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+
+def test_a_continuation_without_its_snapshot_says_so(plugin_root, monkeypatch):
+    """The snapshot can be swept away. Then the run cannot be carried
+    on as it was - and the author has to be told that, not given a
+    quiet different script."""
+    from webapp.services import library, runner
+    monkeypatch.setattr(library, "get_storyboard", lambda name: {"json": SCRIPT})
+    monkeypatch.setattr(runner.comfy, "submit",
+                        lambda graph, client_id="": {"prompt_id": "p-1",
+                                                     "number": 1})
+    runner._jobs.clear()
+    runner._reserved.clear()
+
+    original = runner.submit("测试剧本", {"character_1": "甲"})
+    runner._jobs[original["job_id"]]["snapshot_dir"] = "/nowhere/at/all"
+
+    with pytest.raises(ValueError) as caught:
+        runner.submit("测试剧本", {"character_1": "甲"},
+                      run_name=original["run_name"],
+                      continue_run=True, continue_from=original["job_id"])
+    assert "无法原样继续" in str(caught.value), caught.value
+    runner._jobs.clear()
+    runner._reserved.clear()

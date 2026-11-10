@@ -269,18 +269,36 @@ def collect_artifacts(run_name: str, index: list = None) -> list[dict]:
 def _belongs_to_run(entry: dict, run_name: str) -> bool:
     """Whether this file belongs to THIS run.
 
-    Matching on a substring would give one version another version's
+    Matching on a prefix would give one version another version's
     files: "sb_run" is a prefix of "sb_run_v2", so the first version's
-    list would grow the second version's clips.
+    list would grow the second version's clips - and deleting the
+    first would take the second with it.
 
     Inside a run directory the name has to be a whole directory name.
-    The flat directory (live_storyboards) has no run directory, so there
-    the file name has to carry the name.
+    The flat directory (live_storyboards) has no run directory: there
+    the file is named "<run>_<date>.mp4", so the run name is what comes
+    before the date, and it has to match exactly.
     """
     parts = entry["parts"]
     if len(parts) > 1:
         return run_name in parts[:-1]
-    return entry["name"].startswith(run_name)
+    name = entry["name"]
+    if name.startswith(run_name + "."):
+        return True
+    stem = name.rsplit(".", 1)[0]
+    head, _, tail = stem.rpartition("_")
+    return head == run_name and _looks_like_date(tail)
+
+
+def _looks_like_date(text: str) -> bool:
+    """Is this the date a finished file carries?
+
+    The engine writes "<run>_<YYYY-MM-DD>.mp4" into the flat directory.
+    The date is what tells one version's file from the next one's.
+    """
+    import re
+
+    return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(text or "")))
 
 
 def _role_of(relpath: str) -> str:
@@ -383,12 +401,13 @@ def recent_runs(limit: int = 20) -> list[dict]:
     return runs[:limit]
 
 
-def delete_run_files(run_name: str) -> list:
+def delete_run_files(run_name: str, relpaths: list = None) -> list:
     """Remove a run's files from the output tree.
 
-    Only what belongs to THIS run: the run's own directory, and the
-    flat files that carry its name. A run name is a prefix of the next
-    version's name, so "sb_run" must not take "sb_run_v2" with it.
+    The files are taken from the exact list the task recorded, plus the
+    run's own directory. Nothing is matched by a name prefix: a run
+    name is a prefix of the next version's name, so "sb_run" must not
+    take "sb_run_v2" with it.
     """
     import shutil
 
@@ -397,24 +416,22 @@ def delete_run_files(run_name: str) -> list:
         return []
     removed = []
     output = config.COMFYUI_ROOT / "output"
-    for sub in config.OUTPUT_SUBDIRS:
-        root = output / sub
-        if not root.is_dir():
+    # 1) 任务记录里的那几份文件，一份一份按路径删。
+    for relpath in (relpaths or []):
+        path = output / str(relpath)
+        if not path.is_file():
             continue
-        # 这次运行自己的目录。
-        for folder in root.iterdir():
-            if not folder.is_dir() or folder.name != name:
-                continue
-            count = sum(1 for p in folder.rglob("*") if p.is_file())
-            shutil.rmtree(folder, ignore_errors=True)
-            removed.append("%s/%s（%d 个文件）" % (sub, name, count))
-        # 平铺目录里带这个名字的文件。
-        for path in root.iterdir():
-            if not path.is_file() or not path.name.startswith(name):
-                continue
-            try:
-                path.unlink()
-            except OSError:
-                continue
-            removed.append("%s/%s" % (sub, path.name))
+        try:
+            path.unlink()
+        except OSError:
+            continue
+        removed.append(str(relpath))
+    # 2) 这次运行自己的目录（目录名是整个名字，不是前缀）。
+    for sub in config.OUTPUT_SUBDIRS:
+        folder = output / sub / name
+        if not folder.is_dir():
+            continue
+        count = sum(1 for p in folder.rglob("*") if p.is_file())
+        shutil.rmtree(folder, ignore_errors=True)
+        removed.append("%s/%s（%d 个文件）" % (sub, name, count))
     return removed

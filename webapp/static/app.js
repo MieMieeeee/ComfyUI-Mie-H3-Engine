@@ -575,7 +575,8 @@ function scriptsPage() {
     executionState: "unknown", /* confirmed | changed | edited | unknown */
     executionDraft: null,      /* 模型重写的英文镜像草稿 + 差异 */
     draftingExecution: false,
-    executionApplied: false,   /* 这次会话里换过镜像：存盘时可以确认 */
+    executionApplied: "",      /* 应用镜像时的那一版源文本的指纹 */
+    executionDraftSource: "",  /* 生成镜像草稿时的源文本指纹 */
     draftTimer: null,
     recoveredDraft: null,      /* 本地找到的草稿，等人决定恢复还是丢弃 */
     draftOpen: false,
@@ -688,12 +689,17 @@ function scriptsPage() {
       if (!this.model || this.draftingExecution) return;
       this.draftingExecution = true;
       this.executionDraft = null;
+      this.executionDraftSource = "";
       this.errors = [];
+      // 记下这份草稿是照着哪一版源文本写的：等模型的时候人可能
+      // 还在改中文，那这份草稿就是照着旧版写的，不能用。
+      const source = this.sourceSignature();
       try {
         const data = await api.post(
           `/api/scripts/${encodeURIComponent(this.selected || "")}/execution/draft`,
           { json: this.buildPayload() });
         this.executionDraft = data;
+        this.executionDraftSource = source;
       } catch (error) {
         this.errors = [error.message];
       } finally {
@@ -704,11 +710,23 @@ function scriptsPage() {
     /* 把草稿里的英文镜像放进编辑器：只动 execution，其余一个字不改。 */
     applyExecutionDraft() {
       if (!this.executionDraft || !this.model) return;
+      if (this.executionDraftSource !== this.sourceSignature()) {
+        // 等模型的时候中文改过了：这份镜像是照着旧版写的，用上去
+        // 就是"改了画风却按旧描述生成"。
+        this.executionDraft = null;
+        this.executionDraftSource = "";
+        this.okMessage = "中文设定在生成期间改过了，这份执行描述是照着旧版写的，"
+          + "请重新生成一次。";
+        return;
+      }
       const incoming = this.executionDraft.execution || {};
       const current = this.model.execution || {};
       this.model.execution = Object.assign({}, current, incoming);
       this.executionDraft = null;
-      this.executionApplied = true;
+      this.executionDraftSource = "";
+      // 记住这份镜像对应的是哪一版源文本：之后中文再动，保存就
+      // 不能拿它去确认了。
+      this.executionApplied = this.sourceSignature();
       this.executionState = "confirmed";
       this.sourceSnapshot = this.sourceSignature();
       this.okMessage = "英文镜像已换成新的：看一眼上面的差异，满意就按「💾 保存」。";
@@ -804,7 +822,7 @@ function scriptsPage() {
       this.recoveredDraft = null;
       this.loadError = "";
       this.executionDraft = null;
-      this.executionApplied = false;
+      this.executionApplied = "";
       try {
         const data = await api.get(`/api/scripts/${encodeURIComponent(name)}`);
         this.model = normalizeStoryboardModel(data.json);
@@ -873,7 +891,7 @@ function scriptsPage() {
       this.sourceSnapshot = this.sourceSignature();
       this.executionState = "unknown";
       this.executionDraft = null;
-      this.executionApplied = false;
+      this.executionApplied = "";
       const draft = this.readDraft();
       if (draft && JSON.stringify(draft) !== this.baseline) {
         this.recoveredDraft = { name: this.selected || "new", draft };
@@ -1323,10 +1341,14 @@ function scriptsPage() {
         // 存的是新源文本；镜像是否已经跟上，只有用户知道。
         if (this.executionState === "unknown") this.executionState = "changed";
         // 保存不等于确认镜像：源文本动了而英文没动，"过期"必须留着。
-        // 只有这次会话里刚用"更新生成描述"换过镜像，才算已经跟上。
-        if (this.executionApplied) {
-          this.executionApplied = false;
+        // 只有这次会话里刚用"更新生成描述"换过镜像、而且换过之后
+        // 中文一个字没动，才算已经跟上。
+        if (this.executionApplied
+            && this.executionApplied === this.sourceSignature()) {
+          this.executionApplied = "";
           await this.confirmExecution();
+        } else if (this.executionApplied) {
+          this.executionApplied = "";
         }
         await this.load();
         this.queueValidate();
@@ -1720,6 +1742,7 @@ function historyPage() {
     pages: 1,
     perPage: 20,
     filter: "all",
+    activeCount: 0,        /* 全局在跑的任务数（不只看当前页） */
     loading: false,
     message: "",
     statusText: "",
@@ -1741,29 +1764,26 @@ function historyPage() {
     },
 
     get hasActiveJob() {
-      return (this.items || []).some(
-        (job) => job.status === "running" || job.status === "queued");
+      return (this.activeCount || 0) > 0;
     },
 
     async load() {
       this.loading = true;
       try {
+        // 筛选在服务端做：放在翻页之后会漏掉后面几页的任务，
+        // 总数也会算错。
         const query = `/api/render/jobs?page=${this.page}`
           + `&per_page=${this.perPage}`
-          + (this.filter === "favorite" ? "&favorites=1" : "");
+          + (this.filter === "favorite" ? "&favorites=1" : "")
+          + (["running", "done", "failed"].indexOf(this.filter) >= 0
+            ? `&status=${this.filter}` : "");
         const data = await api.get(query);
-        let items = data.items || [];
-        if (this.filter === "running") {
-          items = items.filter((j) => j.status === "running" || j.status === "queued");
-        } else if (this.filter === "done") {
-          items = items.filter((j) => j.status === "success" || j.status === "partial");
-        } else if (this.filter === "failed") {
-          items = items.filter((j) => ["error", "interrupted", "empty"].indexOf(j.status) >= 0);
-        }
-        this.items = items;
+        this.items = data.items || [];
         this.total = data.total || 0;
         this.page = data.page || 1;
         this.pages = data.pages || 1;
+        // 在跑的任务是全局的：当前这一页没有，不代表没有人在跑。
+        this.activeCount = data.active || 0;
         this.statusText = this.total ? `共 ${this.total} 条` : "";
       } catch (error) {
         this.message = `读取失败：${error.message}`;
@@ -1841,6 +1861,8 @@ function historyPage() {
       this.submitting = true;
       this.message = `正在接着 ${job.title || job.run_name} 继续…`;
       try {
+        // continue_from 让服务端用原任务固定的那份剧本：续跑是接着
+        // 那个任务走，不是拿资产库里现在这份重新来过。
         const record = await api.post("/api/render/submit", {
           script: job.script,
           role_assets: job.role_assets || {},
@@ -1850,6 +1872,7 @@ function historyPage() {
           steps: params.steps || 20,
           duration: params.duration || 18,
           continue_run: true,
+          continue_from: job.job_id || "",
         });
         this.message = `已排队（#${record.number}）：接着 ${job.run_name} 继续`;
         await this.load();
