@@ -553,3 +553,52 @@ def test_a_new_mirror_is_not_confirmed_against_a_moved_source(page, web):
     # 存盘不该把过期镜像确认掉。问服务端：它有没有把"确认"记下来。
     data = api_get("/api/scripts/%E9%95%9C%E5%83%8F%E6%B5%8B%E8%AF%95")
     assert data["execution_state"] != "confirmed",         "the mirror was confirmed against a source it was not written for"
+
+
+def test_the_making_page_shows_the_script_it_will_render(page, web):
+    """Picking a script from a list means nothing unless you can see what
+    you picked."""
+    page.goto(BASE + "/scripts", wait_until="networkidle")
+    page.wait_for_timeout(700)
+    button(page, "＋ 新建").click()
+    page.wait_for_timeout(600)
+    page.get_by_placeholder("剧本名字").fill("预览测试")
+    page.locator(".editor-pane textarea.code").fill("角色1：你好\n角色1动作：他点了点头。")
+    page.wait_for_timeout(600)
+    button(page, "💾 保存").click()
+    page.wait_for_timeout(1500)
+
+    page.goto(BASE + "/video", wait_until="networkidle")
+    page.wait_for_timeout(1200)
+    page.locator("select").first.select_option("预览测试")
+    page.wait_for_timeout(1800)
+
+    card = page.locator(".split-detail .card").first
+    assert card.count() > 0, "the chosen script is not shown at all"
+    assert "预览测试" in card.locator("h3").inner_text()
+    body = card.inner_text()
+    assert "你好" in body, "the lines are not visible"
+    assert "他点了点头" in body, "the actions are not visible"
+    # 角色要写名字，不是编号。
+    assert "角色1" in body, body
+    assert "character_1" not in body, body
+    # 还要能跳到剧本页看完整的那份。
+    link = card.locator("a.btn")
+    assert "/scripts?script=" in (link.get_attribute("href") or "")
+
+
+def test_the_script_page_opens_the_script_it_was_asked_for(page, web):
+    page.goto(BASE + "/scripts", wait_until="networkidle")
+    page.wait_for_timeout(700)
+    button(page, "＋ 新建").click()
+    page.wait_for_timeout(600)
+    page.get_by_placeholder("剧本名字").fill("跳转测试")
+    page.locator(".editor-pane textarea.code").fill("角色1：你好")
+    page.wait_for_timeout(600)
+    button(page, "💾 保存").click()
+    page.wait_for_timeout(1500)
+
+    page.goto(BASE + "/scripts?script=%E8%B7%B3%E8%BD%AC%E6%B5%8B%E8%AF%95",
+              wait_until="networkidle")
+    page.wait_for_timeout(1800)
+    assert visible(page, ".card-head h3").first.inner_text() == "跳转测试"

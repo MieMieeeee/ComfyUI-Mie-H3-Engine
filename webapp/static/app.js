@@ -591,6 +591,11 @@ function scriptsPage() {
 
     async init() {
       await this.load();
+      // 制作页点「在剧本页打开」过来时，URL 里带着剧本名。
+      const wanted = new URLSearchParams(window.location.search).get("script");
+      if (wanted && (this.items || []).some((item) => item.name === wanted)) {
+        await this.open(wanted);
+      }
       window.addEventListener("beforeunload", (event) => {
         if (!this.isDirty) return;
         event.preventDefault();
@@ -1496,6 +1501,7 @@ function videoPage() {
     nextTitle: "",           /* 这一次生成的作品名（第几版） */
     submitting: false,
     assetDetails: {},
+    scriptJson: null,           /* 选中的剧本：摊开给作者核对 */
     executionState: "unknown",  /* 剧本的英文镜像跟不跟得上中文 */
     executionReason: "",
     staleOverride: false,       /* 明知镜像过期，仍要用旧版生成 */
@@ -1558,9 +1564,11 @@ function videoPage() {
       this.executionState = "unknown";
       this.executionReason = "";
       this.staleOverride = false;
+      this.scriptJson = null;
       if (!this.script) { this.effectiveRunName = ""; return; }
       try {
         const data = await api.get(`/api/scripts/${encodeURIComponent(this.script)}`);
+        this.scriptJson = data.json;
         this.roles = (data.json.roles || []).map((r) => ({
           id: r.id, name: r.name, presence: r.presence, asset: "",
         }));
@@ -1612,6 +1620,50 @@ function videoPage() {
     get canSubmit() {
       return !!(this.script && this.roles.length && !this.missingRoles.length
         && !this.submitting && !this.staleBlocked);
+    },
+
+    /* 选中的剧本摊开：不然作者没法确认自己选对了没有。 */
+    get scriptPreview() {
+      const json = this.scriptJson;
+      if (!json) return null;
+      const shots = (json.shots || []).map((shot, index) => ({
+        index: index + 1,
+        id: shot.id,
+        seconds: Number(shot.duration_seconds) || 0,
+        events: (shot.events || []).map((event) => ({
+          type: event.type,
+          who: event.character,
+          text: event.text || "",
+        })),
+      }));
+      const total = shots.reduce((sum, shot) => sum + shot.seconds, 0);
+      return {
+        source: json.source_script || "",
+        shots: shots,
+        roles: (json.roles || []).map((r) => ({
+          id: r.id, name: r.name, presence: r.presence,
+        })),
+        // 事件里记的是角色编号，作者要看的是名字。
+        names: (json.roles || []).reduce((out, r) => {
+          out[r.id] = r.name || r.id;
+          return out;
+        }, {}),
+        target: json.target_duration_seconds,
+        total: total,
+        audio: json.audio_mode === "reference" ? "参考音" : "生成音",
+        look: json.look || "",
+        setting: json.setting || "",
+      };
+    },
+
+    eventTypeName(type) {
+      return SCRIPT_EVENT_NAMES[type] || type;
+    },
+
+    /* 角色编号换成角色名：作者不认 character_1。 */
+    roleName(id) {
+      const names = (this.scriptPreview && this.scriptPreview.names) || {};
+      return names[id] || id || "";
     },
 
     async preview() {

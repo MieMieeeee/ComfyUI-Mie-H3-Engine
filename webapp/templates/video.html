@@ -104,6 +104,45 @@
     </div>
 
     <div class="split-detail">
+      <!-- 选中的剧本：摊开给作者看。不然挑没挑对，只有天知道。
+           x-if 而不是 x-show：没选剧本时，里面的表达式也不能去求值。 -->
+      <template x-if="scriptPreview">
+      <div class="card">
+        <div class="card-head">
+          <h3 x-text="script + ' · 剧本内容'"></h3>
+          <a class="btn subtle" :href="'/scripts?script=' + encodeURIComponent(script)"
+             x-show="script">在剧本页打开完整工作台</a>
+        </div>
+        <div class="script-facts muted small">
+          <span x-text="scriptPreview.shots.length + ' 个分镜'"></span>
+          <span x-text="'约 ' + scriptPreview.total.toFixed(1) + ' 秒'"></span>
+          <span x-text="scriptPreview.audio"></span>
+          <span x-show="scriptPreview.look" x-text="'画风：' + scriptPreview.look"></span>
+        </div>
+        <details class="preview-block">
+          <summary>原文（中文）</summary>
+          <pre class="preview-text" x-text="scriptPreview && scriptPreview.source"></pre>
+        </details>
+        <template x-for="shot in (scriptPreview ? scriptPreview.shots : [])" :key="shot.id">
+          <div class="shot-brief">
+            <div class="muted small"
+                 x-text="'分镜 ' + shot.index + ' · ' + shot.seconds.toFixed(1) + ' 秒'"></div>
+            <template x-for="event in shot.events" :key="event.text + event.who">
+              <div class="event-brief">
+                <span class="badge" :class="'type-' + event.type"
+                      x-text="eventTypeName(event.type)"></span>
+                <span class="muted small" x-text="roleName(event.who)"></span>
+                <span x-text="event.text"></span>
+              </div>
+            </template>
+          </div>
+        </template>
+        <p class="muted small">
+          每一镜的时长是剧本自己算好的，下面「目标秒」只在剧本没写时长时才用得上。
+        </p>
+      </div>
+      </template>
+
       <details class="preview-block" x-show="planPreview || planError">
         <summary>计划的角色与要求</summary>
         <pre class="preview-text" x-text="planPreview"></pre>

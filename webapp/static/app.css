@@ -507,3 +507,14 @@ textarea.input.code {
 }
 .btn.star.starred { color: var(--color-warning); }
 .btn.star:hover { color: var(--color-warning); }
+
+/* 剧本内容速览：让作者在制作页就能核对挑对了没有。 */
+.shot-brief {
+  padding: 8px 0; border-top: 1px solid var(--border-subtle);
+}
+.event-brief {
+  display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  padding: 2px 0; font-size: 13px;
+}
+.event-brief > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.script-facts { display: flex; gap: 14px; flex-wrap: wrap; }
