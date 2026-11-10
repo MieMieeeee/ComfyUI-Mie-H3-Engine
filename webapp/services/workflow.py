@@ -59,11 +59,13 @@ def build(script_name: str, script_json: dict,
           run_name: str = "",
           width: int = 960, height: int = 544,
           steps: int = 20, duration: int = 18,
-          workflow: dict = None) -> dict:
+          workflow: dict = None, library_dir: str = "") -> dict:
     """The API-format workflow for one run.
 
     ``role_assets`` maps a role id (``character_1``) to the asset name
-    wired into that slot.
+    wired into that slot. ``library_dir`` is where the script loader
+    reads from - the snapshot library, so a queued run renders the
+    script that was submitted, not the one in the library by then.
     """
     nodes = json.loads(json.dumps(workflow if workflow is not None else _preset()))
     roles = script_roles(script_json)
@@ -88,7 +90,7 @@ def build(script_name: str, script_json: dict,
 
     nodes[_ID_SCRIPT] = _node(
         "MieH3LoadScriptAsset",
-        {"library_dir": "", "name": script_name},
+        {"library_dir": library_dir, "name": script_name},
         "剧本资产 · Load Script Asset (MieH3)", engine)
 
     # One loader per role, in cast order.

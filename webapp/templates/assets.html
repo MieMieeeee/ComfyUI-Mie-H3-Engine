@@ -6,7 +6,10 @@
   <div class="panel-head">
     <h2>🎨 角色与场景资产</h2>
     <div class="panel-head-actions">
-      <span class="muted" x-text="libraryDir"></span>
+      <details class="path-detail">
+        <summary class="muted small">资产库位置</summary>
+        <code class="muted small" x-text="libraryDir"></code>
+      </details>
       <button class="btn" type="button" @click="load()">🔄 刷新</button>
       <button class="btn primary" type="button" @click="startNew()">＋ 新建</button>
     </div>
@@ -17,9 +20,9 @@
     <div class="split-list">
       <div class="filter-bar">
         <button class="pill" :class="{ active: kind === 'character' }"
-                @click="kind = 'character'">角色</button>
+                @click="setKind('character')">角色</button>
         <button class="pill" :class="{ active: kind === 'scene' }"
-                @click="kind = 'scene'">场景</button>
+                @click="setKind('scene')">场景</button>
       </div>
       <div class="list-scroll">
         <template x-for="item in items" :key="item.name">

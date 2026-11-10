@@ -126,11 +126,27 @@
           <div class="card-head">
             <h3 x-text="model.name || '（未命名）'"></h3>
             <div class="panel-head-actions">
+              <span class="badge" :class="isDirty ? 'warn' : 'ok'"
+                    x-text="savedLabel"></span>
+              <a class="btn" x-show="selected" :href="'/video?script=' + encodeURIComponent(selected)"
+                 title="带着这份剧本去制作页">🎬 用此剧本制作</a>
               <button class="btn" type="button" @click="startDraft('revise')"
                       x-show="selected" title="以当前剧本为底稿，按修改意见生成下一版">✨ 修订</button>
               <button class="btn" type="button" @click="validateNow(true)">✔️ 校验</button>
               <button class="btn primary" type="button" @click="save()">💾 保存</button>
               <button class="btn danger" type="button" @click="remove()">🗑️ 删除</button>
+            </div>
+          </div>
+
+          <!-- 上次没保存就关掉的改动，还在本地。 -->
+          <div class="draft-box" x-show="recoveredDraft">
+            <strong>发现未保存的草稿</strong>
+            <p class="muted small">
+              上一次在这里改过东西但没保存。恢复它，还是丢掉、从库里那份重新开始？
+            </p>
+            <div class="auto-actions">
+              <button class="btn primary" type="button" @click="restoreDraft()">↩ 恢复草稿</button>
+              <button class="btn" type="button" @click="discardDraft()">丢弃草稿</button>
             </div>
           </div>
 
@@ -478,10 +494,20 @@
               </label>
             </template>
 
-            <h4 class="editor-section">
-              执行镜像 execution
-              <span class="muted small">（英文，编译用；键随角色与事件自动增删）</span>
-            </h4>
+            <details class="preview-block advanced" x-show="model.execution">
+              <summary>
+                执行镜像 execution（高级）
+                <span class="badge warn" x-show="executionStale">源文本已改，镜像未更新</span>
+              </summary>
+              <div class="advanced-body">
+            <p class="muted small">
+              英文镜像是你写给编译器的：不会随中文设定自动更新，也不会被悄悄覆盖。
+              <button class="btn subtle" type="button" x-show="executionStale"
+                      @click="confirmExecution()">我已确认</button>
+              <button class="btn subtle" type="button" x-show="executionStale"
+                      @click="startDraft('revise')"
+                      title="以当前剧本为底稿，让模型重写这一版（会带上你的修改要求）">✨ 让 AI 重写</button>
+            </p>
             <label class="field">
               <span>look</span>
               <textarea class="input" rows="2" x-model="model.execution.look"></textarea>
@@ -537,6 +563,8 @@
                 </template>
               </div>
             </template>
+              </div>
+            </details>
           </div>
 
           <!-- ============================== JSON 源码 ============================== -->

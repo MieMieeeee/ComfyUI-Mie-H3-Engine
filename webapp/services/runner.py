@@ -20,7 +20,7 @@ import time
 import uuid
 
 from webapp import config
-from webapp.services import comfy, library, runname, workflow
+from webapp.services import comfy, library, runname, snapshot, workflow
 
 #: The submit lock. It covers "look at the queue, then submit" - the
 #: window in which two submissions could interleave.
@@ -99,9 +99,16 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
     # One name for both the graph and the job record: the engine takes
     # it verbatim, so the record and the run on disk must agree.
     effective = runname.effective_run_name(run_name, script_name)
+    _refuse_a_duplicate(effective, script_name)
+    # The loader reads the library when the prompt RUNS, so the script
+    # is pinned into a snapshot now: editing it while this waits in the
+    # queue must not change what gets rendered.
+    snapshot_dir = snapshot.write_script_snapshot(
+        effective, script_name, script["json"])
     graph = workflow.build(
         script_name, script["json"], role_assets, run_name=effective,
-        width=width, height=height, steps=steps, duration=duration)
+        width=width, height=height, steps=steps, duration=duration,
+        library_dir=snapshot_dir)
 
     client_id = "mie-web-%s" % uuid.uuid4().hex[:12]
     with _submit_lock:
@@ -117,14 +124,38 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
         "status": "queued",
         "error": "",
         "nodes": len(graph),
+        # What this run is pinned to, so the task list can say whether
+        # the inputs still are what they were when it was submitted.
+        "script_hash": snapshot.script_fingerprint(script_name),
+        "asset_hashes": {role_id: snapshot.asset_fingerprint("character", name)
+                         for role_id, name in (role_assets or {}).items() if name},
+        "params": {"width": width, "height": height,
+                   "steps": steps, "duration": duration},
     }
     with _jobs_lock:
         _jobs[record["job_id"]] = record
     _save_jobs()
+    snapshot.prune()
     return record
 
 
-def job(job_id: str, queued: set = None) -> dict:
+def _refuse_a_duplicate(run_name: str, script_name: str) -> None:
+    """One run name per script at a time.
+
+    Two runs with the same name write the same folder, and the second
+    one overwrites the first one's segments while it is still running.
+    """
+    for record in list(_jobs.values()):
+        if record.get("run_name") != run_name:
+            continue
+        if record.get("status") in ("running", "queued"):
+            raise ValueError(
+                "同名任务 %r 已经在跑（#%s）：两个运行会写同一个目录，"
+                "先等它结束，或者换一个片段名。"
+                % (run_name, record.get("number")))
+
+
+def job(job_id: str, queued: tuple = None) -> dict:
     """One job, with its current state read from ComfyUI."""
     with _jobs_lock:
         record = _jobs.get(job_id)
@@ -139,10 +170,13 @@ def job(job_id: str, queued: set = None) -> dict:
         # a failed render from sitting in the list as "running" forever.
         if queued is None:
             queued = comfy.queue_ids()
-        if job_id in queued:
+        running, pending = queued
+        if job_id in running:
             record["status"] = "running"
+        elif job_id in pending:
+            record["status"] = "queued"
         else:
-            record["status"] = "error"
+            record["status"] = "interrupted"
             record["error"] = record.get("error") or (
                 "ComfyUI 里已找不到这次运行：可能提交后立刻失败、被中断，"
                 "或历史已被清理。")
@@ -193,8 +227,10 @@ def jobs() -> list[dict]:
     try:
         queued = comfy.queue_ids()
     except Exception:  # noqa: BLE001 - ComfyUI unreachable: keep the list
-        queued = set()
+        queued = (set(), set())
     live = [job(r["job_id"], queued) for r in records]
+    for record in live:
+        record["inputs_changed"] = _inputs_changed(record)
 
     known = {r["run_name"] for r in live}
     for run in comfy.recent_runs():
@@ -213,8 +249,26 @@ def jobs() -> list[dict]:
                             "relpath": run["video"], "kind": "video", "size": 0}]
                            if run["video"] else []),
             "from_disk": True,
+            "inputs_changed": [],
         })
     return live
+
+
+def _inputs_changed(record: dict) -> list:
+    """The assets that changed since this run was submitted.
+
+    The script is pinned into a snapshot, so it cannot change under the
+    render. The assets cannot be pinned (the MieNodes loader ignores
+    ``library_dir``), so they are watched by content hash instead.
+    """
+    if record.get("status") not in ("running", "queued"):
+        return []
+    try:
+        return snapshot.changed_assets(
+            "character", record.get("role_assets") or {},
+            record.get("asset_hashes") or {})
+    except Exception:  # noqa: BLE001 - a hash failure is not a verdict
+        return []
 
 
 def plan_preview(script_name: str, role_assets: dict[str, str]) -> dict:

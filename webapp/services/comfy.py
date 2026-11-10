@@ -120,20 +120,23 @@ def history(prompt_id: str) -> dict:
     return data.get(prompt_id, {})
 
 
-def queue_ids() -> set:
-    """The prompt ids ComfyUI is running or waiting for.
+def queue_ids() -> tuple:
+    """The prompt ids ComfyUI is running, and the ones it is waiting for.
 
-    A prompt that is neither in the queue nor in the history is gone:
-    it failed before its history entry was written, was cancelled, or
-    was evicted from the history. That is what tells "still running"
-    apart from "already dead" for a job the app cannot see any more.
+    Two sets, not one: a prompt that is WAITING is not running, and the
+    task list has to say so. A prompt that is in neither set and has no
+    history entry is gone - it failed before its history was written, was
+    cancelled, or was evicted.
     """
     data = _json(base_url() + "/queue")
-    ids = set()
-    for entry in (data.get("queue_running") or []) + (data.get("queue_pending") or []):
+    running, pending = set(), set()
+    for entry in data.get("queue_running") or []:
         if len(entry) > 1 and entry[1]:
-            ids.add(str(entry[1]))
-    return ids
+            running.add(str(entry[1]))
+    for entry in data.get("queue_pending") or []:
+        if len(entry) > 1 and entry[1]:
+            pending.add(str(entry[1]))
+    return running, pending
 
 
 def prompt_outputs(prompt_id: str) -> dict:
@@ -248,7 +251,10 @@ def recent_runs(limit: int = 20) -> list[dict]:
         stamp = max((p.stat().st_mtime for p in (videos + clips)), default=0)
         runs.append({
             "run_name": run_dir.name,
-            "status": "success" if videos else "running",
+            # Files on disk prove there WERE results, not that something is
+            # running now: a run with clips but no final video was
+            # interrupted, and calling it "running" is a lie.
+            "status": "success" if videos else ("partial" if clips else "empty"),
             "finished_at": stamp,
             "video": str(videos[0].relative_to(config.COMFYUI_ROOT / "output")).replace("\\", "/") if videos else "",
             "clips": len(clips),

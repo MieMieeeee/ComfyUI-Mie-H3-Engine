@@ -19,8 +19,10 @@ Two things to keep in mind:
 from __future__ import annotations
 
 import io
+import json
 import os
 import pathlib
+import time
 
 from mie_craft.assets import library as _library
 from mie_craft.assets import script_asset as _script_asset
@@ -231,7 +233,88 @@ def get_storyboard(name: str) -> dict:
         "preview": _script_asset.storyboard_preview(cleaned),
         "requirements": meta.get("requirements") or [],
         "sections": meta.get("sections") or [],
+        "source_hash": source_fingerprint(cleaned),
+        "execution_state": execution_state(name, cleaned),
     }
+
+
+# --------------------------------------------------------------------------- #
+# the source / execution-mirror pair
+# --------------------------------------------------------------------------- #
+
+def source_fingerprint(script: dict) -> str:
+    """A hash of everything the English execution mirror describes.
+
+    The mirror is written by hand (or by a model), so nothing keeps it in
+    step with the Chinese source it was made from. This hash is what
+    tells the page that the source moved and the mirror did not.
+    """
+    import hashlib
+
+    source = {
+        "look": script.get("look") or "",
+        "setting": script.get("setting") or "",
+        "scene": script.get("scene") or "",
+        "light": script.get("light") or "",
+        "light_text": script.get("light_text") or "",
+        "roles": [{
+            "id": role.get("id"), "name": role.get("name"),
+            "presence": role.get("presence"), "position": role.get("position"),
+            "voice": role.get("voice"),
+        } for role in script.get("roles") or []],
+        "events": [{
+            "id": event.get("id"), "type": event.get("type"),
+            "character": event.get("character"), "text": event.get("text"),
+            "language": event.get("language"),
+        } for shot in script.get("shots") or []
+            for event in shot.get("events") or []],
+        "designs": script.get("character_designs") or {},
+    }
+    blob = json.dumps(source, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
+def _sync_file() -> pathlib.Path:
+    return config.SETTINGS_FILE.parent / "execution_sync.json"
+
+
+def _load_sync() -> dict:
+    try:
+        data = json.loads(_sync_file().read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def confirm_execution(name: str, script: dict) -> dict:
+    """Record that the mirror matches the source, as of now.
+
+    The record is the app's own business: the contract has no room for
+    it (the payload rejects unknown fields), and it belongs to the work
+    session rather than to the asset.
+    """
+    data = _load_sync()
+    data[name] = {"hash": source_fingerprint(script),
+                  "confirmed_at": time.time()}
+    config.ensure_dirs()
+    _sync_file().write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"name": name, "confirmed": True}
+
+
+def execution_state(name: str, script: dict) -> str:
+    """How the English mirror stands against the Chinese source.
+
+    ``confirmed`` - the mirror was confirmed against this source.
+    ``changed``   - it was confirmed against an EARLIER source, so the
+                    source moved and the mirror may not describe it.
+    ``unknown``   - nobody ever confirmed it (every script written
+                    before this feature existed).
+    """
+    record = _load_sync().get(name) or {}
+    if not record.get("hash"):
+        return "unknown"
+    return "confirmed" if record["hash"] == source_fingerprint(script) else "changed"
 
 
 def save_storyboard(payload: dict) -> dict:

@@ -79,9 +79,28 @@ function llmPage() {
     current: "",
     keysFile: "",
     lastResult: "",
+    filter: "",
 
     async init() {
       await this.load();
+    },
+
+    /* 当前平台排在最前面：它决定工作台用的是哪一家，
+     * 不该让人在二十多行里找它。 */
+    get orderedPlatforms() {
+      const list = (this.platforms || []).slice();
+      return list.sort((a, b) => {
+        if (!!b.current !== !!a.current) return b.current ? 1 : -1;
+        return 0;
+      });
+    },
+
+    get visiblePlatforms() {
+      const needle = (this.filter || "").trim().toLowerCase();
+      if (!needle) return this.orderedPlatforms;
+      return this.orderedPlatforms.filter((p) =>
+        (p.name || "").toLowerCase().includes(needle)
+        || (p.key || "").toLowerCase().includes(needle));
     },
 
     async load() {
@@ -175,9 +194,38 @@ function assetsPage() {
     message: "",
     autoHint: "",
     autoBusy: false,
+    baselineForm: "",
 
     async init() {
       await this.load();
+      window.addEventListener("beforeunload", (event) => {
+        if (!this.isDirty) return;
+        event.preventDefault();
+        event.returnValue = "";
+      });
+    },
+
+    /* 切角色/场景也是换一份表单：脏了就问。 */
+    setKind(kind) {
+      if (kind === this.kind) return;
+      if (!this.confirmDiscard("切换类型")) return;
+      this.kind = kind;
+      this.selected = "";
+      this.detail = {};
+      this.editing = false;
+      this.message = "";
+    },
+
+    /* 资产页也有同样的问题：改了一半切到别的资产，改动就没了。 */
+    get isDirty() {
+      if (!this.editing) return false;
+      try { return JSON.stringify(this.form) !== this.baselineForm; }
+      catch { return true; }
+    },
+
+    confirmDiscard(what) {
+      if (!this.isDirty) return true;
+      return window.confirm(`${what}会丢掉当前未保存的修改。继续吗？`);
     },
 
     get items() {
@@ -195,6 +243,7 @@ function assetsPage() {
     },
 
     async open(name) {
+      if (name !== this.selected && !this.confirmDiscard("切换资产")) return;
       this.selected = name;
       this.editing = false;
       this.message = "";
@@ -207,6 +256,7 @@ function assetsPage() {
     },
 
     startNew() {
+      if (!this.confirmDiscard("新建资产")) return;
       this.selected = "";
       this.detail = {};
       this.editing = true;
@@ -214,10 +264,12 @@ function assetsPage() {
       this.audioFile = null;
       this.autoHint = "";
       this.form = { name: "", description: "", voice: "", ambience: "" };
+      this.baselineForm = JSON.stringify(this.form);
       this.message = "";
     },
 
     startEdit() {
+      if (!this.confirmDiscard("进入编辑")) return;
       this.editing = true;
       this.imageFile = null;
       this.audioFile = null;
@@ -228,9 +280,11 @@ function assetsPage() {
         voice: this.detail.voice || "",
         ambience: this.detail.ambience || "",
       };
+      this.baselineForm = JSON.stringify(this.form);
     },
 
     cancel() {
+      if (!this.confirmDiscard("取消编辑")) return;
       this.editing = false;
       this.imageFile = null;
       this.audioFile = null;
@@ -506,6 +560,11 @@ function scriptsPage() {
     shotDurations: [],         /* 与 grouping 平行；没动过分镜时沿用服务端值 */
     errors: [], warnings: [], okMessage: "",
     warnOpen: false,
+    baseline: "",              /* 打开/保存时的模型快照（用来算未保存） */
+    sourceSnapshot: "",        /* 打开/保存时的中文源文本（镜像陈旧的判据） */
+    executionState: "unknown", /* confirmed | changed | unknown */
+    draftTimer: null,
+    recoveredDraft: null,      /* 本地找到的草稿，等人决定恢复还是丢弃 */
     draftOpen: false,
     drafting: false,
     draftNotes: [],
@@ -518,6 +577,132 @@ function scriptsPage() {
 
     async init() {
       await this.load();
+      window.addEventListener("beforeunload", (event) => {
+        if (!this.isDirty) return;
+        event.preventDefault();
+        event.returnValue = "";   // the browser shows its own wording
+      });
+    },
+
+    /* ---------------------------------------------------------------- */
+    /* 未保存保护                                                        */
+    /* ---------------------------------------------------------------- */
+
+    get isDirty() {
+      if (!this.model) return false;
+      try { return JSON.stringify(this.model) !== this.baseline; }
+      catch { return true; }
+    },
+
+    get savedLabel() {
+      if (!this.model) return "";
+      return this.isDirty ? "未保存" : "已保存";
+    },
+
+    markSaved() {
+      this.baseline = JSON.stringify(this.model || {});
+      this.sourceSnapshot = this.sourceSignature();
+      this.clearDraft();
+    },
+
+    /* 中文源文本的指纹：英文镜像描述的就是它。 */
+    sourceSignature() {
+      const model = this.model;
+      if (!model) return "";
+      const execution = model.execution || {};
+      const parts = {
+        look: model.look || "", setting: model.setting || "",
+        scene: model.scene || "", light: model.light || "",
+        light_text: model.light_text || "",
+        roles: (model.roles || []).map((role) => [
+          role.id, role.name, role.presence, role.position, role.voice]),
+        events: this.parseEvents.map((event) => [
+          event.id, event.type, event.character, event.text, event.language]),
+        designs: model.character_designs || {},
+      };
+      try { return JSON.stringify(parts); }
+      catch { return ""; }
+    },
+
+    /* 镜像陈旧：源文本在这次会话里动过，或者它上次被确认时源文本还不是现在这样。 */
+    get executionStale() {
+      if (!this.model) return false;
+      if (this.executionState === "changed") return true;
+      const snapshot = this.sourceSnapshot;
+      return !!snapshot && snapshot !== this.sourceSignature();
+    },
+
+    async confirmExecution() {
+      if (!this.selected) return;
+      try {
+        await api.post(
+          `/api/scripts/${encodeURIComponent(this.selected)}/confirm_execution`, {});
+        this.executionState = "confirmed";
+        this.sourceSnapshot = this.sourceSignature();
+        this.okMessage = "已确认：英文镜像与当前中文设定一致。";
+      } catch (error) {
+        this.errors = [error.message];
+      }
+    },
+
+    /* 换剧本、新建、离开页面之前：脏了就问一句。 */
+    confirmDiscard(what) {
+      if (!this.isDirty) return true;
+      return window.confirm(`${what}会丢掉当前未保存的修改。继续吗？`);
+    },
+
+    /* 本地草稿：改了东西、还没保存就关了页面，草稿还在。 */
+    draftKey(name) {
+      return "mie-script-draft:" + (name || this.selected || "new");
+    },
+
+    saveDraft() {
+      if (!this.model || !this.isDirty) return;
+      try {
+        window.localStorage.setItem(this.draftKey(), JSON.stringify({
+          model: this.model,
+          // JSON 标签页里的改动还没回到模型里，原文得一起存。
+          raw: (this.tab === "json" && this.jsonDirty) ? this.rawText : null,
+        }));
+      } catch (error) { /* 隐私模式/配额：没有草稿而已 */ }
+    },
+
+    clearDraft() {
+      try { window.localStorage.removeItem(this.draftKey()); } catch (error) { /* 同上 */ }
+    },
+
+    readDraft(name) {
+      try {
+        const raw = window.localStorage.getItem(this.draftKey(name));
+        return raw ? JSON.parse(raw) : null;
+      } catch (error) { return null; }
+    },
+
+    restoreDraft() {
+      if (!this.recoveredDraft) return;
+      const draft = this.recoveredDraft;
+      this.recoveredDraft = null;
+      let model = draft.model || draft;
+      let raw = null;
+      if (draft.raw) {
+        raw = draft.raw;
+        try { model = JSON.parse(draft.raw); } catch (error) { /* 原文坏了就用模型 */ }
+      }
+      this.model = normalizeStoryboardModel(model);
+      this.rawText = raw || "";
+      this.jsonDirty = !!raw;
+      this.tab = raw ? "json" : "edit";
+      this.syncDerived();
+      this.queueValidate();
+    },
+
+    discardDraft() {
+      if (!this.recoveredDraft) return;
+      try {
+        window.localStorage.removeItem(
+          this.draftKey(this.recoveredDraft.name || this.selected));
+      } catch (error) { /* 同上 */ }
+      this.recoveredDraft = null;
     },
 
     async load() {
@@ -540,17 +725,28 @@ function scriptsPage() {
     },
 
     async open(name) {
+      if (name !== this.selected && !this.confirmDiscard("切换剧本")) return;
       this.selected = name;
       this.errors = []; this.warnings = []; this.okMessage = ""; this.warnOpen = false;
       this.draftOpen = false; this.draftNotes = [];
+      this.recoveredDraft = null;
       try {
         const data = await api.get(`/api/scripts/${encodeURIComponent(name)}`);
         this.model = normalizeStoryboardModel(data.json);
         this.cleaned = data.json;
+        this.executionState = data.execution_state || "unknown";
         this.rawText = ""; this.jsonDirty = false;
         this.tab = "preview";
+        // 先把派生状态同步好再记基线：同步会补 execution 的键，如果基线
+        // 取在同步之前，一打开就会被算成"有未保存的改动"。
         this.syncDerived();
         this.adoptGroupingFromShots();
+        this.markSaved();
+        // 之前那次没保存就关掉的改动，还在本地。
+        const draft = this.readDraft(name);
+        if (draft && JSON.stringify(draft) !== this.baseline) {
+          this.recoveredDraft = draft;
+        }
         this.queueValidate();
       } catch (error) {
         this.okMessage = `读取失败：${error.message}`;
@@ -558,9 +754,11 @@ function scriptsPage() {
     },
 
     startNew() {
+      if (!this.confirmDiscard("新建剧本")) return;
       this.selected = "";
       this.errors = []; this.warnings = []; this.okMessage = ""; this.warnOpen = false;
       this.draftOpen = false; this.draftNotes = [];
+      this.recoveredDraft = null;
       this.cleaned = null;
       this.rawText = ""; this.jsonDirty = false;
       this.model = normalizeStoryboardModel({
@@ -584,6 +782,7 @@ function scriptsPage() {
       });
       this.tab = "edit";
       this.syncDerived();
+      this.markSaved();
       this.queueValidate();
     },
 
@@ -605,6 +804,7 @@ function scriptsPage() {
     onJsonInput() {
       this.jsonDirty = true;
       this.queueValidate();
+      this.queueDraft();
     },
 
     /* JSON 标签页是唯一能直接改模型的地方：切走或校验前先解析回表单。 */
@@ -631,6 +831,16 @@ function scriptsPage() {
     afterModelChange() {
       this.syncDerived();
       this.queueValidate();
+      this.queueDraft();
+    },
+
+    /* 草稿写本地：防抖，别在每次按键都写一次。 */
+    queueDraft() {
+      if (this.draftTimer) clearTimeout(this.draftTimer);
+      this.draftTimer = setTimeout(() => {
+        this.draftTimer = null;
+        this.saveDraft();
+      }, 800);
     },
 
     syncDerived() {
@@ -1014,6 +1224,9 @@ function scriptsPage() {
         this.selected = result.name;
         this.okMessage = `已保存：${result.name}（${result.status}）`;
         this.errors = []; this.warnings = [];
+        this.markSaved();
+        // 存的是新源文本；镜像是否已经跟上，只有用户知道。
+        if (this.executionState === "unknown") this.executionState = "changed";
         await this.load();
         this.queueValidate();
       } catch (error) {
@@ -1029,6 +1242,7 @@ function scriptsPage() {
         await api.post(`/api/scripts/${encodeURIComponent(this.selected)}/delete`);
         this.selected = ""; this.model = null; this.cleaned = null;
         this.rawText = ""; this.parseEvents = []; this.grouping = [];
+        this.baseline = "";
         this.okMessage = "已删除";
         await this.load();
       } catch (error) {
@@ -1146,13 +1360,22 @@ function videoPage() {
     duration: 18,
     jobs: [],
     planPreview: "",
+    planError: "",
     message: "",
     statusText: "",
     effectiveRunName: "",
     pollTimer: null,
+    submitting: false,
+    assetDetails: {},
 
     async init() {
       await this.loadScripts();
+      // 从剧本页「用此剧本制作」过来时，URL 里带着剧本名。
+      const wanted = new URLSearchParams(window.location.search).get("script");
+      if (wanted && this.scripts.includes(wanted)) {
+        this.script = wanted;
+        await this.loadScript();
+      }
       await this.refreshJobs();
       this.startPolling();
     },
@@ -1181,6 +1404,34 @@ function videoPage() {
       } catch (error) {
         this.message = `读取失败：${error.message}`;
       }
+    },
+
+    /* 选中一个角色资产后，取它的立绘和描述：选错人等于换了张脸，
+     * 光看名字看不出来。 */
+    async loadAssetDetail(name) {
+      if (!name || this.assetDetails[name]) return;
+      try {
+        const data = await api.get(
+          `/api/assets/character/${encodeURIComponent(name)}`);
+        this.assetDetails[name] = data;
+      } catch (error) {
+        this.assetDetails[name] = { name, image: "", description: "" };
+      }
+    },
+
+    async onRoleAssetChange(role) {
+      await this.loadAssetDetail(role.asset);
+      await this.preview();
+    },
+
+    /* 名字像的角色资产，摆到前面当建议。 */
+    suggestionsFor(role) {
+      const wanted = (role.name || "").trim().toLowerCase();
+      if (!wanted) return [];
+      return this.characters.filter((name) => {
+        const lower = name.toLowerCase();
+        return lower.includes(wanted) || wanted.includes(lower);
+      }).slice(0, 5);
     },
 
     async loadScript() {
@@ -1218,13 +1469,25 @@ function videoPage() {
       return out;
     },
 
+    /* 预检：每个角色都要接上资产，否则后端会拒绝，页面也该先说清楚。 */
+    get missingRoles() {
+      return this.roles.filter((r) => !r.asset).map((r) => r.name);
+    },
+
+    get canSubmit() {
+      return !!(this.script && this.roles.length && !this.missingRoles.length
+        && !this.submitting);
+    },
+
     async preview() {
+      this.planError = "";
       if (!this.script || !this.roles.length) return;
       // The assembler refuses a slot with no asset, so there is nothing to
-      // preview until every role has one. Asking anyway would just produce
-      // an error the user cannot act on yet.
-      if (this.roles.some((r) => !r.asset)) {
+      // preview until every role has one. The page says which ones are
+      // missing instead of asking and swallowing the error.
+      if (this.missingRoles.length) {
         this.planPreview = "";
+        this.planError = "还没接资产的角色：" + this.missingRoles.join("、");
         return;
       }
       try {
@@ -1237,10 +1500,19 @@ function videoPage() {
           .join("\n");
       } catch (error) {
         this.planPreview = "";
+        this.planError = `计划预览失败：${error.message}`;
       }
     },
 
     async submit() {
+      if (this.submitting) return;
+      if (!this.canSubmit) {
+        this.message = this.missingRoles.length
+          ? "还有角色没接资产：" + this.missingRoles.join("、")
+          : "先选一个剧本。";
+        return;
+      }
+      this.submitting = true;
       this.message = "提交中…";
       try {
         const record = await api.post("/api/render/submit", {
@@ -1254,6 +1526,8 @@ function videoPage() {
         await this.refreshJobs();
       } catch (error) {
         this.message = `提交失败：${error.message}`;
+      } finally {
+        this.submitting = false;
       }
     },
 
@@ -1267,6 +1541,22 @@ function videoPage() {
       } catch (error) {
         this.statusText = "";
       }
+    },
+
+    /* 任务状态：说人话。磁盘上只剩片段的运行不是"正在跑"。 */
+    statusLabel(status) {
+      return {
+        success: "完成", error: "失败", running: "运行中", queued: "排队中",
+        partial: "部分产物", interrupted: "已中断", empty: "无产物",
+        unknown: "未知",
+      }[status] || status;
+    },
+
+    statusClass(status) {
+      if (status === "success") return "ok";
+      if (status === "error" || status === "interrupted") return "err";
+      if (status === "running" || status === "queued") return "warn";
+      return "";
     },
   };
 }

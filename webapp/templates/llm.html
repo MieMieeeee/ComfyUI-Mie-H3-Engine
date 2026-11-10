@@ -6,7 +6,10 @@
   <div class="panel-head">
     <h2>🤖 大语言模型设置</h2>
     <div class="panel-head-actions">
-      <span class="muted" x-text="keysFile"></span>
+      <details class="path-detail">
+        <summary class="muted small">密钥文件位置</summary>
+        <code class="muted small" x-text="keysFile"></code>
+      </details>
       <button class="btn" type="button" @click="load()">🔄 刷新</button>
     </div>
   </div>
@@ -20,6 +23,13 @@
     <strong>北京时间早晨 5:00 之后</strong>可重试。
   </p>
 
+  <div class="filter-bar">
+    <input class="input" style="max-width: 260px" x-model="filter"
+           placeholder="搜索平台（名称或 key）" aria-label="搜索平台">
+    <span class="muted small"
+          x-text="'显示 ' + visiblePlatforms.length + ' / ' + platforms.length + ' 个平台'"></span>
+  </div>
+
   <div class="table-wrap">
     <table class="data-table">
       <thead>
@@ -32,7 +42,7 @@
         </tr>
       </thead>
       <tbody>
-        <template x-for="p in platforms" :key="p.key + p.connector">
+        <template x-for="p in visiblePlatforms" :key="p.key + p.connector">
           <tr :class="{ 'row-current': p.current }">
             <td>
               <div class="cell-strong" x-text="p.name"></div>
@@ -41,6 +51,7 @@
             <td class="small muted" x-text="p.endpoint || '—'"></td>
             <td>
               <select class="input" x-model="p.model"
+                      :aria-label="p.name + ' 的模型'"
                       @change="saveModel(p)">
                 <template x-for="m in p.models" :key="m">
                   <option :value="m" x-text="m"></option>
@@ -48,12 +59,14 @@
                 <option value="">（自定义）</option>
               </select>
               <input class="input" x-show="!p.models.includes(p.model)"
-                     x-model="p.model" @change="saveModel(p)"
+                     x-model="p.model" :aria-label="p.name + ' 的自定义模型名'"
+                     @change="saveModel(p)"
                      placeholder="自定义模型名">
             </td>
             <td>
               <template x-if="p.host">
                 <input class="input" :value="p.host || 'http://127.0.0.1:11434'"
+                       :aria-label="p.name + ' 的本地服务地址'"
                        @change="saveHost(p)" placeholder="http://host:port">
               </template>
               <template x-if="!p.host">
@@ -61,14 +74,17 @@
                   <div class="small" :class="p.has_key ? 'ok' : 'warn'"
                        x-text="p.has_key ? p.key_masked : '未设置'"></div>
                   <input class="input" type="password" :value="p.has_key ? p.key_masked : ''"
+                         :aria-label="p.name + ' 的 API Key'"
                          @change="saveKey(p)" placeholder="粘贴 API Key">
                 </div>
               </template>
             </td>
             <td>
               <button class="btn" type="button" @click="test(p)"
+                      :aria-label="'测试 ' + p.name + ' 的连接'"
                       :disabled="p.busy" x-text="p.busy ? '测试中…' : '测试连接'"></button>
               <button class="btn subtle" type="button" @click="makeCurrent(p)"
+                      :aria-label="'把 ' + p.name + ' 设为当前平台'"
                       x-show="!p.current">设为当前</button>
               <span class="badge ok" x-show="p.current">当前</span>
             </td>

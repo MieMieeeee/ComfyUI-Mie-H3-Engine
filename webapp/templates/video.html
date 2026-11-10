@@ -28,17 +28,35 @@
       </label>
 
       <div class="roles-block" x-show="roles.length">
-        <div class="filter-bar"><span class="muted">角色槽位</span></div>
+        <div class="filter-bar">
+          <span class="muted">角色槽位</span>
+          <span class="badge warn" x-show="missingRoles.length"
+                x-text="'缺 ' + missingRoles.length + ' 个资产'"></span>
+        </div>
         <template x-for="r in roles" :key="r.id">
-          <label class="field">
+          <label class="field" :class="{ 'field-missing': !r.asset }">
             <span>
               <span x-text="r.name"></span>
               <span class="muted small" x-text="r.presence === 'on_screen' ? '（出镜）' : '（画外音）'"></span>
+              <span class="badge err" x-show="!r.asset">未接资产</span>
             </span>
-            <select class="input" x-model="r.asset" @change="preview()">
+            <select class="input" x-model="r.asset" @change="onRoleAssetChange(r)">
               <option value="">— 选择资产 —</option>
               <template x-for="c in characters" :key="c"><option :value="c" x-text="c"></option></template>
             </select>
+            <!-- 名字像的角色资产，摆出来当建议 -->
+            <span class="muted small" x-show="suggestionsFor(r).length && r.asset !== suggestionsFor(r)[0]">
+              名字像的：<template x-for="s in suggestionsFor(r)" :key="s">
+                <button class="btn subtle" type="button" @click="r.asset = s; onRoleAssetChange(r)"
+                        x-text="s"></button>
+              </template>
+            </span>
+            <!-- 选中的人长什么样：接错人等于换了张脸 -->
+            <span class="asset-preview" x-show="r.asset && assetDetails[r.asset]">
+              <img class="preview-img" :src="(assetDetails[r.asset] || {}).image || ''" alt="">
+              <span class="muted small"
+                    x-text="((assetDetails[r.asset] || {}).description || '').slice(0, 80)"></span>
+            </span>
           </label>
         </template>
       </div>
@@ -51,7 +69,7 @@
           实际运行名：<code x-text="effectiveRunName"></code>
         </span>
       </label>
-      <div class="field-row">
+      <div class="field-grid">
         <label class="field"><span>宽</span><input class="input" type="number" x-model.number="width"></label>
         <label class="field"><span>高</span><input class="input" type="number" x-model.number="height"></label>
         <label class="field"><span>步数</span><input class="input" type="number" x-model.number="steps"></label>
@@ -59,7 +77,8 @@
       </div>
 
       <button class="btn primary wide" type="button" @click="submit()"
-              :disabled="!script || !roles.length">🎬 开始渲染</button>
+              :disabled="!canSubmit"
+              x-text="submitting ? '提交中…' : (missingRoles.length ? '还差 ' + missingRoles.length + ' 个资产' : '🎬 开始渲染')"></button>
       <div class="result-box" x-show="message" x-text="message"></div>
     </div>
 
@@ -71,9 +90,11 @@
             <div>
               <div class="cell-strong" x-text="j.run_name"></div>
               <div class="muted small" x-text="j.script + ' · ' + j.status"></div>
+              <div class="muted small" x-show="j.from_disk">磁盘记录（不是本页提交的）</div>
+              <div class="warn small" x-show="(j.inputs_changed || []).length"
+                   x-text="'输入已变更：' + j.inputs_changed.join('、') + '（结果可能与提交时不同）'"></div>
             </div>
-            <span class="badge" :class="j.status === 'success' ? 'ok' : (j.status === 'error' ? 'err' : 'warn')"
-                  x-text="j.status"></span>
+            <span class="badge" :class="statusClass(j.status)" x-text="statusLabel(j.status)"></span>
             <div class="job-artifacts">
               <template x-for="a in (j.artifacts || [])" :key="a.relpath">
                 <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
@@ -89,9 +110,10 @@
         <p class="muted">还没有任务。选一个剧本、给每个角色接上资产，然后开始渲染。</p>
       </div>
 
-      <details class="preview-block" x-show="planPreview">
+      <details class="preview-block" x-show="planPreview || planError">
         <summary>计划的角色与要求</summary>
         <pre class="preview-text" x-text="planPreview"></pre>
+        <p class="err small" x-show="planError" x-text="planError"></p>
       </details>
     </div>
   </div>

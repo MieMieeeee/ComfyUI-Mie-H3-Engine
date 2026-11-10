@@ -280,6 +280,20 @@ def create_app() -> Flask:
         except (FileNotFoundError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 404
 
+    @app.route("/api/scripts/<name>/confirm_execution", methods=["POST"])
+    def api_confirm_execution(name):
+        """Record that the English execution mirror matches the source.
+
+        The mirror is written by hand, so nothing kept it in step with
+        the Chinese source; this is the page's way of saying "I have
+        looked at it, it is what I want".
+        """
+        try:
+            script = library.get_storyboard(name)
+        except (FileNotFoundError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 404
+        return jsonify(library.confirm_execution(name, script["json"]))
+
     @app.route("/api/scripts/<name>/plan", methods=["POST"])
     def api_script_plan(name):
         data = request.get_json(silent=True) or {}

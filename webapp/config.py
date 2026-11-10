@@ -68,6 +68,9 @@ SETTINGS_FILE = pathlib.Path(
 #: after the app restarts.
 JOBS_FILE = SETTINGS_FILE.parent / "jobs.json"
 
+#: The pinned copies of the scripts a queued render will read.
+SNAPSHOT_DIR = SETTINGS_FILE.parent / "snapshots"
+
 #: ComfyUI's address. The web app never starts ComfyUI itself; the
 #: launcher does (see F:/Mie-Skills/AGENTS.md).
 COMFYUI_URL = os.environ.get("MIE_COMFYUI_URL", "http://127.0.0.1:8188")

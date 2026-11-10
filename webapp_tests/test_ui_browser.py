@@ -32,7 +32,10 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 PLUGIN_ROOT = pathlib.Path(__file__).resolve().parents[1]
 WEBAPP_MAIN = PLUGIN_ROOT / "webapp" / "__main__.py"
-PORT = 8199
+# NOT 8199: that is the port the workbench itself runs on, and the test
+# server would take the port over - the person using the workbench would
+# be talking to a server with a throwaway library.
+PORT = 8299
 BASE = "http://127.0.0.1:%d" % PORT
 
 

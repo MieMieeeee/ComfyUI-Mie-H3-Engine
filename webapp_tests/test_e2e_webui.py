@@ -74,7 +74,10 @@ if COMFY is not None and str(COMFY) not in sys.path:
 
 webui_node = _load_engine_module("webui_node")
 
-PORT = 8199
+# NOT 8199: the start node STOPS whatever is on the port before it
+# starts, so the test would kill the workbench the person is using -
+# and then serve them a throwaway library until it stops.
+PORT = 8298
 BASE = "http://127.0.0.1:%d" % PORT
 
 

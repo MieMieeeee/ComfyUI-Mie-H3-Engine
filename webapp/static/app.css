@@ -4,6 +4,10 @@
  * 换主题时这一页不需要动。
  */
 
+/* 一条规则管所有盒子的宽高算法：没有它，padding 会加在 width 外面，
+ * 输入框和网格就会把容器撑破（窄屏下整页横向滚动）。 */
+*, *::before, *::after { box-sizing: border-box; }
+
 body {
   margin: 0;
   background: var(--bg-app);
@@ -91,6 +95,37 @@ code {
 }
 
 /* ---------------------------------------------------------------- */
+/* 窄屏                                                              */
+/* ---------------------------------------------------------------- */
+
+/* 390px 的视口里，导航被挤成逐字竖排、整页横向滚动。这里让导航自己
+ * 横向滚，页头换行，长路径收起来。 */
+@media (max-width: 640px) {
+  .app-shell-header { padding: 12px 14px 8px; }
+  .app-shell-header h1 { font-size: 16px; }
+  .main-tabs { padding: 0 8px; gap: 8px; flex-wrap: wrap; }
+  .main-tabs-nav {
+    flex-wrap: nowrap; overflow-x: auto; max-width: 100%;
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .main-tabs-nav::-webkit-scrollbar { display: none; }
+  .main-tabs-nav a { padding: 9px 12px; white-space: nowrap; }
+  .main-stage { padding: 14px 12px 28px; }
+  .panel-head { flex-wrap: wrap; }
+  .panel-head-actions { flex-wrap: wrap; }
+  .split { grid-template-columns: 1fr; }
+  .split-list { max-height: none; }
+  .field-row { flex-wrap: wrap; }
+  .field-row .field { flex: 1 1 160px; }
+  .meta-list { grid-template-columns: 64px 1fr; }
+  .card-head { flex-wrap: wrap; }
+  .job-row { flex-wrap: wrap; }
+  /* 平台表在窄屏里只留要紧的列：接口地址是技术信息，可以横向滚看。 */
+  .data-table td:nth-child(2), .data-table th:nth-child(2) { display: none; }
+  .data-table td, .data-table th { max-width: 180px; }
+}
+
+/* ---------------------------------------------------------------- */
 /* 面板与卡片                                                       */
 /* ---------------------------------------------------------------- */
 
@@ -175,7 +210,14 @@ textarea.input.code {
   font-size: 12px; color: var(--text-secondary);
 }
 .field-row { display: flex; gap: 10px; }
-.field-row .field { flex: 1; }
+.field-row .field { flex: 1; min-width: 0; }   /* the inputs inside may shrink */
+.field .input { width: 100%; min-width: 0; }
+.field-missing .input { border-color: var(--color-warning); }
+/* 数字参数：两列。一行四个会把输入框挤出容器。 */
+.field-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.field-grid .field { min-width: 0; }
 
 .badge {
   display: inline-block; padding: 2px 8px; border-radius: 999px;
@@ -199,6 +241,9 @@ textarea.input.code {
 
 .table-wrap { overflow-x: auto; margin-top: 12px; }
 .data-table { width: 100%; border-collapse: collapse; }
+/* 表格在窄屏里自己横向滚：列里的输入框和接口地址不能把整页撑宽。 */
+.data-table td, .data-table th { max-width: 260px; }
+.data-table td .input { min-width: 0; }
 .data-table th {
   text-align: left; font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: .05em;
@@ -218,6 +263,7 @@ textarea.input.code {
 
 .split { display: grid; grid-template-columns: 320px 1fr; gap: 16px; margin-top: 12px; }
 @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+.split > * { min-width: 0; }   /* the grid item may shrink, or the row overflows */
 .split-list {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
@@ -229,7 +275,7 @@ textarea.input.code {
 }
 .split-detail { min-width: 0; }
 
-.filter-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.filter-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
 .list-scroll { display: flex; flex-direction: column; gap: 3px; }
 .list-row {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -237,6 +283,7 @@ textarea.input.code {
   background: none; border: 1px solid transparent;
   border-radius: 7px; padding: 7px 10px;
   color: var(--text-primary); cursor: pointer; font-family: inherit; font-size: 13px;
+  min-width: 0;   /* a long name must not push the row wider than the panel */
 }
 .list-row:hover { background: var(--bg-card-hover); }
 .list-row.active {
@@ -387,4 +434,28 @@ textarea.input.code {
 .row-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 仅剧本页的双行列表用 stack 修饰，不影响资产页的单行列表 */
 .list-row.stack { flex-direction: column; align-items: stretch; gap: 2px; }
+
+/* 长路径收进详情里：它一路铺开会把页头撑破。 */
+.path-detail { max-width: 320px; }
+.path-detail summary { cursor: pointer; white-space: nowrap; }
+.path-detail code {
+  display: block; margin-top: 4px; word-break: break-all;
+  font-size: 11px; color: var(--text-faint);
+}
+
+/* 选中角色资产后的预览：立绘 + 一句描述 */
+.asset-preview {
+  display: flex; align-items: center; gap: 10px; margin-top: 6px;
+}
+.asset-preview .preview-img {
+  max-width: 56px; max-height: 56px; border-radius: 6px;
+}
+
+/* 高级区（执行镜像）：默认收起来，中文创作面才是主界面。 */
+.advanced summary {
+  cursor: pointer; color: var(--text-secondary); font-size: 13px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.advanced-body { margin-top: 10px; }
+.advanced-body .field { margin-bottom: 8px; }
 
