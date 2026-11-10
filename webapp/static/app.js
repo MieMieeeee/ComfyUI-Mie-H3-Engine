@@ -236,7 +236,10 @@ function assetsPage() {
 
     get items() {
       const list = this.kind === "character" ? this.payload.characters : this.payload.scenes;
-      return (list || []).filter((x) => x && x.name);
+      const broken = (this.payload.broken || {})[this.kind] || [];
+      // 库跳过读不出来的资产，所以它们本来不在列表里——也就没法点、
+      // 没法删。放回列表，标着"损坏"，让人能处理它。
+      return (list || []).filter((x) => x && x.name).concat(broken);
     },
 
     async load() {
@@ -1265,12 +1268,19 @@ function scriptsPage() {
 
     async remove() {
       if (!this.selected) return;
-      if (!window.confirm(`删除 ${this.selected}？`)) return;
+      // 读不出来的剧本删掉就没有备份了：整个文件夹都会被拿走，
+      // 里面那份文件也没了。所以这一次的确认要说清楚。
+      const ask = this.loadError
+        ? `删除 ${this.selected}？\n\n这份剧本读不出来，删除会把整个文件夹一起删掉，`
+          + "里面的文件也不会留下备份。"
+        : `删除 ${this.selected}？`;
+      if (!window.confirm(ask)) return;
       try {
         await api.post(`/api/scripts/${encodeURIComponent(this.selected)}/delete`);
         this.selected = ""; this.model = null; this.cleaned = null;
         this.rawText = ""; this.parseEvents = []; this.grouping = [];
         this.baseline = "";
+        this.loadError = "";
         this.okMessage = "已删除";
         await this.load();
       } catch (error) {

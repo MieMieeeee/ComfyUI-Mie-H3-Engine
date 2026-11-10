@@ -26,13 +26,17 @@
       </div>
       <div class="list-scroll">
         <template x-for="item in items" :key="item.name">
-          <button class="list-row" :class="{ active: item.name === selected }"
+          <button class="list-row stack" :class="{ active: item.name === selected }"
                   @click="open(item.name)">
-            <span x-text="item.name"></span>
-            <span class="muted small"
+            <span class="row-main">
+              <span x-text="item.name"></span>
+              <span class="badge err" x-show="item.error" :title="item.error">损坏</span>
+            </span>
+            <span class="muted small" x-show="!item.error"
                   x-text="kind === 'character'
                     ? (item.image_count + '图 / ' + item.audio_count + '音')
                     : (item.image_count + '图')"></span>
+            <span class="muted small" x-show="item.error" x-text="item.error"></span>
           </button>
         </template>
         <p class="muted" x-show="!items.length">这一类还没有资产。</p>

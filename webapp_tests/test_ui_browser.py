@@ -360,3 +360,48 @@ def test_a_broken_board_says_why_instead_of_going_blank(page, web):
     text = box.first.inner_text()
     assert "storyboard.json" in text, text
     assert "坏剧本.h3_asset.json" in text, text
+
+
+def test_a_broken_board_can_still_be_deleted(page, web):
+    """A board that cannot be read must not be stuck in the library:
+    the delete button lives on the card, and a broken board has no
+    card."""
+    folder = web / "asset_library" / "storyboards" / "坏剧本可删"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "坏剧本可删.h3_asset.json").write_text(
+        json.dumps({"version": 2, "name": "坏剧本可删"}), encoding="utf-8")
+
+    page.goto(BASE + "/scripts", wait_until="networkidle")
+    page.wait_for_timeout(900)
+    row = row_named(page, "坏剧本可删")
+    assert row is not None
+    row.click()
+    page.wait_for_timeout(1200)
+
+    button(page, "🗑️ 删掉这份剧本").click()
+    page.wait_for_timeout(1500)
+    assert row_named(page, "坏剧本可删") is None, "it is still in the list"
+    assert not folder.exists(), "the folder is still on disk"
+
+
+def test_a_broken_character_shows_up_and_can_be_deleted(page, web):
+    """The library skips a broken character, so it used to be nowhere on
+    the page - and a character that is nowhere cannot be deleted."""
+    folder = web / "asset_library" / "characters" / "坏角色"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "images").mkdir(exist_ok=True)
+
+    page.goto(BASE + "/assets", wait_until="networkidle")
+    page.wait_for_timeout(900)
+    row = row_named(page, "坏角色")
+    assert row is not None, "the broken character is not on the page"
+    assert "损坏" in row.inner_text(), row.inner_text()
+
+    row.click()
+    page.wait_for_timeout(1000)
+    assert "读取失败" in message(page), "the page did not say why"
+
+    button(page, "🗑️ 删除").click()
+    page.wait_for_timeout(1500)
+    assert row_named(page, "坏角色") is None, "it is still in the list"
+    assert not folder.exists(), "the folder is still on disk"

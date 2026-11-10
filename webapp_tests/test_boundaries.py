@@ -241,3 +241,47 @@ def test_the_list_carries_the_reason(plugin_root):
     rows = {row["name"]: row for row in library.list_storyboards_meta()}
     assert "坏剧本" in rows, rows.keys()
     assert "storyboard.json" in rows["坏剧本"]["error"]
+
+
+# --------------------------------------------------------------------------- #
+# an asset the library skipped must still be reachable
+# --------------------------------------------------------------------------- #
+
+def test_a_broken_character_is_still_listed(plugin_root):
+    """The library SKIPS a broken asset, so it is not in the names at
+    all - and a name that is not listed cannot be opened or deleted."""
+    from webapp.services import library
+    folder = plugin_root / "asset_library" / "characters" / "坏角色"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "images").mkdir(exist_ok=True)
+
+    broken = library.broken_assets()
+    names = [row["name"] for row in broken["character"]]
+    assert "坏角色" in names, broken
+    reason = [r["error"] for r in broken["character"] if r["name"] == "坏角色"][0]
+    assert "character.json" in reason, reason
+
+    # And it reaches the page.
+    payload = library.list_assets()
+    assert "坏角色" in [row["name"] for row in payload["broken"]["character"]]
+
+
+def test_a_broken_scene_is_still_listed(plugin_root):
+    from webapp.services import library
+    folder = plugin_root / "asset_library" / "scenes" / "坏场景"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "images").mkdir(exist_ok=True)
+
+    names = [row["name"] for row in library.broken_assets()["scene"]]
+    assert "坏场景" in names
+
+
+def test_the_broken_storyboard_is_still_listed(plugin_root):
+    from webapp.services import library
+    folder = plugin_root / "asset_library" / "storyboards" / "坏剧本"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "坏剧本.h3_asset.json").write_text(
+        json.dumps({"version": 2, "name": "坏剧本"}), encoding="utf-8")
+
+    names = [row["name"] for row in library.broken_assets()["storyboard"]]
+    assert "坏剧本" in names

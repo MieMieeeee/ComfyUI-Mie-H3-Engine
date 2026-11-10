@@ -57,7 +57,42 @@ def list_assets() -> dict:
     payload = _library.list_assets_payload(library_dir(), **_library_kwargs())
     payload = _script_asset.augment_assets_payload(payload, library_dir())
     payload["library_dir"] = library_dir()
+    payload["broken"] = broken_assets()
     return payload
+
+
+def broken_assets() -> dict:
+    """The assets the library could not read, per kind.
+
+    The library SKIPS a broken folder instead of listing it, so without
+    this it would be invisible on the page - and impossible to delete,
+    because the delete button lives on the asset it cannot open.
+    """
+    result = {}
+    for kind, lister in (("character", _library.list_characters),
+                          ("scene", _library.list_scenes)):
+        try:
+            report = lister(library_dir(), **_library_kwargs())
+        except (ValueError, OSError):
+            report = {}
+        result[kind] = _skipped_rows(report.get("status", ""))
+    try:
+        boards = _script_asset.list_storyboards(library_dir())
+    except (ValueError, OSError):
+        boards = {}
+    result["storyboard"] = _skipped_rows(boards.get("status", ""))
+    return result
+
+
+def _skipped_rows(status: str) -> list:
+    """The library's skip report, as rows: [{name, error}, ...]."""
+    rows = []
+    for line in (status or "").splitlines():
+        text = line.strip()
+        if text.startswith("skipped ") and ": " in text:
+            name, reason = text[len("skipped "):].split(": ", 1)
+            rows.append({"name": name, "error": reason})
+    return rows
 
 
 def list_characters() -> list[str]:

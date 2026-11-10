@@ -40,8 +40,13 @@
     <!-- 右：工作台 -->
     <div class="split-detail">
       <!-- 这份剧本读不出来的时候，得说清楚为什么读不出来：不然这里
-           只有一句"从左侧选择一个剧本"，像是没点中。 -->
-      <div class="validation-box" x-show="loadError" x-text="loadError"></div>
+           只有一句"从左侧选择一个剧本"，像是没点中。
+           读不出来的剧本也得能删——不然它就永远留在库里，点不掉。 -->
+      <div class="validation-box" x-show="loadError">
+        <p x-text="loadError" style="margin: 0 0 8px;"></p>
+        <button class="btn danger" type="button" @click="remove()"
+                x-show="selected">🗑️ 删掉这份剧本</button>
+      </div>
       <p class="muted" x-show="!model && !draftOpen && !loadError">从左侧选择一个剧本，或点「＋ 新建」「✨ AI 起草」。</p>
 
       <!-- AI 起草表单 -->
