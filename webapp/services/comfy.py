@@ -12,6 +12,7 @@ import json
 import os
 import pathlib
 import re
+import stat
 import time
 import urllib.error
 import urllib.parse
@@ -425,7 +426,13 @@ def delete_run_files(run_name: str, relpaths: list = None) -> list:
     root = output.resolve()
     # 1) 任务记录里的那几份文件，一份一份按路径删。
     for relpath in (relpaths or []):
-        path = (output / str(relpath)).resolve()
+        raw = output / str(relpath)
+        if _is_link(raw):
+            # 链接：删链接本身，不动它指着的地方。
+            if _remove_link(raw):
+                removed.append(str(relpath))
+            continue
+        path = raw.resolve()
         if not _inside(root, path) or not path.is_file():
             continue
         try:
@@ -435,13 +442,87 @@ def delete_run_files(run_name: str, relpaths: list = None) -> list:
         removed.append(str(relpath))
     # 2) 这次运行自己的目录（目录名是整个名字，不是前缀）。
     for sub in config.OUTPUT_SUBDIRS:
-        folder = (output / sub / name).resolve()
-        if not _inside(root, folder) or not folder.is_dir():
+        folder = output / sub / name
+        # lexists 不跟着链接走：断了的链接也算数。
+        if not os.path.lexists(folder):
             continue
-        count = sum(1 for p in folder.rglob("*") if p.is_file())
-        shutil.rmtree(folder, ignore_errors=True)
+        if _is_link(folder):
+            # 这是一个 junction（指向另一个目录的"文件夹"）：看着像
+            # 目录，删的却是它指着的那个地方——别人的作品。
+            if _remove_link(folder):
+                removed.append("%s/%s（是个链接，只删了链接本身）"
+                               % (sub, name))
+            continue
+        resolved = folder.resolve()
+        if not _inside(root, resolved) or not resolved.is_dir():
+            continue
+        # 里面还有链接的话，先把链接摘掉：绝不让删除顺着它走进
+        # 另一个目录去。
+        for link in _links_inside(resolved):
+            _remove_link(link)
+        count = sum(1 for p in resolved.rglob("*") if p.is_file())
+        shutil.rmtree(resolved, ignore_errors=True)
         removed.append("%s/%s（%d 个文件）" % (sub, name, count))
     return removed
+
+
+def _is_link(path: pathlib.Path) -> bool:
+    """Is this a link rather than a real file or directory?
+
+    A junction - a directory that points at another directory - looks
+    like a directory from every angle, and the path it resolves to is
+    the place it points at. Deleting that would delete ANOTHER work's
+    files, so a link is never followed.
+    """
+    try:
+        if path.is_symlink():
+            return True
+    except OSError:
+        return True
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return False
+    reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    if getattr(info, "st_file_attributes", 0) & reparse:
+        return True
+    is_junction = getattr(path, "is_junction", None)
+    if callable(is_junction):
+        try:
+            return bool(is_junction())
+        except OSError:
+            return True
+    return False
+
+
+def _remove_link(path: pathlib.Path) -> bool:
+    """Remove the link itself, never what it points at."""
+    try:
+        if path.is_dir():
+            os.rmdir(path)
+        else:
+            os.unlink(path)
+        return True
+    except OSError:
+        return False
+
+
+def _links_inside(folder: pathlib.Path) -> list:
+    """The links inside this tree.
+
+    The walk does not follow them - but a junction looks like a
+    directory, so it is taken out of the way first.
+    """
+    found = []
+    for dirpath, dirnames, filenames in os.walk(folder):
+        for name in list(dirnames) + list(filenames):
+            path = pathlib.Path(dirpath) / name
+            if not _is_link(path):
+                continue
+            found.append(path)
+            if name in dirnames:
+                dirnames.remove(name)
+    return found
 
 
 #: The engine's own rule for a run name. A name is a name: it holds no

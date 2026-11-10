@@ -769,3 +769,71 @@ def test_the_version_counter_is_seeded_from_the_old_tasks(plugin_root,
     assert runner.next_attempt("旧剧本") == 3, \
         "the number went back and the old folder would be reused"
     runner._jobs.clear()
+
+
+# --------------------------------------------------------------------------- #
+# a link inside the output tree is never followed
+# --------------------------------------------------------------------------- #
+
+def _make_junction(link, target):
+    """A junction: a directory that points at another directory.
+
+    Windows can make one without any special rights, unlike a
+    symbolic link. If this cannot be made, the test says so rather
+    than passing for the wrong reason.
+    """
+    import os
+    import subprocess
+
+    result = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+        capture_output=True)   # 输出是本地代码页，不去解它
+    return result.returncode == 0 and link.exists()
+
+
+def test_a_junction_inside_the_output_is_not_followed(plugin_root, tmp_path,
+                                                       monkeypatch):
+    """A junction looks like a directory, but it points at one. Deleting
+    it the usual way deletes the place it points at - another work."""
+    from webapp.services import comfy
+    root = tmp_path / "comfyui"
+    chains = root / "output" / "h3_chains"
+    chains.mkdir(parents=True)
+    other = chains / "other_run"
+    other.mkdir()
+    keep = other / "film.mp4"
+    keep.write_bytes(b"0")
+    junction = chains / "take"
+    if not _make_junction(junction, other):
+        pytest.skip("this machine cannot make a junction")
+    monkeypatch.setattr(comfy.config, "COMFYUI_ROOT", root)
+
+    removed = comfy.delete_run_files("take")
+    assert keep.is_file(), "the other work was deleted through the junction"
+    assert not junction.exists(), "the link itself was not removed"
+    assert removed, "nothing was reported"
+
+
+def test_a_junction_inside_the_run_is_not_followed(plugin_root, tmp_path,
+                                                    monkeypatch):
+    """A link inside the run's own folder must not take the walk out of
+    it either."""
+    from webapp.services import comfy
+    root = tmp_path / "comfyui"
+    chains = root / "output" / "h3_chains"
+    chains.mkdir(parents=True)
+    elsewhere = root / "elsewhere"
+    elsewhere.mkdir()
+    keep = elsewhere / "keep.txt"
+    keep.write_text("x", encoding="utf-8")
+    run = chains / "take"
+    run.mkdir()
+    (run / "film.mp4").write_bytes(b"0")
+    junction = run / "inner"
+    if not _make_junction(junction, elsewhere):
+        pytest.skip("this machine cannot make a junction")
+    monkeypatch.setattr(comfy.config, "COMFYUI_ROOT", root)
+
+    comfy.delete_run_files("take")
+    assert keep.is_file(), "the delete walked out through the junction"
+    assert not run.exists(), "the run's own folder is still there"
