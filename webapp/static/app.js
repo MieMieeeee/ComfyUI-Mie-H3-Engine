@@ -1451,9 +1451,25 @@ function scriptsPage() {
       if (this.fixing) return;
       this.fixing = true;
       this.errors = []; this.okMessage = "";
+      const sent = this.editSnapshot();
       try {
         const result = await api.post("/api/scripts/risk/fix",
           { json: this.buildPayload(), warnings: warnings });
+        // 等模型的这几十秒里，作者可能又改了：改好的那一版是按改之前
+        // 的那一版算的，直接盖上去会把刚改的东西弄没了。先问一句。
+        const now = this.editSnapshot();
+        if (JSON.stringify(now) !== JSON.stringify(sent)) {
+          const ask = "你在等它改的时候又动了这一版（"
+            + this.editSummary(sent, now).join("、")
+            + "）。\n\n改好的那一版是按你改之前的那一版算的。要盖上去吗？\n"
+            + "盖上去，你刚才改的就没了；不盖的话这次改动作废，"
+            + "再点一次就是按你现在的样子改。";
+          if (!window.confirm(ask)) {
+            this.okMessage = "这一次的改动作废了（你在等的时候改了这一版）。"
+              + "再点一次就是按你现在的样子改。";
+            return;
+          }
+        }
         this.adoptFixedBoard(result.json);
         const notes = (result.notes || []).filter(Boolean);
         let message = notes.length ? notes.join(" ")
@@ -1467,6 +1483,49 @@ function scriptsPage() {
       } finally {
         this.fixing = false;
       }
+    },
+
+    /* 编辑的版本记号：等模型的时候作者又动了哪儿，一比就知道。 */
+    editSnapshot() {
+      const model = this.model || {};
+      return {
+        name: model.name || "",
+        look: model.look || "",
+        setting: model.setting || "",
+        constraints: model.constraints || "",
+        source_script: model.source_script || "",
+        target_duration_seconds: model.target_duration_seconds,
+        camera: model.camera || {},
+        roles: model.roles || [],
+        execution: model.execution || {},
+        shots: this.buildShots(),
+      };
+    },
+
+    /* 说清楚改了哪儿，才好让人决定要不要盖上去。 */
+    editSummary(before, after) {
+      const names = [];
+      if (before.name !== after.name) names.push("名字");
+      if (before.look !== after.look) names.push("画风");
+      if (before.setting !== after.setting) names.push("场景");
+      if (before.constraints !== after.constraints) names.push("限制");
+      if (before.source_script !== after.source_script) names.push("台词");
+      if (before.target_duration_seconds !== after.target_duration_seconds) {
+        names.push("目标时长");
+      }
+      if (JSON.stringify(before.camera) !== JSON.stringify(after.camera)) {
+        names.push("镜头");
+      }
+      if (JSON.stringify(before.roles) !== JSON.stringify(after.roles)) {
+        names.push("角色");
+      }
+      if (JSON.stringify(before.execution) !== JSON.stringify(after.execution)) {
+        names.push("英文镜像");
+      }
+      if (JSON.stringify(before.shots) !== JSON.stringify(after.shots)) {
+        names.push("分镜");
+      }
+      return names.length ? names : ["内容"];
     },
 
     /* 改好的稿子整个换进来：分镜结构和分镜时长都按服务端算好的来，
@@ -1707,7 +1766,10 @@ function videoPage() {
         index: index + 1,
         id: shot.id,
         seconds: Number(shot.duration_seconds) || 0,
-        events: (shot.events || []).map((event) => ({
+        events: (shot.events || []).map((event, eventIndex) => ({
+          // 同一角色说同一句话是常事，所以 key 不能是台词：重复的 key
+          // 会让 Alpine 整个列表渲染不出来，页面上一条都不剩。
+          key: event.id || (shot.id || "shot") + "-" + eventIndex,
           type: event.type,
           who: event.character,
           text: event.text || "",

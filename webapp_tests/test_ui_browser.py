@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import pytest
@@ -111,10 +112,31 @@ def web(tmp_path_factory):
 
 @pytest.fixture()
 def page(web):
+    """A page in a browser.
+
+    Every dialog is answered "yes" by default, so the confirmation
+    boxes do not block a test. A test that wants to look at the
+    question, or to say no, sets ``screen.answer`` to ``"no"`` (or to
+    a callable) before the click; the questions are collected in
+    ``screen.questions``.
+    """
     with sync_playwright() as p:
         browser = p.chromium.launch()
         screen = browser.new_page(viewport={"width": 1500, "height": 1000})
-        screen.on("dialog", lambda d: d.accept())
+        screen.questions = []
+        screen.answer = "yes"
+
+        def on_dialog(dialog):
+            screen.questions.append(dialog.message)
+            answer = screen.answer
+            if callable(answer):
+                answer(dialog)
+            elif answer == "no":
+                dialog.dismiss()
+            else:
+                dialog.accept()
+
+        screen.on("dialog", on_dialog)
         yield screen
         browser.close()
 
@@ -696,3 +718,87 @@ def test_every_risk_of_a_script_can_be_fixed_at_once(page, web):
     assert not visible(page, ".validation-box.err").count(), "the contract refuses the result"
     # 存盘之前，库里那份不能变。
     assert page.locator(".card-head .badge").filter(visible=True).first.inner_text() == "未保存"
+
+
+def test_the_fix_asks_before_it_overrides_what_you_edited(page, web):
+    """模型在写的那几十秒里，作者可能又改了。
+
+    改好的那一版是按改之前的那一版算的：盖上去会把你刚改的弄没了，
+    所以要先问一声，说清改了哪儿。
+    """
+    line = "这是一句需要慢慢说的台词"
+    _write_a_script(page, "别盖掉我", ["角色1：" + line for _ in range(3)])
+    page.evaluate("""() => {
+        const app = Alpine.$data(document.querySelector('section[x-data]'));
+        app.shotDurations = [6.5];
+        app.model.target_duration_seconds = 6.5;
+        app.syncDerived();
+        app.queueValidate();
+    }""")
+    page.wait_for_timeout(2000)
+    risk = page.locator(".validation-box.risk")
+    assert risk.count() == 1, "the fixture did not produce a risk"
+
+    # 让"模型"慢一点：回话之前，作者改了画风。
+    page.evaluate("""() => {
+        const real = window.fetch;
+        window.fetch = async (url, options) => {
+            const response = await real(url, options);
+            if (String(url).indexOf('/api/scripts/risk/fix') >= 0) {
+                await new Promise((resolve) => setTimeout(resolve, 1200));
+                const app = Alpine.$data(document.querySelector('section[x-data]'));
+                app.model.look = '水墨风';
+            }
+            return response;
+        };
+    }""")
+    page.answer = "no"
+    risk.first.get_by_role("button", name="全部按建议改").click()
+    page.wait_for_timeout(5000)
+
+    assert page.questions, "作者改了之后，一句不问就要盖上去"
+    assert "画风" in page.questions[-1], page.questions[-1]
+    look = page.evaluate(
+        "() => Alpine.$data(document.querySelector('section[x-data]')).model.look")
+    assert look == "水墨风", "作者刚改的画风被盖掉了"
+    target = page.evaluate(
+        "() => Alpine.$data(document.querySelector('section[x-data]')).model.target_duration_seconds")
+    assert target == 6.5, "作者说了不盖，时长却还是被改了"
+    assert "作废" in message(page, ".validation-box.ok"), message(page, ".validation-box.ok")
+
+
+def test_the_making_page_shows_a_script_with_repeated_lines(page, web):
+    """同一角色说同一句话是常事。
+
+    预览里每一行都要有key：拿台词当key，重复的台词就把整个列表
+    渲染不出来，页面上一条都不剩。
+    """
+    script = {
+        "version": 2, "name": "重复台词", "language": "zh",
+        "roles": [{"id": "character_1", "name": "角色1", "presence": "on_screen",
+                   "initially_visible": True, "position": "center",
+                   "voice": "male voice"}],
+        "camera": {"framing": "medium_close_up", "movement": "locked",
+                   "perspective": "observer"},
+        "look": "", "setting": "", "constraints": "",
+        "target_duration_seconds": 5, "continuation_overlap_frames": 0,
+        "source_script": "角色1：同一句话\n角色1：同一句话\n角色1：同一句话",
+        "shots": [{"id": "scene_01", "duration_seconds": 5, "events": [
+            {"id": "event_%03d" % (index + 1), "type": "dialogue",
+             "character": "character_1", "text": "同一句话", "language": "zh"}
+            for index in range(3)]}],
+        "execution": {"look": "", "setting": "",
+                      "visible_state": "Character 1 stands at center.",
+                      "voices": {"character_1": "male voice"}, "directions": {}},
+        "audio_mode": "generated",
+    }
+    body = json.dumps({"json": json.dumps(script)}).encode("utf-8")
+    request = urllib.request.Request(BASE + "/api/scripts", data=body,
+                                     headers={"Content-Type": "application/json"})
+    urllib.request.urlopen(request, timeout=30).read()
+
+    page.goto(BASE + "/video?script=" + urllib.parse.quote("重复台词"),
+              wait_until="networkidle")
+    page.wait_for_timeout(2000)
+    events = visible(page, ".event-brief")
+    assert events.count() == 3, "重复的台词把预览里的事件全弄没了"

@@ -127,7 +127,7 @@
           <div class="shot-brief">
             <div class="muted small"
                  x-text="'分镜 ' + shot.index + ' · ' + shot.seconds.toFixed(1) + ' 秒'"></div>
-            <template x-for="event in shot.events" :key="event.text + event.who">
+            <template x-for="event in shot.events" :key="event.key">
               <div class="event-brief">
                 <span class="badge" :class="'type-' + event.type"
                       x-text="eventTypeName(event.type)"></span>
