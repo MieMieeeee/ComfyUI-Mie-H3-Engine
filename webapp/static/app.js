@@ -96,6 +96,68 @@ function blobToDataUrl(blob) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 统一的声音试听（U01）：同一时间只播一个样本，切角色/换文件即停。
+ * 页面组件只调 preview.play(key, src) / preview.stop()，并读它的状态。 */
+/* ------------------------------------------------------------------ */
+
+const audioPreview = (() => {
+  const element = new Audio();
+  element.preload = "none";
+  let currentKey = "";
+  let listener = null;
+
+  function notify() {
+    if (listener) listener({
+      key: currentKey,
+      playing: !element.paused && !element.ended,
+      position: element.currentTime || 0,
+      duration: Number.isFinite(element.duration) ? element.duration : 0,
+    });
+  }
+  const originalListener = () => notify();
+  ["play", "pause", "ended", "timeupdate", "loadedmetadata"].forEach(
+    (name) => element.addEventListener(name, originalListener));
+
+  return {
+    /* 谁在听（当前页面的组件）；换页面/换组件就换回来。 */
+    listen(callback) { listener = callback; notify(); },
+
+    /* 播一个（或点同一个暂停）；key 区分“哪个样本在放”。 */
+    toggle(key, src) {
+      if (currentKey === key && !element.paused) {
+        element.pause();
+        return;
+      }
+      if (currentKey !== key || element.src !== src) {
+        element.src = src;
+        currentKey = key;
+      }
+      element.play().catch(() => { currentKey = ""; notify(); });
+    },
+
+    replay() {
+      element.currentTime = 0;
+      if (element.paused) element.play().catch(() => {});
+    },
+
+    seek(seconds) {
+      element.currentTime = seconds;
+      notify();
+    },
+
+    stop() {
+      element.pause();
+      element.removeAttribute("src");
+      element.load();
+      currentKey = "";
+      notify();
+    },
+
+    key() { return currentKey; },
+  };
+})();
+
+/* ------------------------------------------------------------------ */
 /* 外壳                                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -268,14 +330,59 @@ function assetsPage() {
     autoHint: "",
     autoBusy: false,
     baselineForm: "",
+    /* U01/U03：本地试听与预览的临时地址（撤销/保存后回收）。 */
+    audioObjectUrl: "",
+    imageObjectUrl: "",
+    preview: { key: "", playing: false, position: 0, duration: 0 },
+    lightbox: "",
 
     async init() {
       await this.load();
+      // 本页接管统一播放器；离开或切换时把本地文件引用一起释放。
+      audioPreview.listen((state) => { this.preview = state; });
       window.addEventListener("beforeunload", (event) => {
+        this.releaseMedia();
         if (!this.isDirty) return;
         event.preventDefault();
         event.returnValue = "";
       });
+      // 深链（F08 的补齐入口）：?kind=character&asset=名字 直达那份资产。
+      const params = new URLSearchParams(window.location.search);
+      const wantedKind = params.get("kind");
+      if (wantedKind === "character" || wantedKind === "scene") {
+        await this.setKind(wantedKind);
+      }
+      const wantedAsset = params.get("asset");
+      if (wantedAsset && (this.items || []).some((x) => x.name === wantedAsset)) {
+        await this.open(wantedAsset);
+      }
+    },
+
+    /* 回收本地预览地址并停掉播放（同一个时间只有一个样本在响）。 */
+    releaseMedia() {
+      audioPreview.stop();
+      if (this.audioObjectUrl) URL.revokeObjectURL(this.audioObjectUrl);
+      if (this.imageObjectUrl) URL.revokeObjectURL(this.imageObjectUrl);
+      this.audioObjectUrl = "";
+      this.imageObjectUrl = "";
+      this.lightbox = "";
+    },
+
+    playSample(key, src) {
+      audioPreview.toggle(key, src);
+    },
+
+    replaySample() {
+      audioPreview.replay();
+    },
+
+    seekSample(event) {
+      audioPreview.seek(Number(event.target.value) || 0);
+    },
+
+    fmtSeconds(seconds) {
+      const total = Math.max(0, Math.round(Number(seconds) || 0));
+      return Math.floor(total / 60) + ":" + String(total % 60).padStart(2, "0");
     },
 
     /* 切角色/场景也是换一份表单：脏了就问。 */
@@ -287,11 +394,14 @@ function assetsPage() {
       this.detail = {};
       this.editing = false;
       this.message = "";
+      this.releaseMedia();
     },
 
-    /* 资产页也有同样的问题：改了一半切到别的资产，改动就没了。 */
+    /* 资产页也有同样的问题：改了一半切到别的资产，改动就没了。
+       只选了新图/新音频（U03）也是改动：文件选择计入未保存。 */
     get isDirty() {
       if (!this.editing) return false;
+      if (this.imageFile || this.audioFile) return true;
       try { return JSON.stringify(this.form) !== this.baselineForm; }
       catch { return true; }
     },
@@ -323,6 +433,7 @@ function assetsPage() {
       this.selected = name;
       this.editing = false;
       this.message = "";
+      this.releaseMedia();
       try {
         this.detail = await api.get(`/api/assets/${this.kind}/${encodeURIComponent(name)}`);
       } catch (error) {
@@ -333,6 +444,7 @@ function assetsPage() {
 
     startNew() {
       if (!this.confirmDiscard("新建资产")) return;
+      this.releaseMedia();
       this.selected = "";
       this.detail = {};
       this.editing = true;
@@ -346,6 +458,7 @@ function assetsPage() {
 
     startEdit() {
       if (!this.confirmDiscard("进入编辑")) return;
+      this.releaseMedia();
       this.editing = true;
       this.imageFile = null;
       this.audioFile = null;
@@ -362,16 +475,46 @@ function assetsPage() {
     cancel() {
       if (!this.confirmDiscard("取消编辑")) return;
       this.editing = false;
-      this.imageFile = null;
-      this.audioFile = null;
+      this.discardPicks();
+      this.releaseMedia();
     },
 
     pickImage(event) {
-      this.imageFile = event.target.files[0] || null;
+      const file = event.target.files[0] || null;
+      event.target.value = "";
+      if (!file) return;
+      if (this.imageObjectUrl) URL.revokeObjectURL(this.imageObjectUrl);
+      this.imageFile = file;
+      this.imageObjectUrl = URL.createObjectURL(file);
+    },
+
+    undoImagePick() {
+      if (this.imageObjectUrl) URL.revokeObjectURL(this.imageObjectUrl);
+      this.imageObjectUrl = "";
+      this.imageFile = null;
     },
 
     pickAudio(event) {
-      this.audioFile = event.target.files[0] || null;
+      const file = event.target.files[0] || null;
+      event.target.value = "";
+      if (!file) return;
+      audioPreview.stop();
+      if (this.audioObjectUrl) URL.revokeObjectURL(this.audioObjectUrl);
+      this.audioFile = file;
+      this.audioObjectUrl = URL.createObjectURL(file);
+    },
+
+    /* 保存前反悔：文件选择撤掉（U01/U03），原媒体原样保留。 */
+    undoAudioPick() {
+      audioPreview.stop();
+      if (this.audioObjectUrl) URL.revokeObjectURL(this.audioObjectUrl);
+      this.audioObjectUrl = "";
+      this.audioFile = null;
+    },
+
+    discardPicks() {
+      this.undoImagePick();
+      this.undoAudioPick();
     },
 
     /* 把一张图读成 dataURL：优先刚选的文件，其次已有资产图。 */
@@ -446,12 +589,14 @@ function assetsPage() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || response.statusText);
         this.editing = false;
+        this.discardPicks();
         await this.load();
         await this.open(data.name);
         // After the reload, not before: open() clears the message, so a
         // confirmation set beforehand was wiped before anyone could read it.
         this.message = `已保存：${data.name}（${data.status}）`;
       } catch (error) {
+        // 保存失败：表单和已选文件都保留（U03），改好再存。
         this.message = `保存失败：${error.message}`;
       }
     },
@@ -2940,8 +3085,10 @@ function videoPage() {
     executionState: "unknown",  /* 剧本的英文镜像跟不跟得上中文 */
     executionReason: "",
     staleOverride: false,       /* 明知镜像过期，仍要用旧版生成 */
+    preview: { key: "", playing: false, position: 0, duration: 0 },
 
     async init() {
+      audioPreview.listen((state) => { this.preview = state; });
       await this.loadScripts();
       // 从剧本页「用此剧本制作」过来时，URL 里带着剧本名。
       const wanted = new URLSearchParams(window.location.search).get("script");
@@ -2950,6 +3097,15 @@ function videoPage() {
         await this.loadScript();
       }
       await this.refreshCount();
+    },
+
+    playSample(key, src) {
+      audioPreview.toggle(key, src);
+    },
+
+    fmtSeconds(seconds) {
+      const total = Math.max(0, Math.round(Number(seconds) || 0));
+      return Math.floor(total / 60) + ":" + String(total % 60).padStart(2, "0");
     },
 
     async loadScripts() {
@@ -2978,8 +3134,35 @@ function videoPage() {
     },
 
     async onRoleAssetChange(role) {
+      audioPreview.stop();          // 换了人选，旧声音立刻停（U01）
       await this.loadAssetDetail(role.asset);
       await this.preview();
+    },
+
+    /* F08：按实际配音模式检查每个角色的媒体。参考配音必须有可用
+     * 样本（引擎要拿它生成声音）；出镜角色没图先提醒（有画面描述
+     * 兜底），不硬拦。绑定一变，这里随 assetDetails 自动失效重算。 */
+    roleReadiness(role) {
+      const problems = [];
+      const detail = (this.assetDetails[role.asset] || {});
+      if (this.scriptJson && this.scriptJson.audio_mode === "reference"
+          && !(detail.audios || []).length) {
+        problems.push({ kind: "audio", text: "缺参考声音样本（参考配音要用它）",
+                        fix: "/assets?kind=character&asset=" + encodeURIComponent(role.asset || "") });
+      }
+      if (role.presence === "on_screen" && detail.image === ""
+          && detail.name !== undefined) {
+        problems.push({ kind: "image", text: "没有立绘（将按剧本描述生成形象）",
+                        fix: "/assets?kind=character&asset=" + encodeURIComponent(role.asset || "") });
+      }
+      return problems;
+    },
+
+    get blockingProblems() {
+      if (!this.scriptJson || this.scriptJson.audio_mode !== "reference") return [];
+      return this.roles.filter((r) => r.asset)
+        .filter((r) => this.roleReadiness(r).some((p) => p.kind === "audio"))
+        .map((r) => r.name);
     },
 
     /* 名字像的角色资产，摆到前面当建议。 */
@@ -3053,8 +3236,24 @@ function videoPage() {
     },
 
     get canSubmit() {
-      return !!(this.script && this.roles.length && !this.missingRoles.length
-        && !this.submitting && !this.staleBlocked);
+      /* F08：提交按钮看的是真实的制作条件——角色接满、参考音齐、
+       * ComfyUI 在线、镜像没过期；每少一样，按钮自己说缺什么。 */
+      if (!this.script || !this.roles.length || this.submitting) return false;
+      if (this.missingRoles.length) return false;
+      if (this.blockingProblems.length) return false;
+      if (this.staleBlocked) return false;
+      return this.comfyOnline === true;
+    },
+
+    get submitLabel() {
+      if (this.submitting) return "提交中…";
+      if (this.missingRoles.length)
+        return "还差 " + this.missingRoles.length + " 个资产";
+      if (this.blockingProblems.length)
+        return "缺参考声音：" + this.blockingProblems.join("、");
+      if (this.staleBlocked) return "先处理上面的镜像问题";
+      if (this.comfyOnline === false) return "ComfyUI 未连接，不能渲染";
+      return "🎬 开始渲染";
     },
 
     /* 选中的剧本摊开：不然作者没法确认自己选对了没有。 */

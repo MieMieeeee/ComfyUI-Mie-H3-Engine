@@ -53,11 +53,52 @@
             <button class="btn danger" type="button" @click="remove()">🗑️ 删除</button>
           </div>
         </div>
-        <div class="preview-row">
-          <img class="preview-img" :src="detail.image || ''" alt=""
-               x-show="detail.image">
-          <p class="muted" x-show="!detail.image">没有图片。</p>
+        <!-- 全部图片的缩略图（U03）：点开放大，不再只给第一张。 -->
+        <div class="preview-row" x-show="(detail.images || []).length">
+          <template x-for="(img, i) in detail.images || []" :key="i">
+            <button class="thumb" type="button" @click="lightbox = img"
+                    :aria-label="'放大第 ' + (i + 1) + ' 张图'">
+              <img class="preview-img" :src="img" :alt="'第 ' + (i + 1) + ' 张图'">
+            </button>
+          </template>
         </div>
+        <p class="muted" x-show="!(detail.images || []).length">没有图片。</p>
+
+        <!-- 声音样本（U01）：全部可放，标序号和时长；没样本就明说。 -->
+        <div class="sample-list" x-show="kind === 'character'">
+          <span class="small"><strong>声音样本</strong>
+            <span class="muted" x-show="(detail.audios || []).length"
+                  x-text="'（' + detail.audios.length + ' 段；引擎按序号顺序使用）'"></span>
+          </span>
+          <template x-for="clip in detail.audios || []" :key="clip.url">
+            <div class="sample-row">
+              <button class="btn" type="button"
+                      @click="playSample('a:' + clip.url, clip.url)"
+                      :aria-label="'播放样本 ' + clip.index"
+                      x-text="preview.key === 'a:' + clip.url && preview.playing
+                        ? '⏸ 暂停' : '▶ 播放'"></button>
+              <span class="small" x-text="'样本 ' + clip.index"></span>
+              <span class="muted small"
+                    x-text="preview.key === 'a:' + clip.url
+                      ? fmtSeconds(preview.position) + ' / ' + fmtSeconds(preview.duration)
+                      : (clip.ext || '').toUpperCase()"></span>
+              <input class="sample-seek" type="range" min="0" step="0.1"
+                     :max="preview.duration || 0"
+                     :value="preview.key === 'a:' + clip.url ? preview.position : 0"
+                     @input="seekSample($event)"
+                     :disabled="preview.key !== 'a:' + clip.url || !preview.duration"
+                     :aria-label="'样本 ' + clip.index + ' 进度'">
+              <button class="btn" type="button" @click="replaySample()"
+                      :disabled="preview.key !== 'a:' + clip.url"
+                      aria-label="重播">↺</button>
+            </div>
+          </template>
+          <p class="muted small" x-show="!(detail.audios || []).length">
+            暂无声音样本——只有文字描述没法确认实际声音。
+            <button class="btn" type="button" @click="startEdit()">去上传声音样本</button>
+          </p>
+        </div>
+
         <dl class="meta-list">
           <dt>描述</dt><dd x-text="detail.description || '（空）'"></dd>
           <template x-if="kind === 'character'">
@@ -69,9 +110,6 @@
           </template>
           <dd x-show="kind === 'scene'" x-text="detail.ambience || '（空）'"></dd>
         </dl>
-        <p class="muted small" x-show="detail.audio_count">
-          <span x-text="detail.audio_count"></span> 段音色样本
-        </p>
       </div>
 
       <div class="card" x-show="editing">
@@ -98,14 +136,47 @@
           <span>环境音（英文）</span>
           <input class="input" x-model="form.ambience" placeholder="例如：Quiet room tone">
         </label>
+        <!-- 媒体的必填/保留规则按新建与编辑分开说（U03），
+             选了文件就有新旧对照、本地试听和撤销。 -->
         <label class="field">
-          <span x-text="kind === 'character' ? '立绘（留空则保留原图）' : '场景图（留空则保留原图）'"></span>
+          <span x-text="selected
+            ? (kind === 'character' ? '立绘（不选则保留现有图片）' : '场景图（不选则保留现有图片）')
+            : (kind === 'character' ? '立绘（新建必填）' : '场景图（新建必填）')"></span>
           <input class="input" type="file" accept="image/*" @change="pickImage($event)">
         </label>
+        <div class="media-compare" x-show="imageObjectUrl || detail.image">
+          <figure x-show="detail.image && imageObjectUrl">
+            <img class="preview-img" :src="detail.image" alt="现有图片">
+            <figcaption class="muted small">现有</figcaption>
+          </figure>
+          <figure x-show="imageObjectUrl">
+            <img class="preview-img" :src="imageObjectUrl" alt="新选的图片">
+            <figcaption class="muted small">将保存为新图</figcaption>
+          </figure>
+          <button class="btn" type="button" x-show="imageObjectUrl"
+                  @click="undoImagePick()">撤销本次选择</button>
+        </div>
         <label class="field" x-show="kind === 'character'">
-          <span>音色样本（留空则保留原样）</span>
+          <span x-text="selected
+            ? '音色样本（不选则保留现有样本；选了会替换全部）'
+            : '音色样本（新建必填）'"></span>
           <input class="input" type="file" accept="audio/*" @change="pickAudio($event)">
         </label>
+        <div class="media-compare" x-show="audioObjectUrl">
+          <p class="small" style="margin: 0">
+            将替换 <span x-text="detail.audio_count || 0"></span> 段现有样本。
+            先听一下确认没选错：
+          </p>
+          <div class="sample-row">
+            <button class="btn" type="button"
+                    @click="playSample('local-audio', audioObjectUrl)"
+                    x-text="preview.key === 'local-audio' && preview.playing
+                      ? '⏸ 暂停' : '▶ 试听新样本'"></button>
+            <span class="muted small" x-text="preview.key === 'local-audio'
+              ? fmtSeconds(preview.position) + ' / ' + fmtSeconds(preview.duration) : ''"></span>
+            <button class="btn" type="button" @click="undoAudioPick()">撤销本次选择</button>
+          </div>
+        </div>
 
         <!-- AI 补全：对标 auto 保存节点，只起草空字段 -->
         <div class="auto-box">
@@ -126,5 +197,11 @@
   <!-- 回执在两张卡片之外：编辑卡片保存后会被藏起来（editing=false），
        回执放里面就等于永远看不见。 -->
   <div class="result-box" x-show="message" x-text="message"></div>
+
+  <!-- 放大查看（U03）：点缩略图打开，Esc/点空白处关闭。 -->
+  <div class="lightbox" x-show="lightbox" @click="lightbox = ''"
+       @keydown.escape.window="lightbox = ''" role="dialog" aria-label="放大查看图片">
+    <img :src="lightbox" alt="放大查看">
+  </div>
 </section>
 {% endblock %}

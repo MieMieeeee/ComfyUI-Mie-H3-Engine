@@ -39,6 +39,11 @@
               <span x-text="r.name"></span>
               <span class="muted small" x-text="r.presence === 'on_screen' ? '（出镜）' : '（画外音）'"></span>
               <span class="badge err" x-show="!r.asset">未接资产</span>
+              <!-- F08：缺什么直接标在角色卡上，给出补齐入口 -->
+              <template x-for="(problem, pi) in (r.asset ? roleReadiness(r) : [])" :key="pi">
+                <span class="badge" :class="problem.kind === 'audio' ? 'err' : 'warn'"
+                      x-text="problem.text" :title="problem.text"></span>
+              </template>
             </span>
             <select class="input" x-model="r.asset" @change="onRoleAssetChange(r)">
               <option value="">— 选择资产 —</option>
@@ -51,11 +56,28 @@
                         x-text="s"></button>
               </template>
             </span>
-            <!-- 选中的人长什么样：接错人等于换了张脸 -->
+            <!-- 选中的人长什么样、听起来什么样：一张卡上核对（U01/F08） -->
             <span class="asset-preview" x-show="r.asset && assetDetails[r.asset]">
               <img class="preview-img" :src="(assetDetails[r.asset] || {}).image || ''" alt="">
               <span class="muted small"
                     x-text="((assetDetails[r.asset] || {}).description || '').slice(0, 80)"></span>
+              <span class="sample-row" x-show="r.asset">
+                <button class="btn" type="button"
+                        x-show="((assetDetails[r.asset] || {}).audios || []).length"
+                        @click="playSample('v:' + r.id, assetDetails[r.asset].audios[0].url)"
+                        x-text="preview.key === 'v:' + r.id && preview.playing
+                          ? '⏸ 暂停' : '▶ 试听'"></button>
+                <span class="muted small" x-show="preview.key === 'v:' + r.id"
+                      x-text="fmtSeconds(preview.position) + ' / ' + fmtSeconds(preview.duration)"></span>
+                <span class="muted small"
+                      x-show="r.asset && !((assetDetails[r.asset] || {}).audios || []).length">
+                  暂无声音样本
+                </span>
+                <template x-for="(problem, pi) in (r.asset ? roleReadiness(r) : [])" :key="'f' + pi">
+                  <a class="btn subtle" :href="problem.fix" target="_blank" rel="noopener"
+                     x-text="problem.kind === 'audio' ? '去上传声音样本' : '去传立绘'"></a>
+                </template>
+              </span>
             </span>
           </label>
         </template>
@@ -96,7 +118,7 @@
 
       <button class="btn primary wide" type="button" @click="submit()"
               :disabled="!canSubmit"
-              x-text="submitting ? '提交中…' : (missingRoles.length ? '还差 ' + missingRoles.length + ' 个资产' : (staleBlocked ? '先处理上面的镜像问题' : '🎬 开始渲染'))"></button>
+              x-text="submitLabel"></button>
       <div class="result-box" x-show="message" x-text="message"></div>
       <p class="muted small" x-show="message && message.indexOf('已排队') === 0">
         任务在制作历史页看进度和成片：<a href="/history">🗂️ 打开制作历史</a>

@@ -199,6 +199,25 @@ def planned_run_name(script_name: str, run_name: str = "") -> dict:
     }
 
 
+def _check_reference_audio(script: dict, role_assets: dict) -> None:
+    """Reference audio renders from the character's sample; no sample,
+    no voice. Checked here (not just on the page) because the asset may
+    have changed between the page's check and the submit (F08).
+    """
+    if not isinstance(script, dict) \
+            or script.get("audio_mode") != "reference":
+        return
+    for role in script.get("roles") or []:
+        asset = (role_assets or {}).get(role.get("id") or "") or ""
+        if not asset:
+            continue  # the missing-asset case is caught elsewhere
+        detail = library.get_character(asset)
+        if not detail.get("audios"):
+            raise ValueError(
+                "角色「%s」接的资产「%s」没有声音样本：参考配音要用它生成声音，"
+                "先去资产页上传。" % (role.get("name") or role.get("id"), asset))
+
+
 def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
            width: int = 960, height: int = 544, steps: int = 20,
            duration: int = 18, continue_run: bool = False,
@@ -244,6 +263,10 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
     # requests with the same name used to both pass the check and both
     # land in the queue, and they write one folder.
     with _submit_lock:
+        # F08: the page's readiness check is a moment in time - the asset
+        # may have changed since. Reference audio needs an actual sample
+        # per role, and that is knowable here, right before the queue.
+        _check_reference_audio(script["json"], role_assets)
         attempt = (original.get("attempt") or 1) if original \
             else next_attempt(script_name)
         if not original:

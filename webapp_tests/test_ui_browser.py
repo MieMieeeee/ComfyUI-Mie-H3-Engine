@@ -121,7 +121,8 @@ def page(web):
     ``screen.questions``.
     """
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = p.chromium.launch(
+            args=["--autoplay-policy=no-user-gesture-required"])
         screen = browser.new_page(viewport={"width": 1500, "height": 1000})
         screen.questions = []
         screen.answer = "yes"
@@ -800,7 +801,10 @@ def test_the_making_page_shows_a_script_with_repeated_lines(page, web):
     body = json.dumps({"json": json.dumps(script)}).encode("utf-8")
     request = urllib.request.Request(BASE + "/api/scripts", data=body,
                                      headers={"Content-Type": "application/json"})
-    urllib.request.urlopen(request, timeout=30).read()
+    try:
+        urllib.request.urlopen(request, timeout=30).read()
+    except urllib.error.HTTPError as exc:
+        raise AssertionError("script save rejected: %s" % exc.read()[:300]) from exc
 
     page.goto(BASE + "/video?script=" + urllib.parse.quote("重复台词"),
               wait_until="networkidle")
@@ -1612,3 +1616,171 @@ def test_the_shot_count_shown_is_the_shot_count_sent(page):
     assert script_call and script_call[0]["shot_count"] == 0
     # 摘要说明这是锁定条件而不是偏好。
     assert "锁定条件" in page.locator(".intake-card").inner_text() or True
+
+
+# --------------------------------------------------------------------------- #
+# Batch B browser coverage: listening, media protection, readiness
+# --------------------------------------------------------------------------- #
+
+def _wav_bytes(seconds=2.0):
+    """A longer sample: a quarter-second one ends before the assertion
+    can see it playing."""
+    import io
+    import wave
+    frames = int(seconds * 16000)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(16000)
+        handle.writeframes(bytes(2 * frames))
+    return buf.getvalue()
+
+
+def _api_put_character(name, with_audio=True, description="一个测试角色"):
+    """Create a character through the real endpoint (synthetic media)."""
+    import urllib.request
+    boundary = "----probe"
+    parts = []
+
+    def field(key, value):
+        parts.append(("--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n"
+                      % (boundary, key, value)).encode("utf-8"))
+
+    def media(key, filename, payload, mime):
+        parts.append(("--%s\r\nContent-Disposition: form-data; name=\"%s\"; "
+                      "filename=\"%s\"\r\nContent-Type: %s\r\n\r\n"
+                      % (boundary, key, filename, mime)).encode("utf-8")
+            + payload + b"\r\n")
+
+    field("name", name)
+    field("description", description)
+    field("voice", "male voice")
+    media("image", "portrait.png", png_bytes(), "image/png")
+    if with_audio:
+        media("audio", "sample.wav", _wav_bytes(), "audio/wav")
+    body = b"--" + boundary.encode() + b"--\r\n"
+    payload = b"".join(parts) + body
+    request = urllib.request.Request(
+        BASE + "/api/assets/character", data=payload, method="POST",
+        headers={"Content-Type": "multipart/form-data; boundary=" + boundary})
+    return json.loads(urllib.request.urlopen(request, timeout=30).read())
+
+
+def _open_asset(page, name):
+    page.goto(BASE + "/assets", wait_until="networkidle")
+    row = row_named(page, name)
+    assert row is not None, "asset %s not in the list" % name
+    row.click()
+    page.wait_for_timeout(600)
+
+
+def test_character_samples_play_and_say_when_there_are_none(page):
+    with_audio = _api_put_character("试听有声")
+    assert with_audio["status"] in ("created", "overwritten")
+    _api_put_character("试听无声", with_audio=False)
+    _open_asset(page, "试听有声")
+
+    row = page.locator(".sample-row", has_text="样本 1")
+    assert row.count() >= 1, "the sample list did not render"
+    # 按钮带 aria-label（播放样本 N），按可见文本定位更稳。
+    row.locator("button", has_text="▶ 播放").click()
+    page.wait_for_timeout(900)
+    # 播放中：按钮变暂停，且时长读出来了（1 秒的样本）。
+    row = page.locator(".sample-row", has_text="样本 1")
+    assert row.locator("button", has_text="⏸ 暂停").count() == 1
+    assert "0:02" in row.inner_text(), row.inner_text()
+    row.locator("button", has_text="⏸ 暂停").click()
+    page.wait_for_timeout(300)
+
+    # 无样本的角色：明说，并给上传入口。
+    _open_asset(page, "试听无声")
+    card = page.locator(".split-detail").inner_text()
+    assert "暂无声音样本" in card
+    assert page.get_by_role("button", name="去上传声音样本").count() == 1
+
+
+def test_a_picked_audio_previews_locally_and_can_be_undone(page):
+    _api_put_character("试听编辑")
+    _open_asset(page, "试听编辑")
+    page.get_by_role("button", name="✏️ 编辑").click()
+    page.wait_for_timeout(300)
+
+    inputs = page.locator("input[type=file][accept='audio/*']")
+    inputs.set_input_files(
+        [{"name": "new.wav", "mimeType": "audio/wav", "buffer": _wav_bytes()}])
+    page.wait_for_timeout(300)
+    # 选了文件：说要替换几段，能先听，也能撤销。
+    box = page.locator(".media-compare").filter(has_text="将替换")
+    assert "将替换 1 段现有样本" in box.inner_text()
+    box.get_by_role("button", name="▶ 试听新样本").click()
+    page.wait_for_timeout(700)
+    assert box.get_by_role("button", name="⏸ 暂停").count() == 1
+    box.get_by_role("button", name="撤销本次选择").click()
+    page.wait_for_timeout(300)
+    # x-show 只是隐藏：要按“可见”来断言撤销生效。
+    assert page.locator(".media-compare").filter(
+        has_text="将替换").filter(visible=True).count() == 0
+
+
+def test_only_picking_media_counts_as_unsaved_work(page):
+    """U03: replacing ONLY the audio (no text change) is still unsaved
+    work - switching assets asks, refusing keeps both the form and the
+    picked file."""
+    _api_put_character("媒体保护甲")
+    _api_put_character("媒体保护乙")
+    _open_asset(page, "媒体保护甲")
+    page.get_by_role("button", name="✏️ 编辑").click()
+    page.wait_for_timeout(300)
+
+    page.locator("input[type=file][accept='audio/*']").set_input_files(
+        [{"name": "new.wav", "mimeType": "audio/wav", "buffer": _wav_bytes()}])
+    page.wait_for_timeout(300)
+
+    # 只换了音频也算脏：切到另一份资产要问。
+    page.answer = "no"
+    row_named(page, "媒体保护乙").click()
+    page.wait_for_timeout(300)
+    assert page.questions, "switching with only a picked file did not ask"
+    assert "未保存的修改" in page.questions[-1]
+    # 拒绝后：还在编辑，文件选择也还在。
+    assert page.locator(".media-compare").filter(has_text="将替换").count() == 1
+
+
+def test_reference_audio_readiness_blocks_the_button(page):
+    """F08: a reference-audio script with a sample-less asset keeps
+    'start render' off, names who is missing it, and offers the fix."""
+    import urllib.request
+    from test_library import SCRIPT
+    # 一份 reference 配音的单角色剧本（走真校验，要真的合法）。
+    script = json.loads(json.dumps(SCRIPT))
+    script["name"] = "参考配音剧"
+    script["audio_mode"] = "reference"
+    # 角色名不动：source_script 与事件全等校验按名字走（改了名就配不上）。
+    body = json.dumps({"json": json.dumps(script)}).encode("utf-8")
+    request = urllib.request.Request(BASE + "/api/scripts", data=body,
+                                     headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(request, timeout=30).read()
+    except urllib.error.HTTPError as exc:
+        raise AssertionError("script save rejected: %s" % exc.read()[:300]) from exc
+    _api_put_character("无声主角", with_audio=False)
+    _api_put_character("有声主角", with_audio=True)
+
+    page.goto(BASE + "/video", wait_until="networkidle")
+    page.select_option("select.input >> nth=0", "参考配音剧")
+    page.wait_for_timeout(1200)
+    # 选无声资产：角色卡标出缺参考音，按钮说清是谁，且不可用。
+    page.locator(".roles-block select.input").first.select_option("无声主角")
+    page.wait_for_timeout(900)
+    assert "缺参考声音样本" in page.locator(".roles-block").inner_text()
+    button_text = page.locator("button.btn.primary.wide").inner_text().strip()
+    assert button_text.startswith("缺参考声音"), button_text
+    assert "去上传声音样本" in page.locator(".roles-block").inner_text()
+    assert page.locator("button.btn.primary.wide").is_disabled()
+
+    # 换有样本的资产：这道门过了（离线实例停在“未连接”而不是缺音）。
+    page.locator(".roles-block select.input").first.select_option("有声主角")
+    page.wait_for_timeout(900)
+    button_text = page.locator("button.btn.primary.wide").inner_text().strip()
+    assert "参考声音" not in button_text, button_text

@@ -12,6 +12,7 @@ from webapp import config
 from webapp.services import comfy, library
 
 from conftest import PNG_1x1
+from conftest import PNG_1x1, WAV_1S
 from test_library import SCRIPT
 
 
@@ -884,3 +885,65 @@ def test_a_rewrite_that_drops_the_lines_is_not_taken(client):
     assert "这是一句很长很长的台词" in fixed["json"]["source_script"], \
         "the author's line was thrown away"
     assert any("少了内容" in note for note in fixed["notes"]), fixed["notes"]
+
+
+# --------------------------------------------------------------------------- #
+# Batch B (usability remediation): listening, media protection, readiness
+# --------------------------------------------------------------------------- #
+
+def _make_character_with_audio(client, name, with_audio=True):
+    data = {"name": name, "description": "描述", "voice": "male voice",
+            "image": (io.BytesIO(PNG_1x1), "portrait.png")}
+    if with_audio:
+        data["audio"] = (io.BytesIO(WAV_1S), "sample.wav")
+    response = client.post("/api/assets/character", data=data,
+                           content_type="multipart/form-data")
+    assert response.status_code == 200, response.get_json()
+    return response.get_json()
+
+
+def test_character_detail_lists_playable_samples(client):
+    """U01: the detail names every sample with a playable URL, ordered
+    the way the engine loads them."""
+    _make_character_with_audio(client, "试听角色")
+    detail = client.get("/api/assets/character/试听角色").get_json()
+    assert detail["audio_count"] == 1
+    assert detail["audios"] and detail["audios"][0]["index"] == 1
+    assert detail["audios"][0]["url"].startswith("/library/characters/")
+    response = client.get(detail["audios"][0]["url"])
+    assert response.status_code == 200
+    assert response.data[:4] == b"RIFF"   # it really is the WAV file
+
+
+def test_a_character_without_samples_says_so(client):
+    _make_character_with_audio(client, "无声角色", with_audio=False)
+    detail = client.get("/api/assets/character/无声角色").get_json()
+    assert detail["audio_count"] == 0
+    assert detail["audios"] == []
+
+
+def test_the_render_refuses_reference_audio_without_samples(
+        client, monkeypatch):
+    """F08: the page's check is a moment in time - the queue itself
+    refuses a reference-audio render whose asset has no sample."""
+    from webapp.services import runner
+    _make_character_with_audio(client, "无声角色", with_audio=False)
+    _make_character_with_audio(client, "有声角色", with_audio=True)
+    # 一份 reference 配音的单角色剧本。
+    script = json.loads(json.dumps(SCRIPT))
+    script["audio_mode"] = "reference"
+    from webapp.services import library
+    monkeypatch.setattr(library, "get_storyboard",
+                        lambda name: {"json": script})
+    # 接到无样本资产：排队前拒绝，说清是谁缺。
+    with pytest.raises(ValueError, match="无声角色.*没有声音样本"):
+        runner.submit("测试剧本", {"character_1": "无声角色"},
+                      run_name="ref_audio_probe")
+    # 接到有样本资产：这道检查放行（后续管线错误与它无关）。
+    try:
+        runner.submit("测试剧本", {"character_1": "有声角色"},
+                      run_name="ref_audio_probe2")
+    except ValueError as exc:
+        assert "声音样本" not in str(exc)   # 不是这道检查拦的
+    except Exception:
+        pass   # ComfyUI 不在线等下游错误都算：这道检查过了就行

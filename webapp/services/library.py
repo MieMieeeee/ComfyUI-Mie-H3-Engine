@@ -121,19 +121,54 @@ def _png_data_url(png_bytes: bytes) -> str:
     return "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
 
 
+def _natural_key(name: str):
+    """Sort 02 after 1 the way the core library does (U01: the sample
+    list the page plays has to match the order the engine loads)."""
+    import re
+
+    return [int(part) if part.isdigit() else part.lower()
+            for part in re.split(r"(\d+)", name)]
+
+
+def _audio_entries(name: str, kind: str) -> list:
+    """The character's audio files as playable entries.
+
+    The bytes already come back from the loader, but the page needs a
+    URL per clip; the files sit under <library>/<kind>s/<name>/audio/
+    (legacy: next to the metadata) and the /library route serves them.
+    Ordered like the core loader orders them, so sample 1 on the page
+    is sample 1 to the engine.
+    """
+    import urllib.parse
+
+    root = pathlib.Path(str(library_dir())) / (kind + "s") / name
+    folder = root / "audio"
+    if not folder.is_dir():
+        folder = root
+    files = [p for p in sorted(folder.glob("*"),
+                               key=lambda p: _natural_key(p.name))
+             if p.suffix.lower() in (".wav", ".mp3") and p.is_file()]
+    base = "/library/%s/%s/audio/" % (kind + "s", urllib.parse.quote(name))
+    return [{"index": number, "ext": p.suffix.lstrip("."),
+             "url": base + urllib.parse.quote(p.name), "file": p.name}
+            for number, p in enumerate(files, 1)]
+
+
 def get_character(name: str) -> dict:
     """One character's metadata, its portrait and its audio clips."""
     data = _library.load_character(library_dir(), name, **_library_kwargs())
     images = data.get("png_bytes_list") or []
+    audios = _audio_entries(name, "character")
     return {
         "kind": "character",
         "name": data.get("name", name),
         "description": data.get("description", ""),
         "voice": data.get("voice", ""),
         "image_count": len(images),
-        "audio_count": len(data.get("audio_bytes_list") or []),
+        "audio_count": len(audios),
         "image": _png_data_url(images[0]) if images else "",
         "images": [_png_data_url(b) for b in images],
+        "audios": audios,
         "audio_exts": data.get("audio_exts") or [],
     }
 
