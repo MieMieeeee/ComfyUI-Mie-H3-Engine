@@ -653,3 +653,72 @@ def test_validate_writes_nothing_to_the_library(client):
     response = _post_validate(client)
     assert response.status_code == 200
     assert client.get("/api/scripts").get_json()["names"] == []
+
+
+# --------------------------------------------------------------------------- #
+# Batch A / F03: the confirmed picture reading feeds the event structuring
+# --------------------------------------------------------------------------- #
+
+_PICTURE_EVENTS_REPLY = json.dumps({
+    "roles": [
+        {"name": "年轻人", "presence": "on_screen", "position": "left"},
+        {"name": "橘猫", "presence": "on_screen", "position": "right"},
+    ],
+    "events": [
+        {"role": 0, "type": "dialogue", "text": "你好呀，小家伙。",
+         "language": "zh", "source": ""},
+        {"role": 1, "type": "action", "text": "橘猫蹭了蹭他的裤脚。",
+         "language": "zh", "source": ""},
+    ],
+}, ensure_ascii=False)
+
+
+def test_a_picture_only_reading_can_be_structured(client, monkeypatch):
+    """No text at all - the confirmed picture reading alone is enough
+    material, and nothing it produces counts as an addition (there is
+    no author text to be unfaithful to)."""
+    stub = ReadingStub(replies=[_PICTURE_EVENTS_REPLY])
+    response = _post_events(client, monkeypatch, stub, text="", reading={
+        "basis": "image", "caption": "",
+        "observed": ["图中可见一名穿蓝外套的年轻人蹲在厨房，旁边有一只橘猫。"],
+        "proposed": ["他可能是外卖员，正给这只猫送餐。"],
+        "conflicts": [],
+    })
+    assert response.status_code == 200, response.get_json()
+    events = response.get_json()["events"]
+    assert events["mode"] == "proposed"
+    assert [r["name"] for r in events["roles"]] == ["年轻人", "橘猫"]
+    assert not any(e["addition"] for e in events["events"])
+    # 确认过的图片信息进了提示词，且与台词保护分开表述。
+    user = stub.calls[0][1]["content"]
+    assert "穿蓝外套的年轻人蹲在厨房" in user
+    assert "外卖员" in user
+    assert "台词保留只看作者原文" in user
+
+
+def test_conflict_rulings_travel_into_the_events_prompt(client, monkeypatch):
+    stub = ReadingStub(replies=[_PICTURE_EVENTS_REPLY])
+    response = _post_events(client, monkeypatch, stub, text="一男一女在天台聊天。",
+                            reading={
+        "basis": "image", "caption": "",
+        "observed": [], "proposed": [],
+        "conflicts": [
+            {"field": "人物", "image": "图中是两名女性", "text": "原文是一男一女",
+             "resolution": "text", "override": ""},
+            {"field": "地点", "image": "图中是厨房", "text": "原文是天台",
+             "resolution": "manual", "override": "故事发生在天台"},
+        ],
+    })
+    assert response.status_code == 200, response.get_json()
+    user = stub.calls[0][1]["content"]
+    assert "以文字为准" in user
+    assert "故事发生在天台" in user
+    # 原文仍是原文（台词保护对象）。
+    assert "作者写的原文" in user and "一男一女在天台聊天" in user
+
+
+def test_events_with_neither_text_nor_reading_is_refused(client, monkeypatch):
+    stub = ReadingStub(replies=[_PICTURE_EVENTS_REPLY])
+    response = _post_events(client, monkeypatch, stub, text="  ")
+    assert response.status_code == 400
+    assert not stub.calls

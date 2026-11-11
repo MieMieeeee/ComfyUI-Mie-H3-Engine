@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import subprocess
 
 from flask import Flask, abort, jsonify, render_template, request, send_from_directory
 
@@ -26,9 +27,37 @@ from webapp.services import (autodraft, comfy, history, intake, library, llm,
                              riskfix, runname, runner, theme, versions)
 
 
+def _app_version() -> str:
+    """The commit this code was started from.
+
+    A long-lived workbench process can outlive the files it serves: the
+    operator swaps the checkout, the browser fetches the NEW static
+    files, but the OLD process still answers with OLD routes and OLD
+    templates (F01). The version is computed once at startup and shown
+    by the health check, stamped on every static URL and printed by the
+    startup self-check, so a mixed instance can be TOLD apart instead
+    of guessed at.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(config.REPO_ROOT),
+             "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5)
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return "dev"
+
+
+#: This process's version - fixed at import, like the routes it serves.
+APP_VERSION = _app_version()
+
+
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 MB uploads
+    app.jinja_env.globals["app_version"] = APP_VERSION
     config.ensure_dirs()
 
     # The library resolves its root from this variable. It is read at call
@@ -98,10 +127,12 @@ def create_app() -> Flask:
     @app.route("/api/health")
     def api_health():
         """Who am I? The engine's node asks this to find out whether the
-        web app is already up before it starts one."""
+        web app is already up before it starts one - and the operator
+        asks it whether the process matches the files on disk."""
         return jsonify({
             "status": "ok",
             "app": "comfyui-mie-web",
+            "version": APP_VERSION,
             "plugin_root": str(config.PLUGIN_ROOT),
         })
 
@@ -514,7 +545,8 @@ def create_app() -> Flask:
             else:
                 result = {"code": "ok",
                           "events": intake.structure_events(
-                              str(data.get("text") or ""))}
+                              str(data.get("text") or ""),
+                              data.get("reading") or None)}
         except intake.IntakeError as exc:
             return jsonify({"code": exc.code, "error": str(exc),
                             "request_id": request_id,

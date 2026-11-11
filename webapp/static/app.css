@@ -612,3 +612,11 @@ textarea.input.code {
 .intake-asset-form, .intake-asset-done {
   padding: 8px; border: 1px solid var(--border-subtle); border-radius: 8px;
 }
+
+/* 批次 A：上一份事件稿的提示与选择横幅。 */
+.intake-keepdraft, .intake-draft-choice {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding: 8px; margin: 0 0 8px;
+  border: 1px dashed var(--border-subtle); border-radius: 8px;
+}
+.intake-draft-choice { border-style: solid; }

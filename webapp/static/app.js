@@ -1432,6 +1432,8 @@ function scriptsPage() {
           caption: "", hasCaption: false, needsCaption: false,
           reading: null, readBusy: false, readError: "",
           eventDraft: null,   /* {mode, roles, events, unmapped, design} */
+          previousDraft: null,  /* 重新整理前的上一份（含作者的改动，F05） */
+          showDraftChoice: false,
           validateState: { ok: null, errors: [], checked: false },
           form: { name: "新剧本", shot_count: 0, language: "zh",
                   target_duration_seconds: 20, audio_mode: "generated",
@@ -1539,8 +1541,9 @@ function scriptsPage() {
       }
       if (s.step === "understanding" || s.step === "events") {
         return { label: "返回修改素材", run: () => {
+          // 事件稿留在会话里（F05）：素材可以改，回来时上一份还在，
+          // 只有明确的“重新开始”才清空。
           s.step = "material";
-          s.eventDraft = null;
           this.intakeTouch();
         } };
       }
@@ -1587,6 +1590,22 @@ function scriptsPage() {
     get intakeValidateOk() {
       const state = this.intake && this.intake.validateState;
       return !!(state && state.checked && state.ok);
+    },
+
+    /* 生成前的一句确认摘要（U05）：把实际会生效的条件说成人话。 */
+    get intakePrefaceSummary() {
+      const s = this.intake;
+      if (!s) return "";
+      const shots = Number(s.form.shot_count) === 0
+        ? "分镜自动" : "分镜 " + s.form.shot_count + " 镜";
+      const policy = s.textPolicy === "keep"
+        ? "台词逐字保留" : "允许改编情节和台词";
+      const mode = this.intakeNeedsEvents ? "按已确认的角色和事件生成" : "按点子自由创作";
+      return mode + "：" + policy + "，约 "
+        + (Number(s.form.target_duration_seconds) || 20) + " 秒，" + shots
+        + "（"
+        + (this.intakeNeedsEvents ? "这些是锁定条件" : "时长和分镜是偏好，模型可调整")
+        + "）";
     },
 
     intakeCaptionInput() {
@@ -1855,31 +1874,40 @@ function scriptsPage() {
     /* ---------------- 事件稿：整理、编辑、预检 ------------------------- */
 
     /* 整理角色与事件。已经像事件行的文字在服务端走共享解析器直接
-       解析（不经过模型）；普通故事文字由模型给建议，补写单独标出。 */
+       解析（不经过模型）；普通故事文字由模型给建议，补写单独标出。
+       有图片理解时把确认过的信息一并带上（F03）。 */
     async intakeStructure() {
       const s = this.intake;
       if (!s || s.readBusy) return;
-      if (!s.text.trim()) {
-        s.readError = "文字是空的：写一段故事再整理。";
+      if (!s.text.trim() && !this.intakeReadingSummary().trim()) {
+        s.readError = "素材是空的：写一段文字，或放一张图并解读后再整理。";
         return;
       }
       s.readError = "";
       s.step = "reading";
       s.readBusy = true;
       const seq = ++s.requestSeq;
+      // 重新整理时，上一份（可能带着作者的改动）留作可换回的版本（F05）。
+      s.previousDraft = s.eventDraft
+        ? JSON.parse(JSON.stringify(s.eventDraft)) : null;
       try {
-        const { status, data } = await this.intakePost("/api/scripts/intake", {
+        const body = {
           request_id: "req-" + seq + "-" + Date.now(),
           revision: s.revision, action: "events",
           text: s.text,
-        });
+          reading: this.intakeConfirmedReading(),
+        };
+        const { status, data } = await this.intakePost(
+          "/api/scripts/intake", body);
         if (seq !== s.requestSeq) return;
         if (status !== 200 || !data.events) {
           s.step = s.reading ? "understanding" : "material";
           s.readError = data.error || "整理失败了";
+          s.previousDraft = null;
           return;
         }
         this.intakeAdoptEvents(data.events);
+        s.showDraftChoice = !!s.previousDraft;
         s.step = "events";
         s.validateState = { ok: null, errors: [], checked: false };
         this.intakeStash();
@@ -1891,6 +1919,66 @@ function scriptsPage() {
       } finally {
         s.readBusy = false;
       }
+    },
+
+    /* 明确的重新开始：只有用户点了才清掉事件稿（F05）。 */
+    intakeRestartEvents() {
+      const s = this.intake;
+      if (!s) return;
+      s.eventDraft = null;
+      s.previousDraft = null;
+      s.showDraftChoice = false;
+      s.validateState = { ok: null, errors: [], checked: false };
+      this.intakeTouch();
+    },
+
+    /* 换回上一份（含作者改动的那份）；预检随之重跑。 */
+    intakeUsePreviousDraft() {
+      const s = this.intake;
+      if (!s || !s.previousDraft) return;
+      s.eventDraft = s.previousDraft;
+      s.previousDraft = null;
+      s.showDraftChoice = false;
+      s.validateState = { ok: null, errors: [], checked: false };
+      this.intakeTouch();
+      this.intakeValidate();
+    },
+
+    /* 就用新整理的这份，旧的不要了。 */
+    intakeKeepNewDraft() {
+      const s = this.intake;
+      if (!s) return;
+      s.previousDraft = null;
+      s.showDraftChoice = false;
+      this.intakeTouch();
+    },
+
+    /* 已确认的图片理解，结构化传给事件整理（F03）：不要拼进原文
+       （原文是台词保护的对象），作为独立的上下文字段。 */
+    intakeConfirmedReading() {
+      const s = this.intake;
+      const reading = s && s.reading;
+      if (!reading) return null;
+      return {
+        basis: reading.basis || "",
+        caption: s.caption || "",
+        observed: (reading.observed || []).map((o) => o.text).filter(Boolean),
+        proposed: (reading.proposed || []).map((p) => p.text).filter(Boolean),
+        conflicts: (reading.conflicts || [])
+          .filter((c) => c.resolution)
+          .map((c) => ({
+            field: c.field, image: c.image, text: c.text,
+            resolution: c.resolution, override: c.override || "",
+          })),
+      };
+    },
+
+    /* 给“素材是否够整理”看的摘要文本（纯图也可整理，F03）。 */
+    intakeReadingSummary() {
+      const confirmed = this.intakeConfirmedReading();
+      if (!confirmed) return "";
+      const parts = confirmed.observed.concat(confirmed.proposed);
+      return parts.join(" ");
     },
 
     /* 服务端的事件稿落进会话：角色保 ui_id，事件保角色序号。 */
@@ -2224,7 +2312,7 @@ function scriptsPage() {
         body = {
           mode: "concept", concept,
           name: s.form.name || "新剧本",
-          shot_count: Number(s.form.shot_count) || 2,
+          shot_count: Number(s.form.shot_count) || 0,
           language: s.form.language,
           target_duration_seconds: Number(s.form.target_duration_seconds) || 20,
           audio_mode: s.form.audio_mode,
@@ -2338,6 +2426,8 @@ function scriptsPage() {
           conflicts: s.reading.conflicts,
         } : null,
         eventDraft: s.eventDraft,
+        previousDraft: s.previousDraft,
+        showDraftChoice: s.showDraftChoice,
         design: s.design,
         form: s.form,
         candidate: null,   /* 候选不暂存：它要么载入，要么重来 */
@@ -2384,10 +2474,17 @@ function scriptsPage() {
       if (meta.eventDraft && Array.isArray(meta.eventDraft.events)) {
         s.eventDraft = meta.eventDraft;
       }
+      if (meta.previousDraft && Array.isArray(meta.previousDraft.events)) {
+        s.previousDraft = meta.previousDraft;
+        s.showDraftChoice = !!meta.showDraftChoice;
+      }
       if (meta.design) s.design = Object.assign(s.design, meta.design);
       s.form = Object.assign(s.form, meta.form || {});
       s.step = s.eventDraft ? "events"
         : (meta.reading ? "understanding" : "material");
+      // 恢复完成就自己预检（F04）：主按钮从“预检中…”走到可生成或
+      // 明确错误，不需要用户去找“重新预检”。
+      if (s.step === "events") this.intakeValidate();
       if (meta.reading && Array.isArray(meta.reading.conflicts)) {
         s.reading.conflicts = meta.reading.conflicts.map((c) => ({
           id: c.id, field: c.field || "", image: c.image || "",

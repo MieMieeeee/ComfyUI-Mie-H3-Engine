@@ -113,6 +113,15 @@
           <!-- 素材：文字 + 可选图片。reading 忙碌时原样保留。 -->
           <div class="intake-material"
                x-show="intake.step === 'material' || intake.step === 'reading'">
+            <!-- 返回素材时上一份事件稿还在（F05）；重新开始是唯一清空的路 -->
+            <div class="intake-keepdraft" x-show="intake.eventDraft">
+              <p class="small" style="margin: 0">
+                上一份事件稿还在（<span x-text="intakeVisibleEvents.length"></span>
+                条，含你的改动）：再整理会给出新旧两份的选择。
+              </p>
+              <button class="btn" type="button"
+                      @click="intakeRestartEvents()">🗑 重新开始（清空事件稿）</button>
+            </div>
             <label class="field">
               <span>文字（一段点子、一个故事或几句台词草稿都行）</span>
               <textarea class="input" rows="4" x-model="intake.text"
@@ -348,6 +357,19 @@
           <!-- 事件稿：角色卡 + 事件行 + 未分配片段 + 整体设计 + 预检 -->
           <template x-if="intake.step === 'events' && intake.eventDraft">
             <div class="intake-events">
+              <!-- 重新整理后：上一份（带作者改动）与新建议之间的明确选择（F05） -->
+              <div class="intake-draft-choice" x-show="intake.showDraftChoice">
+                <p class="small" style="margin: 0 0 6px">
+                  这是按当前素材重新整理的<b>新建议</b>。你上一份改过的稿子（角色、台词、
+                  顺序和补写采用状态）完整保留着，可以一键换回：
+                </p>
+                <div class="job-actions">
+                  <button class="btn primary" type="button"
+                          @click="intakeUsePreviousDraft()">沿用上一份（含我的改动）</button>
+                  <button class="btn" type="button"
+                          @click="intakeKeepNewDraft()">就用这份新建议</button>
+                </div>
+              </div>
               <p class="muted small" x-show="intake.eventDraft.mode === 'parsed'">
                 原文已经是角色事件行：直接按共享解析器读入，没有经过模型改写。
               </p>
@@ -399,15 +421,19 @@
                 <template x-for="(event, index) in intakeVisibleEvents" :key="event.ui_id">
                   <div class="intake-event">
                     <span class="intake-event-no" x-text="index + 1"></span>
-                    <select class="input intake-event-role" :value="event.role"
-                            @change="intakeSetEvent(event, 'role', Number($event.target.value))"
+                    <select class="input intake-event-role"
+                            @change="intakeSetEvent(event, 'role', Number($event.target.value)); intakeTouchEvents()"
                             :aria-label="'事件 ' + (index + 1) + ' 角色'">
+                      <!-- 选项由内部 x-for 生成：select 的 value 在选项就绪
+                           前设置会被浏览器丢弃（F02），所以选中态写在每个
+                           option 上，渲染完成即正确。 -->
                       <template x-for="(role, rIndex) in intake.eventDraft.roles" :key="role.ui_id">
-                        <option :value="rIndex" x-text="(rIndex + 1) + '·' + (role.name || '未命名')"></option>
+                        <option :value="rIndex" :selected="rIndex === event.role"
+                                x-text="(rIndex + 1) + '·' + (role.name || '未命名')"></option>
                       </template>
                     </select>
-                    <select class="input intake-event-type" :value="event.type"
-                            @change="intakeSetEvent(event, 'type', $event.target.value)"
+                    <select class="input intake-event-type" x-model="event.type"
+                            @change="intakeTouchEvents()"
                             :aria-label="'事件 ' + (index + 1) + ' 类型'">
                       <option value="dialogue">台词</option>
                       <option value="action">动作</option>
@@ -418,8 +444,8 @@
                               @change="intakeTouchEvents()"
                               :class="{ 'input-err': intakeEventError(index) }"
                               :aria-label="'事件 ' + (index + 1) + ' 内容'"></textarea>
-                    <select class="input intake-event-lang" :value="event.language"
-                            @change="intakeSetEvent(event, 'language', $event.target.value)"
+                    <select class="input intake-event-lang" x-model="event.language"
+                            @change="intakeTouchEvents()"
                             :aria-label="'事件 ' + (index + 1) + ' 语言'">
                       <option value="zh">zh</option>
                       <option value="en">en</option>
@@ -558,9 +584,17 @@
                        @change="intakeTouch()">
               </label>
               <label class="field">
-                <span>段数（希望切成几镜）</span>
-                <input class="input" type="number" min="1" max="20"
-                       x-model.number="intake.form.shot_count" @change="intakeTouch()">
+                <span>段数（分镜数）</span>
+                <!-- 0 是“自动”（模型按内容定）：不再把 0 显示成数字（U05），
+                     两条生成路径都把选择原样传给服务端。 -->
+                <select class="input" @change="intake.form.shot_count = Number($event.target.value); intakeTouch()"
+                        :aria-label="'段数（分镜数），当前 ' + (intake.form.shot_count === 0 ? '自动' : intake.form.shot_count + ' 镜')">
+                  <option value="0" :selected="intake.form.shot_count === 0">自动</option>
+                  <template x-for="n in 20" :key="n">
+                    <option :value="n" :selected="intake.form.shot_count === n"
+                            x-text="n + ' 镜'"></option>
+                  </template>
+                </select>
               </label>
               <label class="field">
                 <span>语言</span>
@@ -613,6 +647,12 @@
               </p>
             </div>
           </template>
+
+          <!-- 生成前的确认摘要（U05）：说清这次生成实际按什么条件走 -->
+          <p class="muted small" style="margin: 4px 0 0"
+             x-show="['material', 'understanding', 'events'].includes(intake.step)
+                     && (intake.text.trim() || intake.reading || intake.image)"
+             x-text="intakePrefaceSummary"></p>
 
           <div class="auto-actions">
             <button class="btn primary" type="button"

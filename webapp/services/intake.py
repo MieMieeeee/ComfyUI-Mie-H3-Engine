@@ -483,18 +483,21 @@ def _parse_model_events(raw: str, text: str) -> dict:
             language = "zh"
         source = str(row.get("source") or "").strip()
         span = None
-        if source:
+        if source and text:
             found = text.find(source, cursor)
             if found < 0:              # maybe it appears earlier
                 found = text.find(source)
             if found >= 0:
                 span = [found, found + len(source)]
                 cursor = max(cursor, found + len(source))
+        # 没有原文时（纯图片整理）就不存在“补写”：一切都是建议，
+        # 由 mode=proposed 表达；有原文时，认领不到片段的才算补写。
         events.append({
             "ui_id": "e%d_%d" % (number + 1, len(events) + 1),
             "role_ui_id": "r%d" % (index + 1),
             "type": kind, "text": body[:2000], "language": language,
-            "span": span, "addition": span is None,
+            "span": span,
+            "addition": bool(text) and span is None,
         })
         if span:
             spans.append(span)
@@ -502,22 +505,68 @@ def _parse_model_events(raw: str, text: str) -> dict:
             "unmapped": _mapped_pieces(text, spans)}
 
 
-def structure_events(text: str) -> dict:
-    """Turn the author's text into an editable event list.
+def _reading_context_block(reading: dict) -> str:
+    """The confirmed picture understanding as prompt context (F03).
+
+    The author's TEXT stays the protected source for lines that must be
+    kept verbatim; the picture facts and creative suggestions travel as
+    their own labelled block so the model cannot blur them into
+    dialogue the author never typed.
+    """
+    if not isinstance(reading, dict):
+        return ""
+    blocks = []
+    observed = [str(t or "").strip() for t in reading.get("observed") or []
+                if str(t or "").strip()]
+    proposed = [str(t or "").strip() for t in reading.get("proposed") or []
+                if str(t or "").strip()]
+    caption = str(reading.get("caption") or "").strip()
+    if caption:
+        blocks.append("作者提供的人工图注（人工来源，当作图片事实）：" + caption)
+    if observed:
+        blocks.append("已确认的图片可见信息：\n" + "\n".join(
+            "- " + t for t in observed))
+    if proposed:
+        blocks.append("已确认的创作建议（猜想，作者已核对）：\n" + "\n".join(
+            "- " + t for t in proposed))
+    for conflict in reading.get("conflicts") or []:
+        if not isinstance(conflict, dict):
+            continue
+        how = str(conflict.get("resolution") or "")
+        if how == "text":
+            blocks.append("图文冲突裁定（以文字为准）：图：%s／文：%s"
+                          % (conflict.get("image") or "", conflict.get("text") or ""))
+        elif how == "image":
+            blocks.append("图文冲突裁定（以图片为准）：%s"
+                          % (conflict.get("image") or ""))
+        elif how == "manual":
+            blocks.append("图文冲突裁定（作者改写）：%s"
+                          % (conflict.get("override") or ""))
+    if not blocks:
+        return ""
+    return "图片与理解（不是作者写的台词；台词保留只看作者原文）：\n" \
+           + "\n".join(blocks)
+
+
+def structure_events(text: str, reading: dict = None) -> dict:
+    """Turn the author's materials into an editable event list.
 
     Already-labelled lines go through the shared parser with no model
     (the author wrote event lines; nobody rewrites them). Ordinary
-    prose gets model PROPOSALS - every event carries the source piece
+    prose - or a PICTURE with its confirmed reading and no text at all
+    (F03) - gets model PROPOSALS: every event carries the source piece
     it came from, and pieces nobody claimed are listed so the author
     can assign, mark as scene notes, or drop the keep-mark.
     """
     text = str(text or "").strip()
-    if not text:
-        raise IntakeError("bad_request", "文字是空的：写一段故事再整理", 400)
     if len(text) > 30000:
         raise IntakeError("bad_request", "文字太长：最多 30000 字", 400)
+    context = _reading_context_block(reading)
+    if not text and not context:
+        raise IntakeError("bad_request",
+                          "素材是空的：写一段文字，或放一张图并解读后再整理", 400)
 
-    parsed = try_labelled_parse(text)
+    parsed = try_labelled_parse(text) if text else None
     if parsed is not None:
         roles, events, spans = parsed
         ui_roles = _ui_roles(roles)
@@ -536,7 +585,14 @@ def structure_events(text: str) -> dict:
         }
 
     connector = _connector()
-    user_text = "整理这段故事文字：\n\n" + text
+    parts = ["整理这份素材，产出角色和事件稿。"]
+    if text:
+        parts.append("作者写的原文（要保留的台词以此为准）：\n" + text)
+    if context:
+        parts.append(context)
+    if not text:
+        parts.append("（作者没有写文字，只提供了上面的图片信息。）")
+    user_text = "\n\n".join(parts)
     try:
         raw = connector.invoke([
             {"role": "system", "content": _EVENTS_SYSTEM},

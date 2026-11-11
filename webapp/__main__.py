@@ -25,12 +25,28 @@ if _PACKAGE_PARENT not in sys.path:
     sys.path.insert(0, _PACKAGE_PARENT)
 
 from webapp import config  # noqa: E402
-from webapp.flask_app import app  # noqa: E402
+from webapp.flask_app import APP_VERSION, app  # noqa: E402
+
+
+def _self_check() -> None:
+    """Say what this process is, and that its routes made it in.
+
+    A workbench process outliving its files is the F01 failure: the
+    startup log is where the operator compares what STARTED against
+    what is on disk.
+    """
+    expected = ("/api/health", "/api/scripts/intake",
+                "/api/scripts/intake/validate", "/api/scripts/auto")
+    have = {rule.rule for rule in app.url_map.iter_rules()}
+    missing = [route for route in expected if route not in have]
+    print("[webapp] version %s · routes %s" % (
+        APP_VERSION, "ok" if not missing else "MISSING %s" % missing))
 
 
 def main() -> int:
     """Run the web front end. Single process, no reloader: a second
     process would fight over the render queue."""
+    _self_check()
     app.run(host=config.WEB_HOST, port=config.WEB_PORT,
             debug=config.WEB_DEBUG, use_reloader=False, threaded=True)
     return 0

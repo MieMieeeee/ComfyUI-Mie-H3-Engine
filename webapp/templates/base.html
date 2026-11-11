@@ -8,14 +8,16 @@
   <meta name="color-scheme" content="dark">
   <title>{% block title %}ComfyUI-Mie 短剧工作台{% endblock %}</title>
 
-  <!-- 主题 CSS: tokens.css (:root 变量 + 共享组件) -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <!-- 主题 CSS: tokens.css (:root 变量 + 共享组件)。静态资源带进程版本：
+       文件换了而进程还是旧的（F01）时，页面会拿到新资源 + 旧模板，
+       版本戳让这种混装一眼可查。 -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css', v=app_version) }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=app_version) }}">
   <style id="theme-injector">{{ theme_css_content | safe }}</style>
 
   <!-- app.js 必须先加载, 再加载 Alpine (Alpine 启动时需要 appShell 已定义) -->
-  <script defer src="{{ url_for('static', filename='app.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='alpine.min.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='app.js', v=app_version) }}"></script>
+  <script defer src="{{ url_for('static', filename='alpine.min.js', v=app_version) }}"></script>
 </head>
 <body data-theme="{{ theme_id }}" data-tab="{{ active }}" x-data="appShell()">
   <header class="app-shell-header">
@@ -54,6 +56,7 @@
 
   <footer class="app-shell-footer">
     <span>数据真源：ComfyUI-Mie-Craft / ComfyUI-Mie-LLM · 主题复用 ComfyUIWebToRunWorkflow</span>
+    <span class="muted small" title="本进程启动时的代码版本（健康检查 /api/health 同值）">v{{ app_version }}</span>
   </footer>
 </body>
 </html>

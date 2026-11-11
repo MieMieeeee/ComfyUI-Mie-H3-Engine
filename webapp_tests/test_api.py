@@ -22,6 +22,28 @@ def test_every_page_serves(client):
         assert b"ComfyUI-Mie" in response.data, path
 
 
+def test_the_health_check_names_the_running_version(client):
+    """F01: a long-lived workbench can outlive its files. The health
+    answer has to say WHICH code the process is, so a mixed instance
+    (new static files, old routes) can be told apart."""
+    data = client.get("/api/health").get_json()
+    assert data["status"] == "ok"
+    version = data.get("version") or ""
+    assert version, "the health check must carry the process's version"
+
+
+def test_static_files_carry_the_process_version(client):
+    """The page stamps its static URLs with the SAME version the health
+    check reports: files swapped under a live process stop matching the
+    stamp, and the mismatch is visible from the page source alone."""
+    body = client.get("/").data.decode("utf-8")
+    import re
+    stamped = re.findall(r"/static/app\.js\?v=([^\"']+)", body)
+    assert stamped, "static references must carry a version stamp"
+    assert "v%s" % stamped[0] in body  # the footer shows the same one
+    assert client.get("/static/app.js").status_code == 200
+
+
 def test_the_theme_is_in_the_page(client):
     body = client.get("/").data.decode("utf-8")
     assert "theme-injector" in body

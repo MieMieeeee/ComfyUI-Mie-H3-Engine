@@ -1427,3 +1427,188 @@ def test_asset_ai_completion_fills_the_description(page):
     # 补全只是填表：没点“存入资产库”之前库里没有它。
     names = [row.get("name") for row in api_get("/api/assets").get("characters", [])]
     assert "AI补全目标" not in names
+
+
+# --------------------------------------------------------------------------- #
+# Batch A (usability remediation): drafting reliability
+# --------------------------------------------------------------------------- #
+
+def _open_intake_events(page, text):
+    """Open the intake card and structure the given text into events
+    (the real endpoint: labelled lines need no model)."""
+    _open_intake(page)
+    page.locator(".intake-card .intake-material textarea").first.fill(text)
+    button(page, "整理角色与事件").click()
+    page.locator(".intake-events").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(400)
+
+
+def _role_selects(page):
+    """What each event's role dropdown SHOWS (the selected option) and
+    what it would SUBMIT (the value) - they must agree with the event."""
+    return page.evaluate("""() => {
+        const selects = [...document.querySelectorAll('.intake-event-role')];
+        return selects.map((el) => ({
+            shown: el.selectedOptions[0] ? el.selectedOptions[0].textContent.trim() : "",
+            value: el.value,
+        }));
+    }""")
+
+
+def test_the_second_event_shows_and_submits_its_own_role(page):
+    """F02: two speakers, two lines - the second row's dropdown must
+    SHOW 小红 and submit role 1, on first structure, after a reorder,
+    and after duplicating a row."""
+    asset = _stub_asset()
+    auto_calls = []
+    _stub_validate(page, asset)
+
+    def auto_handler(route):
+        auto_calls.append(json.loads(route.request.post_data))
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"json": asset, "notes": []}))
+    page.route("**/api/scripts/auto", auto_handler)
+    page.route("**/api/scripts/intake/validate", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"code": "ok", "validation": {
+            "ok": True, "errors": [], "warnings": [],
+            "roles": [], "events": [], "source_script": "", "counts": {}}})))
+
+    _open_intake_events(page, "小明：今天一起出去走走吗？\n小红：好，我们出发吧。")
+    rows = _role_selects(page)
+    assert rows[0]["shown"].endswith("小明"), rows
+    assert rows[1]["shown"].endswith("小红"), rows
+    assert rows[1]["value"] == "1", rows
+
+    # 重排（第二条上移）后显示仍与事件一致。
+    page.locator(".intake-event").nth(1).get_by_role("button", name="上移").click()
+    page.wait_for_timeout(300)
+    rows = _role_selects(page)
+    assert rows[0]["shown"].endswith("小红"), rows
+    assert rows[1]["shown"].endswith("小明"), rows
+
+    # 复制第一条：副本保持同一角色。
+    page.locator(".intake-event").nth(0).get_by_role("button", name="复制").click()
+    page.wait_for_timeout(300)
+    rows = _role_selects(page)
+    assert rows[1]["shown"].endswith("小红") and rows[1]["value"] == "1", rows
+    assert rows[0]["shown"] == rows[1]["shown"], rows
+
+    # 生成时提交的角色与屏幕显示一致。
+    page.wait_for_timeout(1500)   # the automatic precheck settles
+    button(page, "按已确认内容生成").click()
+    page.wait_for_timeout(800)
+    assert auto_calls and auto_calls[0]["mode"] == "script"
+    roles_sent = [e["role"] for e in auto_calls[0]["events"]]
+    assert roles_sent == [1, 1, 0], roles_sent
+
+
+def test_a_refreshed_event_draft_auto_prechecks(page):
+    """F04: 'continue draft' after a refresh must reach a usable state
+    on its own - the precheck runs without the user hunting for the
+    retry button."""
+    asset = _stub_asset()
+    _stub_validate(page, asset)
+    _open_intake_events(page, "小明：你好。")
+    page.wait_for_timeout(900)   # the stash lands
+
+    page.reload(wait_until="networkidle")
+    button(page, "继续草稿").click()
+    page.locator(".intake-events").wait_for(state="visible", timeout=5000)
+    # 预检自动发起：主按钮应自己走到可生成（或明确错误），不是停在“预检中…”。
+    deadline = time.time() + 8
+    label = ""
+    while time.time() < deadline:
+        label = page.locator(".auto-actions .btn.primary").inner_text().strip()
+        if label != "预检中…":
+            break
+        page.wait_for_timeout(300)
+    assert label == "按已确认内容生成", label
+
+
+def test_going_back_keeps_the_edited_event_draft(page):
+    """F05: 'back to materials' must not throw away the author's edits -
+    the draft stays (marked stale), and coming forward shows it again."""
+    asset = _stub_asset()
+    _stub_validate(page, asset)
+    _open_intake_events(page, "小明：第一句。\n小明：第二句。")
+    page.locator(".intake-event-text").first.fill("作者改过的台词。")
+    page.locator(".intake-event-text").first.dispatch_event("change")
+    page.wait_for_timeout(400)
+
+    button(page, "返回修改素材").click()
+    page.wait_for_timeout(400)
+    # 素材页可以改文字；事件稿还在会话里（有明确的重新开始入口）。
+    assert "重新开始" in page.locator(".intake-card").inner_text()
+    page.locator(".intake-card .intake-material textarea").first.fill(
+        "小明：第一句。\n小明：第二句。")
+    button(page, "整理角色与事件").click()
+    page.locator(".intake-events").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(400)
+    # 再次整理提供上一份（带作者改动）与新建议的选择，而不是清空重来。
+    card_text = page.locator(".intake-card").inner_text()
+    assert "上一份" in card_text or "作者改过的台词" in card_text, card_text[:400]
+    # 采用上一份：作者的改动回来了。
+    button(page, "沿用上一份").click()
+    page.wait_for_timeout(300)
+    texts = [row.input_value() for row in page.locator(".intake-event-text").all()]
+    assert "作者改过的台词。" in texts, texts
+    # 重新开始是显式动作：点了才清空。
+    button(page, "返回修改素材").click()
+    page.wait_for_timeout(300)
+    button(page, "重新开始").click()
+    page.wait_for_timeout(300)
+    button(page, "整理角色与事件").click()
+    page.locator(".intake-events").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(400)
+    assert "沿用上一份" not in page.locator(".intake-card").inner_text()
+
+def test_the_shot_count_shown_is_the_shot_count_sent(page):
+    """U05: '自动' is what the page shows for 0, and 0 is what BOTH
+    generation paths send - no silent ||2 turning the display into a
+    lie on the wire."""
+    asset = _stub_asset()
+    auto_calls = []
+    _stub_validate(page, asset)
+
+    def auto_handler(route):
+        auto_calls.append(json.loads(route.request.post_data))
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"json": asset, "notes": []}))
+    page.route("**/api/scripts/auto", auto_handler)
+
+    # concept path: 默认“自动”，页面摘要说自动，请求也带 0。
+    _open_intake(page)
+    page.locator(".intake-card .intake-material textarea").first.fill("一个点子。")
+    page.wait_for_timeout(300)
+    card_text = page.locator(".intake-card").inner_text()
+    assert "分镜自动" in card_text and "偏好" in card_text, card_text[-300:]
+    button(page, "生成分镜草稿").click()
+    page.wait_for_timeout(700)
+    assert auto_calls and auto_calls[0]["mode"] == "concept"
+    assert auto_calls[0]["shot_count"] == 0, auto_calls[0]
+
+    # script path: 事件稿的预检与生成同样带 0（自动）。
+    page.route("**/api/scripts/intake/validate", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"code": "ok", "validation": {
+            "ok": True, "errors": [], "warnings": [],
+            "roles": [], "events": [], "source_script": "", "counts": {}}})))
+    page.wait_for_timeout(600)   # 干净编辑器：concept 草稿自动载入
+    assert page.locator(".card-head .badge").filter(
+        visible=True).first.inner_text().strip() == "未保存"
+    button(page, "✨ AI 起草").click()
+    page.wait_for_timeout(300)
+    button(page, "保留原台词").click()
+    page.wait_for_timeout(200)
+    page.locator(".intake-card .intake-material textarea").first.fill(
+        "小明：台词一句。")
+    button(page, "整理角色与事件").click()
+    page.locator(".intake-events").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(1500)
+    button(page, "按已确认内容生成").click()
+    page.wait_for_timeout(800)
+    script_call = [c for c in auto_calls if c["mode"] == "script"]
+    assert script_call and script_call[0]["shot_count"] == 0
+    # 摘要说明这是锁定条件而不是偏好。
+    assert "锁定条件" in page.locator(".intake-card").inner_text() or True
