@@ -333,13 +333,13 @@ function assetsPage() {
     /* U01/U03：本地试听与预览的临时地址（撤销/保存后回收）。 */
     audioObjectUrl: "",
     imageObjectUrl: "",
-    preview: { key: "", playing: false, position: 0, duration: 0 },
+    audioPreviewState: { key: "", playing: false, position: 0, duration: 0 },
     lightbox: "",
 
     async init() {
       await this.load();
       // 本页接管统一播放器；离开或切换时把本地文件引用一起释放。
-      audioPreview.listen((state) => { this.preview = state; });
+      audioPreview.listen((state) => { this.audioPreviewState = state; });
       window.addEventListener("beforeunload", (event) => {
         this.releaseMedia();
         if (!this.isDirty) return;
@@ -1865,7 +1865,120 @@ function scriptsPage() {
       s.assetForm = {
         kind: "character", name: "", target: "", description: "", voice: "",
         busy: false, error: "", saved: null, drafting: false,
+        exists: null,           /* 同名的现有资产（F06），等作者决定 */
+        croppedBlob: null,      /* 多人物图裁出来的区域（F07） */
+        croppedUrl: "",
+        cropOpen: false,
       };
+    },
+
+    /* ---------------- 多人物图的区域裁剪（F07） ------------------------ */
+
+    /* 打开裁剪：图铺满 canvas，拖一个矩形就是要保存的区域。 */
+    async intakeOpenCrop() {
+      const s = this.intake;
+      const form = s && s.assetForm;
+      if (!form || !s.imageBlob) return;
+      form.cropOpen = true;
+      await this.$nextTick;
+      const canvas = document.querySelector(".intake-card .crop-canvas");
+      if (!canvas) return;
+      const bitmap = await createImageBitmap(s.imageBlob);
+      const maxEdge = 360;   // 展示用尺寸；裁剪按原图坐标算
+      const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      canvas._bitmap = bitmap;
+      canvas._scale = scale;
+      canvas._rect = null;   // [x0, y0, x1, y1] 展示坐标
+      this.intakeDrawCrop(canvas);
+
+      const state = { dragging: false, x0: 0, y0: 0 };
+      const position = (event) => {
+        const box = canvas.getBoundingClientRect();
+        return [event.clientX - box.left, event.clientY - box.top];
+      };
+      const down = (event) => {
+        state.dragging = true;
+        [state.x0, state.y0] = position(event);
+        canvas._rect = [state.x0, state.y0, state.x0, state.y0];
+        this.intakeDrawCrop(canvas);
+      };
+      const move = (event) => {
+        if (!state.dragging) return;
+        const [x, y] = position(event);
+        canvas._rect = [state.x0, state.y0, x, y];
+        this.intakeDrawCrop(canvas);
+      };
+      const up = () => { state.dragging = false; };
+      if (canvas._wired !== true) {
+        canvas._wired = true;
+        canvas.addEventListener("pointerdown", down);
+        canvas.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+      }
+    },
+
+    intakeDrawCrop(canvas) {
+      const context = canvas.getContext("2d");
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      if (canvas._bitmap) context.drawImage(canvas._bitmap, 0, 0,
+        canvas.width, canvas.height);
+      if (canvas._rect) {
+        const [x0, y0, x1, y1] = canvas._rect;
+        context.save();
+        context.fillStyle = "rgba(0,0,0,0.45)";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(canvas._bitmap,
+          Math.min(x0, x1) / canvas._scale, Math.min(y0, y1) / canvas._scale,
+          Math.abs(x1 - x0) / canvas._scale, Math.abs(y1 - y0) / canvas._scale,
+          Math.min(x0, x1), Math.min(y0, y1),
+          Math.abs(x1 - x0), Math.abs(y1 - y0));
+        context.strokeStyle = "#7dd3fc";
+        context.lineWidth = 2;
+        context.strokeRect(Math.min(x0, x1), Math.min(y0, y1),
+          Math.abs(x1 - x0), Math.abs(y1 - y0));
+        context.restore();
+      }
+    },
+
+    async intakeApplyCrop() {
+      const s = this.intake;
+      const form = s && s.assetForm;
+      const canvas = document.querySelector(".intake-card .crop-canvas");
+      if (!form || !canvas || !canvas._rect || !canvas._bitmap) return;
+      const [x0, y0, x1, y1] = canvas._rect;
+      const scale = canvas._scale;
+      const left = Math.max(0, Math.round(Math.min(x0, x1) / scale));
+      const top = Math.max(0, Math.round(Math.min(y0, y1) / scale));
+      const width = Math.max(1, Math.round(Math.abs(x1 - x0) / scale));
+      const height = Math.max(1, Math.round(Math.abs(y1 - y0) / scale));
+      if (width < 8 || height < 8) {
+        form.error = "选的区域太小了：拖一个大一点的框。";
+        return;
+      }
+      const out = document.createElement("canvas");
+      out.width = width;
+      out.height = height;
+      out.getContext("2d").drawImage(canvas._bitmap, left, top, width, height,
+        0, 0, width, height);
+      const blob = await new Promise((resolve) =>
+        out.toBlob(resolve, "image/jpeg", 0.9));
+      if (!blob) return;
+      if (form.croppedUrl) URL.revokeObjectURL(form.croppedUrl);
+      form.croppedBlob = blob;
+      form.croppedUrl = URL.createObjectURL(blob);
+      form.cropOpen = false;
+      form.error = "";
+    },
+
+    intakeUndoCrop() {
+      const s = this.intake;
+      const form = s && s.assetForm;
+      if (!form) return;
+      if (form.croppedUrl) URL.revokeObjectURL(form.croppedUrl);
+      form.croppedBlob = null;
+      form.croppedUrl = "";
     },
 
     async intakeDraftAssetFields() {
@@ -1894,7 +2007,7 @@ function scriptsPage() {
       }
     },
 
-    async intakeSaveAsset() {
+    async intakeSaveAsset(overwrite = false) {
       const s = this.intake;
       const form = s && s.assetForm;
       if (!form || form.busy) return;      // 重复点击只有一次提交
@@ -1908,28 +2021,52 @@ function scriptsPage() {
       }
       form.busy = true;
       form.error = "";
+      form.exists = null;
       try {
+        // 参考目标组装进唯一的 description（F07）：后端读同名第一个
+        // 字段，append 两次会把目标丢掉。
+        let description = form.description.trim();
+        if (form.target.trim()) {
+          description += "\n（参考目标：" + form.target.trim() + "）";
+        }
+        const image = form.croppedBlob || s.imageBlob;
         const body = new FormData();
         body.append("name", form.name.trim());
-        body.append("description", form.description);
+        body.append("description", description);
         if (form.kind === "character") body.append("voice", form.voice);
-        if (form.target.trim()) {
-          // 多人物图要写清这图当谁的参考：跟描述一起入库可追溯。
-          body.append("description",
-            form.description + (form.description ? "\n" : "")
-            + "（参考目标：" + form.target.trim() + "）");
-        }
-        if (s.imageBlob) body.append("image", s.imageBlob, "intake-reference.jpg");
+        // “另存”按创建走（F06）：同名是 409 决策，不是静默覆盖。
+        if (!overwrite) body.append("on_exists", "create");
+        if (image) body.append("image", image,
+          form.croppedBlob ? "intake-reference-cropped.jpg" : "intake-reference.jpg");
         const response = await fetch("/api/assets/" + form.kind, {
           method: "POST", body,
         });
         const data = await response.json().catch(() => ({}));
+        if (response.status === 409) {
+          // 同名：把现有资产摆出来，改名或明确覆盖，作者决定。
+          form.exists = data.existing || { name: data.name || form.name };
+          form.error = "";
+          return;
+        }
         if (!response.ok) {
           form.error = data.error || "保存失败了";
           return;
         }
-        form.saved = { kind: form.kind === "scene" ? "场景" : "角色",
-                       name: form.name.trim() };
+        // 读回确认（F07）：保存的说“存进去了”，读回来的才算数。
+        let readBack = "";
+        try {
+          const detail = await api.get(
+            "/api/assets/" + form.kind + "/" + encodeURIComponent(form.name.trim()));
+          readBack = detail.description || "";
+        } catch { readBack = ""; }
+        const targetSaved = !form.target.trim()
+          || (readBack && readBack.indexOf(form.target.trim()) >= 0);
+        form.saved = {
+          kind: form.kind === "scene" ? "场景" : "角色",
+          name: form.name.trim(),
+          targetOk: targetSaved,
+          target: form.target.trim(),
+        };
       } catch (error) {
         form.error = error.message;
       } finally {
@@ -3085,10 +3222,13 @@ function videoPage() {
     executionState: "unknown",  /* 剧本的英文镜像跟不跟得上中文 */
     executionReason: "",
     staleOverride: false,       /* 明知镜像过期，仍要用旧版生成 */
-    preview: { key: "", playing: false, position: 0, duration: 0 },
+    audioPreviewState: { key: "", playing: false, position: 0, duration: 0 },
+    sceneAsset: "",          /* U02：场景资产选择，接线进计划的 scene_1 */
+    scenes: [],
+    sceneDetails: {},
 
     async init() {
-      audioPreview.listen((state) => { this.preview = state; });
+      audioPreview.listen((state) => { this.audioPreviewState = state; });
       await this.loadScripts();
       // 从剧本页「用此剧本制作」过来时，URL 里带着剧本名。
       const wanted = new URLSearchParams(window.location.search).get("script");
@@ -3097,6 +3237,33 @@ function videoPage() {
         await this.loadScript();
       }
       await this.refreshCount();
+    },
+
+    /* 场景资产（U02）：选中后计划的 scene_1 槽用它，剧本自己的 scene
+     * 描述会被覆盖——引擎的接线规则，页面上明说。 */
+    async loadScenes() {
+      if (this.scenes.length) return;
+      try {
+        const assets = await api.get("/api/assets");
+        this.scenes = (assets.scenes || [])
+          .filter((x) => x && x.name).map((x) => x.name);
+      } catch { this.scenes = []; }
+    },
+
+    async loadSceneDetail(name) {
+      if (!name || this.sceneDetails[name]) return;
+      try {
+        this.sceneDetails[name] = await api.get(
+          "/api/assets/scene/" + encodeURIComponent(name));
+      } catch (error) {
+        this.sceneDetails[name] = { name, image: "", description: "", ambience: "" };
+      }
+    },
+
+    async onSceneChange() {
+      audioPreview.stop();
+      await this.loadSceneDetail(this.sceneAsset);
+      await this.preview();
     },
 
     playSample(key, src) {
@@ -3114,6 +3281,8 @@ function videoPage() {
         this.scripts = data.names || [];
         const assets = await api.get("/api/assets");
         this.characters = (assets.characters || [])
+          .filter((x) => x && x.name).map((x) => x.name);
+        this.scenes = (assets.scenes || [])
           .filter((x) => x && x.name).map((x) => x.name);
       } catch (error) {
         this.message = `读取失败：${error.message}`;
@@ -3317,7 +3486,7 @@ function videoPage() {
       try {
         const data = await api.post(
           `/api/scripts/${encodeURIComponent(this.script)}/plan`,
-          { role_assets: this.roleAssets() });
+          { role_assets: this.roleAssets(), scene_asset: this.sceneAsset });
         this.planPreview = (data.requirements || [])
           .map((r) => `${r.socket}: ${r.kind} ${r.name || "(未接线)"}`
             + `${r.required ? " [必填]" : ""}${r.note ? " — " + r.note : ""}`)
@@ -3345,6 +3514,7 @@ function videoPage() {
         const record = await api.post("/api/render/submit", {
           script: this.script,
           role_assets: this.roleAssets(),
+          scene_asset: this.sceneAsset,
           run_name: this.runName,
           width: this.width, height: this.height,
           steps: this.steps, duration: this.duration,

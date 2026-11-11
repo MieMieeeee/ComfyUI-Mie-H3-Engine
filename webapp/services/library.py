@@ -234,7 +234,8 @@ def to_wav_bytes(raw: bytes) -> bytes:
 
 
 def save_character(name: str, description: str = None, voice: str = None,
-                   image_raw: bytes = None, audio_raw: bytes = None) -> dict:
+                   image_raw: bytes = None, audio_raw: bytes = None,
+                   on_exists: str = "upsert") -> dict:
     """Create or update a character.
 
     ``image_raw`` / ``audio_raw`` of None mean "keep what is on disk", so
@@ -254,6 +255,8 @@ def save_character(name: str, description: str = None, voice: str = None,
             description = current.get("description", "")
         if voice is None:
             voice = current.get("voice", "")
+    if on_exists == "create":
+        _refuse_existing("character", name)
     png_bytes = None
     if image_raw is not None:
         png_bytes = [to_png_bytes(image_raw)]
@@ -265,13 +268,46 @@ def save_character(name: str, description: str = None, voice: str = None,
         png_bytes_list=png_bytes, wav_bytes_list=wav_bytes, **_library_kwargs())
 
 
+class AssetExistsError(FileExistsError):
+    """A same-named asset is already in the library (F06).
+
+    Raised only by the CREATE semantics - the caller meant to add
+    something new, and the existing asset must not be touched before
+    the author has decided what to do about the clash.
+    """
+
+    def __init__(self, kind: str, name: str, detail: dict):
+        super().__init__(
+            "%s「%s」已经存在" % ("角色" if kind == "character" else "场景", name))
+        self.kind = kind
+        self.name = name
+        self.detail = detail
+
+
+def _refuse_existing(kind: str, name: str) -> None:
+    """Create semantics: a same-named asset is a decision, not a write."""
+    folder = pathlib.Path(str(library_dir())) / (kind + "s") / name
+    if folder.is_dir():
+        try:
+            detail = (get_character(name) if kind == "character"
+                      else get_scene(name))
+        except Exception:  # noqa: BLE001 - the clash is the fact
+            detail = {}
+        raise AssetExistsError(kind, name, detail)
+
+
 def save_scene(name: str, description: str, ambience: str = None,
-               image_raw: bytes = None) -> dict:
+               image_raw: bytes = None, on_exists: str = "upsert") -> dict:
     """Create or update a scene.
 
     ``ambience`` of None keeps the stored value; an empty string clears
     it. That is the library's convention, not the usual one.
+    ``on_exists='create'`` refuses a same-named asset instead of
+    overwriting it (F06): the new-and-save flows mean CREATE, and a
+    silent overwrite loses the author's previous asset.
     """
+    if on_exists == "create":
+        _refuse_existing("scene", name)
     png_bytes = None
     if image_raw is not None:
         png_bytes = [to_png_bytes(image_raw)]

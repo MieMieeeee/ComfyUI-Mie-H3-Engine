@@ -221,7 +221,7 @@ def _check_reference_audio(script: dict, role_assets: dict) -> None:
 def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
            width: int = 960, height: int = 544, steps: int = 20,
            duration: int = 18, continue_run: bool = False,
-           continue_from: str = "") -> dict:
+           continue_from: str = "", scene_asset: str = "") -> dict:
     """Build the workflow for a script and queue it.
 
     Returns the job record. The render itself takes minutes; the caller
@@ -295,7 +295,8 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
             graph = workflow.build(
                 script_name, script["json"], role_assets, run_name=effective,
                 width=width, height=height, steps=steps, duration=duration,
-                library_dir=snapshot_dir)
+                library_dir=snapshot_dir,
+                scene_asset=(original or {}).get("scene_asset") or scene_asset)
             result = comfy.submit(graph, client_id=client_id)
         except Exception:
             _release(effective)
@@ -312,6 +313,7 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
         "attempt": attempt,
         "continued": bool(continue_run),
         "role_assets": role_assets,
+        "scene_asset": scene_asset,
         "submitted_at": _now(),
         "status": "queued",
         "error": "",
@@ -651,7 +653,8 @@ def _inputs_changed(record: dict) -> list:
         return []
 
 
-def plan_preview(script_name: str, role_assets: dict[str, str]) -> dict:
+def plan_preview(script_name: str, role_assets: dict[str, str],
+                 scene_asset: str = "") -> dict:
     """The plan a run WOULD use, without running anything.
 
     The plan is assembled by the same builder the render uses, so what the
@@ -659,7 +662,8 @@ def plan_preview(script_name: str, role_assets: dict[str, str]) -> dict:
     """
     script = library.get_storyboard(script_name)
     graph = workflow.build(
-        script_name, script["json"], role_assets, run_name="preview")
+        script_name, script["json"], role_assets, run_name="preview",
+        scene_asset=scene_asset)
     plan_node = next(
         (n for n in graph.values()
          if n["class_type"].endswith("ChainPlanModern|MieH3")), None)

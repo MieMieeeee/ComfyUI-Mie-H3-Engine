@@ -947,3 +947,102 @@ def test_the_render_refuses_reference_audio_without_samples(
         assert "声音样本" not in str(exc)   # 不是这道检查拦的
     except Exception:
         pass   # ComfyUI 不在线等下游错误都算：这道检查过了就行
+
+
+# --------------------------------------------------------------------------- #
+# Batch C: reference assets - create semantics, target read-back, scene wiring
+# --------------------------------------------------------------------------- #
+
+def test_create_semantics_refuses_a_same_named_character(client):
+    """F06: the save-as flow means CREATE - a same-named asset is a 409
+    with the existing one described, not a silent overwrite."""
+    _make_character_with_audio(client, "同名角色")
+    before = client.get("/api/assets/character/同名角色").get_json()
+    response = client.post(
+        "/api/assets/character",
+        data={"name": "同名角色", "description": "新的描述",
+              "voice": "another voice", "on_exists": "create"},
+        content_type="multipart/form-data")
+    assert response.status_code == 409, response.get_json()
+    body = response.get_json()
+    assert body["code"] == "exists"
+    assert body["existing"]["description"] == "描述"
+    # 原资产原封不动。
+    after = client.get("/api/assets/character/同名角色").get_json()
+    assert after["description"] == before["description"]
+    assert after["voice"] == before["voice"]
+
+
+def test_create_semantics_refuses_a_same_named_scene(client):
+    response = client.post(
+        "/api/assets/scene",
+        data={"name": "客厅", "description": "第一份", "ambience": "quiet",
+              "image": (io.BytesIO(PNG_1x1), "scene.png")},
+        content_type="multipart/form-data")
+    assert response.status_code == 200, response.get_json()
+    clash = client.post(
+        "/api/assets/scene",
+        data={"name": "客厅", "description": "第二份", "on_exists": "create"},
+        content_type="multipart/form-data")
+    assert clash.status_code == 409
+    kept = client.get("/api/assets/scene/客厅").get_json()
+    assert kept["description"] == "第一份"
+
+
+def test_explicit_overwrite_still_works_for_the_decided_flow(client):
+    """The old upsert default is untouched (edit flows), and saying
+    overwrite on purpose does overwrite."""
+    _make_character_with_audio(client, "覆盖角色")
+    response = client.post(
+        "/api/assets/character",
+        data={"name": "覆盖角色", "description": "改过的描述",
+              "voice": "new voice"},
+        content_type="multipart/form-data")
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "overwritten"
+    assert client.get("/api/assets/character/覆盖角色").get_json()[
+        "description"] == "改过的描述"
+
+
+def test_the_scene_asset_wires_into_the_plan_graph(plugin_root):
+    """U02: a chosen scene becomes a LoadAsset node feeding the plan's
+    scene_1 socket; without a choice nothing changes (old requests)."""
+    from webapp.services import library, workflow
+    script = json.loads(json.dumps(SCRIPT))
+    graph = workflow.build("测试剧本", script, {"character_1": "甲"},
+                           run_name="scene_probe")
+    # 链路 preset 本来就有 Scene Prompt 等节点：按生成的资产节点号判断。
+    assert workflow._ID_SCENE not in graph, "no scene loader expected"
+
+    library.save_scene("天台", "夜晚的天台", ambience="wind",
+                       image_raw=PNG_1x1)
+    graph = workflow.build("测试剧本", script, {"character_1": "甲"},
+                           run_name="scene_probe", scene_asset="天台")
+    plan = graph[workflow._ID_PLAN]
+    assert plan["inputs"]["scene_1"] == [workflow._ID_SCENE, 5]
+    scene_node = graph[workflow._ID_SCENE]
+    assert scene_node["class_type"] == "LoadAssetV2|Mie"
+    assert scene_node["inputs"]["kind"] == "scene"
+    assert scene_node["inputs"]["name"] == "天台"
+    # The graph still verifies against the same rules (webapp 拼的图要用
+    # ComfyUI 自己的校验验——计划 §10 的老规矩)。
+    assert workflow.build("测试剧本", script, {"character_1": "甲"},
+                          scene_asset="不存在的场景")  # build 不查库，接线层查
+
+
+def test_a_scene_asset_choice_travels_to_the_plan_preview(client, monkeypatch):
+    from webapp.services import runner, workflow
+    calls = {}
+    original = workflow.build
+
+    def spy(script_name, script_json, role_assets, **kwargs):
+        calls["scene"] = kwargs.get("scene_asset", "")
+        return original(script_name, script_json, role_assets, **kwargs)
+
+    monkeypatch.setattr(runner.workflow, "build", spy)
+    client.post("/api/scripts", json={"json": json.dumps(SCRIPT)})
+    response = client.post("/api/scripts/测试剧本/plan",
+                           json={"role_assets": {"character_1": "甲"},
+                                 "scene_asset": "天台"})
+    assert response.status_code == 200, response.get_json()
+    assert calls["scene"] == "天台"

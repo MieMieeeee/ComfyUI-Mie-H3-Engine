@@ -75,21 +75,21 @@
               <button class="btn" type="button"
                       @click="playSample('a:' + clip.url, clip.url)"
                       :aria-label="'播放样本 ' + clip.index"
-                      x-text="preview.key === 'a:' + clip.url && preview.playing
+                      x-text="audioPreviewState.key === 'a:' + clip.url && audioPreviewState.playing
                         ? '⏸ 暂停' : '▶ 播放'"></button>
               <span class="small" x-text="'样本 ' + clip.index"></span>
               <span class="muted small"
-                    x-text="preview.key === 'a:' + clip.url
-                      ? fmtSeconds(preview.position) + ' / ' + fmtSeconds(preview.duration)
+                    x-text="audioPreviewState.key === 'a:' + clip.url
+                      ? fmtSeconds(audioPreviewState.position) + ' / ' + fmtSeconds(audioPreviewState.duration)
                       : (clip.ext || '').toUpperCase()"></span>
               <input class="sample-seek" type="range" min="0" step="0.1"
-                     :max="preview.duration || 0"
-                     :value="preview.key === 'a:' + clip.url ? preview.position : 0"
+                     :max="audioPreviewState.duration || 0"
+                     :value="audioPreviewState.key === 'a:' + clip.url ? audioPreviewState.position : 0"
                      @input="seekSample($event)"
-                     :disabled="preview.key !== 'a:' + clip.url || !preview.duration"
+                     :disabled="audioPreviewState.key !== 'a:' + clip.url || !audioPreviewState.duration"
                      :aria-label="'样本 ' + clip.index + ' 进度'">
               <button class="btn" type="button" @click="replaySample()"
-                      :disabled="preview.key !== 'a:' + clip.url"
+                      :disabled="audioPreviewState.key !== 'a:' + clip.url"
                       aria-label="重播">↺</button>
             </div>
           </template>
@@ -170,10 +170,10 @@
           <div class="sample-row">
             <button class="btn" type="button"
                     @click="playSample('local-audio', audioObjectUrl)"
-                    x-text="preview.key === 'local-audio' && preview.playing
+                    x-text="audioPreviewState.key === 'local-audio' && audioPreviewState.playing
                       ? '⏸ 暂停' : '▶ 试听新样本'"></button>
-            <span class="muted small" x-text="preview.key === 'local-audio'
-              ? fmtSeconds(preview.position) + ' / ' + fmtSeconds(preview.duration) : ''"></span>
+            <span class="muted small" x-text="audioPreviewState.key === 'local-audio'
+              ? fmtSeconds(audioPreviewState.position) + ' / ' + fmtSeconds(audioPreviewState.duration) : ''"></span>
             <button class="btn" type="button" @click="undoAudioPick()">撤销本次选择</button>
           </div>
         </div>

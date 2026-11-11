@@ -31,6 +31,7 @@ _ID_SCRIPT = "900"
 _ID_PLAN = "901"
 _ID_SLOTS = "902"
 _ID_ROSTER = "903"
+_ID_SCENE = "908"
 _ID_ASSET_BASE = 910
 
 
@@ -59,13 +60,17 @@ def build(script_name: str, script_json: dict,
           run_name: str = "",
           width: int = 960, height: int = 544,
           steps: int = 20, duration: int = 18,
-          workflow: dict = None, library_dir: str = "") -> dict:
+          workflow: dict = None, library_dir: str = "",
+          scene_asset: str = "") -> dict:
     """The API-format workflow for one run.
 
     ``role_assets`` maps a role id (``character_1``) to the asset name
     wired into that slot. ``library_dir`` is where the script loader
     reads from - the snapshot library, so a queued run renders the
     script that was submitted, not the one in the library by then.
+    ``scene_asset`` wires a scene asset into the plan's scene_1 slot
+    (U02): the scene's picture and ambience override the script's own
+    scene copy, exactly as the wired characters do for their slots.
     """
     nodes = json.loads(json.dumps(workflow if workflow is not None else _preset()))
     roles = script_roles(script_json)
@@ -110,6 +115,13 @@ def build(script_name: str, script_json: dict,
     plan_inputs = {"storyboard": [_ID_SCRIPT, 0]}
     for index, (role, node_id) in enumerate(asset_nodes, 1):
         plan_inputs["character_%d" % index] = [node_id, 5]
+    scene_name = (scene_asset or "").strip()
+    if scene_name:
+        nodes[_ID_SCENE] = _node(
+            "LoadAssetV2|Mie", {"kind": "scene", "library_dir": "",
+                                "name": scene_name},
+            "场景资产 · Load %s" % scene_name, mienodes)
+        plan_inputs["scene_1"] = [_ID_SCENE, 5]
     nodes[_ID_PLAN] = _node(
         "MieH3ScriptToPlan", plan_inputs,
         "剧本转计划 · Script → Plan (MieH3)", engine)

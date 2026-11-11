@@ -1773,10 +1773,10 @@ def test_reference_audio_readiness_blocks_the_button(page):
     # 选无声资产：角色卡标出缺参考音，按钮说清是谁，且不可用。
     page.locator(".roles-block select.input").first.select_option("无声主角")
     page.wait_for_timeout(900)
-    assert "缺参考声音样本" in page.locator(".roles-block").inner_text()
+    assert "缺参考声音样本" in page.locator(".roles-block").first.inner_text()
     button_text = page.locator("button.btn.primary.wide").inner_text().strip()
     assert button_text.startswith("缺参考声音"), button_text
-    assert "去上传声音样本" in page.locator(".roles-block").inner_text()
+    assert "去上传声音样本" in page.locator(".roles-block").first.inner_text()
     assert page.locator("button.btn.primary.wide").is_disabled()
 
     # 换有样本的资产：这道门过了（离线实例停在“未连接”而不是缺音）。
@@ -1784,3 +1784,139 @@ def test_reference_audio_readiness_blocks_the_button(page):
     page.wait_for_timeout(900)
     button_text = page.locator("button.btn.primary.wide").inner_text().strip()
     assert "参考声音" not in button_text, button_text
+
+
+# --------------------------------------------------------------------------- #
+# Batch C browser coverage: name clash, target read-back, crop, scene loop
+# --------------------------------------------------------------------------- #
+
+def _intake_with_picture(page, name="闭环保存"):
+    _open_intake(page)
+    page.locator(".intake-pick input[type=file]").set_input_files(
+        [{"name": "pic.png", "mimeType": "image/png",
+          "buffer": png_bytes(width=200, height=120)}])
+    page.wait_for_timeout(600)
+    button(page, "另存为参考资产").click()
+    page.locator(".intake-asset-form").wait_for(state="visible", timeout=5000)
+    page.get_by_label("名称", exact=False).fill(name)
+
+
+def _api_get_asset(kind, name):
+    return api_get("/api/assets/%s/%s" % (kind, urllib.parse.quote(name)))
+
+
+def test_a_same_named_asset_save_asks_before_touching(page):
+    _api_put_character("闭环保存", description="原有的那份")
+    _intake_with_picture(page)
+    page.get_by_label("声音说明", exact=False).fill("低沉男声")
+    page.locator(".intake-asset-form textarea").fill("新的描述。")
+    button(page, "存入资产库").click()
+    page.wait_for_timeout(800)
+
+    # 同名：决策块出现，原资产摆在眼前，且没被动过。
+    block = page.locator(".intake-exists").filter(visible=True)
+    assert block.count() == 1
+    assert "闭环保存" in block.inner_text()
+    assert _api_get_asset("character", "闭环保存")["description"] == "原有的那份"
+
+    # 选择改名：改名后入库，原有那份原样。
+    block.get_by_role("button", name="我改名字").click()
+    page.wait_for_timeout(200)
+    page.get_by_label("名称", exact=False).fill("闭环保存2")
+    button(page, "存入资产库").click()
+    page.locator(".intake-asset-done").wait_for(state="visible", timeout=8000)
+    names = [x["name"] for x in api_get("/api/assets")["characters"]]
+    assert "闭环保存" in names and "闭环保存2" in names
+    assert _api_get_asset("character", "闭环保存")["description"] == "原有的那份"
+
+
+def test_the_reference_target_is_saved_and_read_back(page):
+    _intake_with_picture(page, "目标读回")
+    page.get_by_label("声音说明", exact=False).fill("低沉男声")
+    page.get_by_label("参考目标", exact=False).fill("蓝外套年轻人（左一）")
+    page.locator(".intake-asset-form textarea").fill("穿蓝外套的年轻人。")
+    button(page, "存入资产库").click()
+    page.locator(".intake-asset-done").wait_for(state="visible", timeout=8000)
+
+    # 回执说读回核对过，详情里真的有目标（F07：说存了不算，读回来对上才算）。
+    done = page.locator(".intake-asset-done").inner_text()
+    assert "读回核对过" in done and "蓝外套年轻人（左一）" in done
+    description = _api_get_asset("character", "目标读回")["description"]
+    assert "参考目标：蓝外套年轻人（左一）" in description
+
+
+def test_a_cropped_region_is_what_gets_saved(page):
+    _intake_with_picture(page, "裁剪目标")
+    page.get_by_label("声音说明", exact=False).fill("低沉男声")
+    page.locator(".intake-asset-form textarea").fill("裁剪目标。")
+
+    button(page, "✂️ 裁剪区域（多人物图）").click()
+    canvas = page.locator(".crop-canvas")
+    canvas.wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(400)
+    box = canvas.bounding_box()
+    # 拖左半边：多人物图里“左边那个人”。
+    page.mouse.move(box["x"] + box["width"] * 0.05, box["y"] + box["height"] * 0.1)
+    page.mouse.down()
+    page.mouse.move(box["x"] + box["width"] * 0.48, box["y"] + box["height"] * 0.9,
+                    steps=6)
+    page.mouse.up()
+    button(page, "用这个区域").click()
+    page.wait_for_timeout(400)
+    assert page.locator(".intake-asset-form figure").filter(
+        has_text="将保存这个区域").count() == 1
+
+    button(page, "存入资产库").click()
+    page.locator(".intake-asset-done").wait_for(state="visible", timeout=8000)
+    detail = _api_get_asset("character", "裁剪目标")
+    # 保存的图宽高比符合裁剪框（左半边竖框 → 宽 < 高×原图比），原图还在起草卡。
+    import base64
+    png = base64.b64decode(detail["image"].split(",", 2)[1])
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    width = int.from_bytes(png[16:20], "big")
+    height = int.from_bytes(png[20:24], "big")
+    assert width / height < 1.0, (width, height)   # 200x120 的左半边是竖的
+    assert page.locator(".intake-preview img").filter(visible=True).count() == 1
+
+
+def test_a_saved_scene_can_be_chosen_for_the_plan(page):
+    """C3 闭环：起草图 → 另存场景 → 制作页选择 → 计划请求带上它。"""
+    plan_calls = []
+    page.route("**/api/scripts/*/plan", lambda route: (
+        plan_calls.append(json.loads(route.request.post_data)),
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"script": "", "roles": [],
+                                       "fallback_plan": "", "preview": "",
+                                       "requirements": [], "nodes": 33}))))
+    _write_a_script(page, "场景闭环剧", ["角色1：你好"])
+
+    # 起草图 → 另存场景（带图）。
+    _open_intake(page)
+    page.locator(".intake-pick input[type=file]").set_input_files(
+        [{"name": "scene.png", "mimeType": "image/png",
+          "buffer": png_bytes(width=120, height=90)}])
+    page.wait_for_timeout(600)
+    button(page, "另存为参考资产").click()
+    page.locator(".intake-asset-form").wait_for(state="visible", timeout=5000)
+    page.locator(".intake-asset-form select").select_option("scene")
+    page.get_by_label("名称", exact=False).fill("天台试")
+    page.locator(".intake-asset-form textarea").fill("夜晚的天台，风很大。")
+    button(page, "存入资产库").click()
+    page.locator(".intake-asset-done").wait_for(state="visible", timeout=8000)
+    assert "天台试" in [x["name"] for x in api_get("/api/assets")["scenes"]]
+
+    # 制作页：选剧本、接角色、选场景 —— 计划请求真的带 scene_asset。
+    # 角色资产要先建好：页面的角色列表是加载时读的。
+    char_name = _api_put_character("场景闭环角")["name"]
+    page.goto(BASE + "/video", wait_until="networkidle")
+    page.select_option("select.input >> nth=0", "场景闭环剧")
+    page.wait_for_timeout(1200)
+    page.locator(".roles-block select.input").first.select_option(char_name)
+    page.wait_for_timeout(900)
+    scene_select = page.locator(".roles-block select.input").nth(1)
+    scene_select.select_option("天台试")
+    page.wait_for_timeout(900)
+    assert plan_calls and plan_calls[-1].get("scene_asset") == "天台试", plan_calls[-1:]
+    # 场景卡显示描述与环境音；说明覆盖关系。
+    block = page.locator(".roles-block", has_text="场景参考").first
+    assert "天台，风很大" in block.inner_text() or "夜晚的天台" in block.inner_text()

@@ -222,6 +222,29 @@
                       <input class="input" x-model="intake.assetForm.target"
                              placeholder="例如：蓝外套年轻人（左一）">
                     </label>
+                    <!-- 多人物图的区域裁剪（F07）：保存的图本身就是所选人物 -->
+                    <div class="crop-block">
+                      <div class="job-actions">
+                        <button class="btn" type="button" x-show="!intake.assetForm.cropOpen"
+                                @click="intakeOpenCrop()">✂️ 裁剪区域（多人物图）</button>
+                        <button class="btn" type="button" x-show="intake.assetForm.cropOpen"
+                                @click="intake.assetForm.cropOpen = false">不裁了，沿用全图</button>
+                      </div>
+                      <canvas class="crop-canvas" x-show="intake.assetForm.cropOpen"
+                              aria-label="拖动选择要保存的区域"></canvas>
+                      <p class="muted small" x-show="intake.assetForm.cropOpen">
+                        在图上按住拖一个框，松开后点「用这个区域」。
+                      </p>
+                      <div class="job-actions" x-show="intake.assetForm.cropOpen">
+                        <button class="btn primary" type="button"
+                                @click="intakeApplyCrop()">用这个区域</button>
+                      </div>
+                      <figure class="media-compare" x-show="intake.assetForm.croppedUrl">
+                        <img class="preview-img" :src="intake.assetForm.croppedUrl" alt="裁剪后的区域">
+                        <figcaption class="muted small">将保存这个区域</figcaption>
+                        <button class="btn" type="button" @click="intakeUndoCrop()">撤销裁剪（用全图）</button>
+                      </figure>
+                    </div>
                     <label class="field" x-show="intake.assetForm.kind === 'character'">
                       <span>声音说明（角色必填）</span>
                       <input class="input" x-model="intake.assetForm.voice"
@@ -234,7 +257,28 @@
                     </label>
                     <p class="err small" x-show="intake.assetForm.error"
                        x-text="intake.assetForm.error"></p>
-                    <div class="job-actions">
+                    <!-- 同名资产（F06）：先看现有的是什么，改名或明确覆盖 -->
+                    <div class="intake-exists" x-show="intake.assetForm.exists">
+                      <p class="small" style="margin: 0 0 6px">
+                        ⚠ 已经有同名
+                        <span x-text="intake.assetForm.kind === 'scene' ? '场景' : '角色'"></span>
+                        「<span x-text="(intake.assetForm.exists || {}).name || intake.assetForm.name"></span>」：
+                        改个名字另存一份，或者明确覆盖它（现有描述和图会被替换）。
+                      </p>
+                      <div class="media-compare" x-show="(intake.assetForm.exists || {}).image">
+                        <img class="preview-img" :src="(intake.assetForm.exists || {}).image" alt="现有资产图">
+                        <span class="muted small"
+                              x-text="((intake.assetForm.exists || {}).description || '').slice(0, 60)"></span>
+                      </div>
+                      <div class="job-actions">
+                        <button class="btn" type="button"
+                                @click="intake.assetForm.exists = null">我改名字</button>
+                        <button class="btn danger" type="button"
+                                :disabled="intake.assetForm.busy"
+                                @click="intakeSaveAsset(true)">覆盖它</button>
+                      </div>
+                    </div>
+                    <div class="job-actions" x-show="!intake.assetForm.exists">
                       <button class="btn primary" type="button"
                               :disabled="intake.assetForm.busy"
                               @click="intakeSaveAsset()"
@@ -254,12 +298,23 @@
                     <p class="small" style="margin: 0 0 4px">
                       ✅ 已入库：<span x-text="intake.assetForm.saved.kind"></span>
                       「<span x-text="intake.assetForm.saved.name"></span>」。
-                      到 <a :href="'/assets'">资产页</a> 可以查看和继续编辑。
+                      到 <a :href="'/assets'">资产页</a> 可以查看和继续编辑，
+                      去制作页绑定使用。
                     </p>
+                    <!-- 读回确认（F07）：说“存了”不算，读回来对上才算 -->
+                    <p class="muted small" x-show="intake.assetForm.saved.target"
+                       style="margin: 0 0 4px"
+                       :class="intake.assetForm.saved.targetOk ? '' : 'err'"
+                       x-text="intake.assetForm.saved.targetOk
+                         ? '参考目标已随描述一起入库（读回核对过）：' + intake.assetForm.saved.target
+                         : '⚠ 读回核对没找到参考目标：到资产页检查描述。'"></p>
                     <p class="muted small" style="margin: 0">
                       资产入库 ≠ 制作引用：渲染时在制作页按角色显式绑定它。
                     </p>
                     <div class="job-actions">
+                      <a class="btn" :href="'/assets?kind=' + intake.assetForm.kind
+                        + '&asset=' + encodeURIComponent(intake.assetForm.saved.name)"
+                        target="_blank" rel="noopener">在资产页查看</a>
                       <button class="btn" type="button"
                               @click="intake.assetForm = null">好的</button>
                     </div>

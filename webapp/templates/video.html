@@ -65,10 +65,10 @@
                 <button class="btn" type="button"
                         x-show="((assetDetails[r.asset] || {}).audios || []).length"
                         @click="playSample('v:' + r.id, assetDetails[r.asset].audios[0].url)"
-                        x-text="preview.key === 'v:' + r.id && preview.playing
+                        x-text="audioPreviewState.key === 'v:' + r.id && audioPreviewState.playing
                           ? '⏸ 暂停' : '▶ 试听'"></button>
-                <span class="muted small" x-show="preview.key === 'v:' + r.id"
-                      x-text="fmtSeconds(preview.position) + ' / ' + fmtSeconds(preview.duration)"></span>
+                <span class="muted small" x-show="audioPreviewState.key === 'v:' + r.id"
+                      x-text="fmtSeconds(audioPreviewState.position) + ' / ' + fmtSeconds(audioPreviewState.duration)"></span>
                 <span class="muted small"
                       x-show="r.asset && !((assetDetails[r.asset] || {}).audios || []).length">
                   暂无声音样本
@@ -81,6 +81,30 @@
             </span>
           </label>
         </template>
+      </div>
+
+      <!-- 场景参考（U02）：接进计划的 scene_1 槽；引擎用它覆盖剧本的
+           scene 描述——这正是把场景资产接进制作的那条线。 -->
+      <div class="roles-block" x-show="roles.length">
+        <div class="filter-bar">
+          <span class="muted">场景参考（可选）</span>
+          <span class="muted small" x-show="sceneAsset"
+                x-text="'已选 ' + sceneAsset + '：画面与场景描述以它为准'"></span>
+        </div>
+        <label class="field">
+          <span>场景资产（不选则用剧本自己的场景描述）</span>
+          <select class="input" x-model="sceneAsset" @change="onSceneChange()">
+            <option value="">— 用剧本的 scene 字段 —</option>
+            <template x-for="sc in scenes" :key="sc"><option :value="sc" x-text="sc"></option></template>
+          </select>
+        </label>
+        <span class="asset-preview" x-show="sceneAsset && sceneDetails[sceneAsset]">
+          <img class="preview-img" :src="(sceneDetails[sceneAsset] || {}).image || ''" alt="">
+          <span class="muted small"
+                x-text="((sceneDetails[sceneAsset] || {}).description || '').slice(0, 80)"></span>
+          <span class="muted small" x-show="(sceneDetails[sceneAsset] || {}).ambience"
+                x-text="'环境音：' + ((sceneDetails[sceneAsset] || {}).ambience || '')"></span>
+        </span>
       </div>
 
       <label class="field">

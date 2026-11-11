@@ -213,18 +213,32 @@ def create_app() -> Flask:
         voice = _field(data, form, "voice")
         image_raw = _uploaded("image")
         audio_raw = _uploaded("audio")
+        # F06: the new-and-save flows mean CREATE. 'create' refuses a
+        # same-named asset atomically (server-side, not a page-side
+        # check that can race); the default stays the old upsert for
+        # the edit flows.
+        on_exists = str(form.get("on_exists") or data.get("on_exists")
+                        or "upsert")
         try:
             if kind == "character":
                 result = library.save_character(
                     name, description, voice,
-                    image_raw=image_raw, audio_raw=audio_raw)
+                    image_raw=image_raw, audio_raw=audio_raw,
+                    on_exists=on_exists)
             elif kind == "scene":
                 ambience = _field(data, form, "ambience")
                 result = library.save_scene(
                     name, description, ambience=ambience,
-                    image_raw=image_raw)
+                    image_raw=image_raw, on_exists=on_exists)
             else:
                 abort(404)
+        except library.AssetExistsError as exc:
+            existing = dict(exc.detail or {})
+            existing.pop("images", None)
+            existing.pop("audios", None)
+            return jsonify({"error": str(exc), "code": "exists",
+                            "kind": exc.kind, "name": exc.name,
+                            "existing": existing}), 409
         except (ValueError, FileNotFoundError) as exc:
             return jsonify({"error": str(exc)}), 400
         result.pop("png_bytes_list", None)
@@ -499,7 +513,9 @@ def create_app() -> Flask:
         data = request.get_json(silent=True) or {}
         role_assets = {str(k): str(v) for k, v in (data.get("role_assets") or {}).items()}
         try:
-            return jsonify(runner.plan_preview(name, role_assets))
+            return jsonify(runner.plan_preview(
+                name, role_assets,
+                scene_asset=str(data.get("scene_asset") or "")))
         except (FileNotFoundError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
 
@@ -671,7 +687,8 @@ def create_app() -> Flask:
                 steps=int(data.get("steps") or 20),
                 duration=int(data.get("duration") or 18),
                 continue_run=bool(data.get("continue_run")),
-                continue_from=str(data.get("continue_from") or ""))
+                continue_from=str(data.get("continue_from") or ""),
+                scene_asset=str(data.get("scene_asset") or ""))
         except (FileNotFoundError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
         except comfy.ComfyUnavailable as exc:
