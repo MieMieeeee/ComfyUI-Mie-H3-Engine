@@ -21,7 +21,8 @@ import time
 import uuid
 
 from webapp import config
-from webapp.services import comfy, history, library, runname, snapshot, workflow
+from webapp.services import (comfy, history, jsonfile, library, runname,
+                             snapshot, workflow)
 
 #: The submit lock. It covers "look at the queue, then submit" - the
 #: window in which two submissions could interleave. It also covers the
@@ -75,9 +76,7 @@ def _save_jobs() -> None:
             for record in records]
     try:
         config.ensure_dirs()
-        config.JOBS_FILE.write_text(
-            json.dumps({"jobs": slim}, ensure_ascii=False, indent=2),
-            encoding="utf-8")
+        jsonfile.write_json(config.JOBS_FILE, {"jobs": slim})
     except OSError:
         pass  # a log we cannot write must not break the render
 
@@ -341,7 +340,12 @@ def _refuse_a_duplicate(run_name: str, script_name: str) -> None:
     if run_name in _reserved:
         raise ValueError(
             "同名任务 %r 正在提交中：等它完成，或者换一个片段名。" % run_name)
-    for record in list(_jobs.values()):
+    # The table's lock, like every other walk of it: the page polls
+    # exactly as a submission lands, and a walk that dies mid-stride
+    # (the table changed under it) turns the submission into a 500.
+    with _jobs_lock:
+        records = list(_jobs.values())
+    for record in records:
         if record.get("run_name") != run_name:
             continue
         if record.get("status") in ("running", "queued"):
@@ -582,13 +586,14 @@ def delete_record(job_id: str, delete_files: bool = False) -> dict:
         if record is not None:
             run_name = record.get("run_name") or ""
             _jobs.pop(job_id, None)
-        elif job_id.startswith("disk:"):
-            # 磁盘任务的编号是可以编的：只有真的在清单里的那次运行
-            # 才能被移出历史。
-            name = job_id[len("disk:"):]
-            if name not in {r["run_name"] for r in comfy.recent_runs()}:
-                raise ValueError("这条任务不在历史里。")
-            run_name = name
+    if not run_name and job_id.startswith("disk:"):
+        # 磁盘任务的编号是可以编的：只有真的在清单里的那次运行
+        # 才能被移出历史。这次磁盘走查在锁外做：锁护的是任务表，
+        # 不该拿它等硬盘。
+        name = job_id[len("disk:"):]
+        if name not in {r["run_name"] for r in comfy.recent_runs()}:
+            raise ValueError("这条任务不在历史里。")
+        run_name = name
     if not run_name:
         raise ValueError("这条任务不在历史里。")
     history.dismiss(run_name)

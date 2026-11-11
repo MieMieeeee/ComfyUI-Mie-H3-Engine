@@ -37,13 +37,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import pathlib
-import tempfile
 import time
 
 from mie_craft.assets import script_asset as _script_asset
 from mie_craft.script import contract
+
+from webapp.services.jsonfile import write_json as _write_json
 
 #: The folder inside a script's own directory.
 VERSIONS_DIRNAME = "versions"
@@ -97,30 +97,6 @@ def index_path(name: str) -> pathlib.Path:
 
 def version_path(name: str, number: int) -> pathlib.Path:
     return versions_dir(name) / ("%04d.json" % int(number))
-
-
-# --------------------------------------------------------------------------- #
-# writing
-# --------------------------------------------------------------------------- #
-
-def _write_json(path: pathlib.Path, value) -> None:
-    """Write JSON the way the rest of the app does, atomically.
-
-    A half-written index would lose the history, so the file is written
-    to a temporary name and moved into place in one step.
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary = tempfile.mkstemp(prefix="." + path.name + ".", dir=str(path.parent))
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(value, stream, ensure_ascii=False, indent=2)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-    except BaseException:
-        pathlib.Path(temporary).unlink(missing_ok=True)
-        raise
 
 
 # --------------------------------------------------------------------------- #

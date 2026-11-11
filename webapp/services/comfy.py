@@ -327,9 +327,23 @@ def _role_of(relpath: str) -> str:
 
 
 def run_manifest(run_name: str) -> dict:
-    """What the run says about itself: how long it is, how many shots."""
+    """What the run says about itself: how long it is, how many shots.
+
+    The task list asks for the manifest of every row on every poll, so
+    the answer is kept with the stat of the file that produced it - the
+    same deal the file scan gets. A manifest that changes (a run that
+    finishes) is read again; one that did not is not read at all.
+    """
     path = (config.COMFYUI_ROOT / "output" / "h3_chains" / run_name
             / "manifest.json")
+    try:
+        info = path.stat()
+    except OSError:
+        return {}
+    key = (str(path), info.st_mtime_ns, info.st_size)
+    hit = _manifest_cache.get(str(path))
+    if hit is not None and hit[0] == key:
+        return hit[1]
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError, AttributeError):
@@ -337,12 +351,20 @@ def run_manifest(run_name: str) -> dict:
     if not isinstance(payload, dict):
         return {}
     segments = payload.get("segments") or []
-    return {
+    result = {
         "duration_seconds": payload.get("duration_seconds"),
         "clip_count": payload.get("clip_count") or len(segments),
         "delivered_frames": payload.get("total_delivered_frames"),
         "plan_hash": payload.get("plan_hash"),
     }
+    if len(_manifest_cache) > 1000:   # one entry per run; runs are hundreds
+        _manifest_cache.clear()
+    _manifest_cache[str(path)] = (key, result)
+    return result
+
+
+#: The manifests already read, with the stat that produced them.
+_manifest_cache: dict = {}
 
 
 def _kind_of(path: pathlib.Path) -> str:
@@ -369,8 +391,34 @@ def recent_runs(limit: int = 20) -> list[dict]:
     The web app's own job table lives in memory, so a restart empties it -
     but the renders do not go anywhere. They are indexed from the chain
     directory instead, so the page still shows what was made.
+
+    The walk is reused for a few seconds, the same deal the file scan
+    gets: the page polls every three seconds, and a folder that appears
+    between polls is picked up when the walk's time is up - walking
+    every run folder on every poll is what made the list feel stuck.
     """
     root = config.COMFYUI_ROOT / "output" / "h3_chains"
+    now = time.time()
+    if (_runs_cache["runs"] and _runs_cache["root"] == root
+            and now - _runs_cache["at"] < _RUNS_TTL):
+        return _runs_cache["runs"][:limit]
+    runs = _walk_runs(root)
+    _runs_cache["root"] = root
+    _runs_cache["at"] = now
+    _runs_cache["runs"] = runs
+    return runs[:limit]
+
+
+#: The last walk of the run folders, when it was made, and which root it
+#: was of - a changed root must not be served from the old walk.
+_runs_cache: dict = {"root": None, "at": 0.0, "runs": []}
+
+#: How long a walk stays good for - the same number the file scan uses.
+_RUNS_TTL = _SCAN_TTL
+
+
+def _walk_runs(root: pathlib.Path) -> list[dict]:
+    """The chain directory, run folder by run folder."""
     if not root.is_dir():
         return []
     runs = []
@@ -404,7 +452,7 @@ def recent_runs(limit: int = 20) -> list[dict]:
             "shots": len(shots),
         })
     runs.sort(key=lambda r: r["finished_at"], reverse=True)
-    return runs[:limit]
+    return runs
 
 
 def delete_run_files(run_name: str, relpaths: list = None) -> list:
@@ -441,7 +489,7 @@ def delete_run_files(run_name: str, relpaths: list = None) -> list:
                 removed.append(str(relpath))
             continue
         path = raw.resolve()
-        if not _inside(root, path) or not path.is_file():
+        if not inside_tree(root, path) or not path.is_file():
             continue
         try:
             path.unlink()
@@ -463,7 +511,7 @@ def delete_run_files(run_name: str, relpaths: list = None) -> list:
                                % (sub, name))
             continue
         resolved = folder.resolve()
-        if not _inside(root, resolved) or not resolved.is_dir():
+        if not inside_tree(root, resolved) or not resolved.is_dir():
             continue
         # 里面还有链接的话，先把链接摘掉：绝不让删除顺着它走进
         # 另一个目录去。
@@ -560,11 +608,14 @@ _LEGAL_RUN_NAME = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9._-]{0,94}[A-Za-z0-9]$|^[A-Za-z0-9]$")
 
 
-def _inside(root: pathlib.Path, path: pathlib.Path) -> bool:
+def inside_tree(root: pathlib.Path, path: pathlib.Path) -> bool:
     """Is this path inside that tree?
 
     The paths are resolved first, so ".." and a symbolic link that
-    points outside are both caught here.
+    points outside are both caught here. A string prefix says nothing:
+    a sibling directory whose name merely starts the same ("output2"
+    next to "output") is not inside, and prefix-matching would let it
+    through.
     """
     try:
         path.relative_to(root)

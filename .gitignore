@@ -38,3 +38,6 @@ Thumbs.db
 # The web front end's runtime log (the node writes it next to the plugin)
 webui.log
 webui.pid
+
+# ZCode session state (agents, workflows) - local tooling, not the repo
+.zcode/

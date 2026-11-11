@@ -28,7 +28,7 @@ from mie_craft.assets import library as _library
 from mie_craft.assets import script_asset as _script_asset
 
 from webapp import config
-from webapp.services import versions
+from webapp.services import jsonfile, versions
 
 
 def plugin_root() -> pathlib.Path:
@@ -364,8 +364,7 @@ def confirm_execution(name: str, script: dict) -> dict:
                   "execution_hash": execution_fingerprint(script),
                   "confirmed_at": time.time()}
     config.ensure_dirs()
-    _sync_file().write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    jsonfile.write_json(_sync_file(), data)
     return {"name": name, "confirmed": True}
 
 

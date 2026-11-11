@@ -20,24 +20,53 @@ import json
 import pathlib
 
 from webapp import config
+from webapp.services import jsonfile
 
 
 def _file() -> pathlib.Path:
     return config.SETTINGS_FILE.parent / "history.json"
 
 
+#: The parsed file, with the stat that produced it. The task list asks
+#: about the favourites and the dismissed runs of every record on every
+#: poll; reading and parsing the file once per question was a hundred
+#: reads every three seconds. The stat travels with the answer, so a
+#: change on disk is seen on the very next question.
+_cache: dict = {"key": None, "data": {}}
+
+
 def _read() -> dict:
+    path = _file()
     try:
-        data = json.loads(_file().read_text(encoding="utf-8"))
+        info = path.stat()
+    except OSError:
+        return {}
+    key = (str(path), info.st_mtime_ns, info.st_size)
+    if _cache["key"] == key:
+        # a copy, not the cache itself: the callers edit what they got,
+        # and a failed write must not leave the edit behind in the cache
+        return dict(_cache["data"])
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return {}
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        data = {}
+    _cache["key"] = key
+    _cache["data"] = data
+    return dict(data)
 
 
 def _write(data: dict) -> None:
     config.ensure_dirs()
-    _file().write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    jsonfile.write_json(_file(), data)
+    # What was just written is the truth now; say so before anyone asks.
+    try:
+        info = _file().stat()
+        _cache["key"] = (str(_file()), info.st_mtime_ns, info.st_size)
+    except OSError:
+        _cache["key"] = None
+    _cache["data"] = dict(data) if isinstance(data, dict) else {}
 
 
 # --------------------------------------------------------------------------- #
