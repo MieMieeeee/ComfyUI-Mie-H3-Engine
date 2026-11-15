@@ -41,3 +41,6 @@ webui.pid
 
 # ZCode session state (agents, workflows) - local tooling, not the repo
 .zcode/
+
+# The restart's stderr log (same deal as webui.log)
+webui.err.log
