@@ -643,3 +643,43 @@ textarea.input.code {
   background: rgba(0, 0, 0, 0.82); cursor: zoom-out;
 }
 .lightbox img { max-width: 92vw; max-height: 88vh; object-fit: contain; }
+
+/* 历史页作品分组（U06）：作品卡 + 尝试行。 */
+.history-search { max-width: 220px; }
+.work-row .attempt-list { display: flex; flex-direction: column; gap: 8px; }
+.attempt-row {
+  padding: 8px; border-top: 1px dashed var(--border-subtle);
+  display: flex; flex-direction: column; gap: 6px;
+}
+
+/* 窄屏（U08）：剧本列表收为选择入口，桌面不显示它。 */
+.narrow-picker { display: none; }
+@media (max-width: 640px) {
+  .narrow-picker { display: block; }
+  .split-list { display: none; }
+  .split { display: block; }
+  .split-detail { min-width: 0; }
+  /* 恢复提示一行紧凑：留继续/清空两个动作即可。 */
+  .intakeResume, [x-if] .card { max-width: 100%; }
+  .panel-head { flex-wrap: wrap; }
+  .history-search { max-width: 100%; }
+}
+
+/* 长文件名（分镜/技术文件）不许把窄屏撑出横向滚动。 */
+.artifact { overflow-wrap: anywhere; max-width: 100%; min-width: 0; }
+.job-artifacts { min-width: 0; }
+.attempt-list, .attempt-row, .delivery, .delivery-meta { min-width: 0; }
+.cell-strong { overflow-wrap: anywhere; }
+
+/* 窄屏导航：五个标签 + 状态不再把页面撑出横向滚动（U08）。 */
+.main-tabs-nav { flex-wrap: wrap; min-width: 0; }
+.main-tabs-nav a { white-space: nowrap; }
+.main-tabs-status { flex-wrap: wrap; min-width: 0; }
+main.main-stage, .page-frame, .panel { min-width: 0; max-width: 100%; }
+
+/* 尝试行里的长路径/长输入名（inputs_changed）不许把文档撑宽。 */
+.attempt-row * { max-width: 100%; }
+.warn, .attempt-row .muted { overflow-wrap: anywhere; }
+
+/* 长错误消息（URL、堆栈）同样不许撑宽页面。 */
+.err, p.err { overflow-wrap: anywhere; max-width: 100%; min-width: 0; }

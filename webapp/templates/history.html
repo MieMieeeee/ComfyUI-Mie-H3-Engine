@@ -13,8 +13,8 @@
   </div>
 
   <p class="muted">
-    每一次生成都是一条记录：成片、版本、状态都在这里。喜欢的可以收藏，
-    不要的可以移出列表 —— 移出列表不会删掉硬盘上的成片。
+    按<b>作品</b>看：一个运行目录是一部作品，它下面的每次生成是一次尝试。
+    成片挂在作品上，展开看每一次尝试的时间和状态。移出列表不会删掉硬盘上的成片。
   </p>
 
   <div class="filter-bar">
@@ -28,11 +28,15 @@
             @click="setFilter('done')">已完成</button>
     <button class="pill" :class="{ active: filter === 'failed' }"
             @click="setFilter('failed')">失败/中断</button>
+    <!-- U06：搜索作品（运行名 / 剧本 / 标题 / 错误文本），整部作品一起命中 -->
+    <input class="input history-search" x-model="searchQuery"
+           @input.debounce.400ms="page = 1; load()"
+           placeholder="搜作品：名字、剧本或错误文本">
   </div>
 
   <div class="card">
     <div class="card-head">
-      <h3 x-text="'共 ' + total + ' 条'"></h3>
+      <h3 x-text="'共 ' + total + ' 部作品 · ' + attemptsTotal + ' 次尝试'"></h3>
       <div class="panel-head-actions">
         <label class="field" style="margin: 0;">
           <span class="muted small">每页</span>
@@ -45,95 +49,131 @@
       </div>
     </div>
 
-    <p class="muted" x-show="!loading && !items.length">这里还没有记录。</p>
+    <p class="muted" x-show="!loading && !works.length">这里还没有作品。</p>
     <p class="muted" x-show="loading">正在读…</p>
 
-    <template x-for="j in items" :key="j.job_id || j.run_name">
-      <div class="job-row">
+    <!-- 一部作品（一个运行目录）一张卡；尝试在卡内展开（U06）。 -->
+    <template x-for="w in works" :key="w.run_name">
+      <div class="job-row work-row">
         <div class="job-head">
           <div class="cell-strong">
-            <span x-text="j.title || j.run_name"></span>
+            <span x-text="w.title || w.run_name"></span>
             <button class="btn star" type="button"
-                    :class="{ starred: j.favorite }"
-                    @click="toggleFavorite(j)"
-                    :title="j.favorite ? '取消收藏' : '收藏这条'"
-                    x-text="j.favorite ? '★' : '☆'"></button>
+                    :class="{ starred: w.favorite }"
+                    @click="favoriteWork(w)"
+                    :title="w.favorite ? '取消收藏这部作品' : '收藏这部作品'"
+                    x-text="w.favorite ? '★' : '☆'"></button>
           </div>
           <div class="muted small">
-            <span x-text="j.script"></span>
-            <span x-show="j.attempt" x-text="' · 第 ' + j.attempt + ' 版'"></span>
-            <span x-show="j.continued" x-text="' · 续跑'"></span>
-            <span x-show="j.from_disk" x-text="' · 磁盘记录'"></span>
+            <span x-text="w.script"></span>
+            <span x-text="' · ' + w.attempt_count + ' 次尝试'"></span>
+            <span class="muted" x-text="'（' + w.statuses.map(statusLabel).join('／') + '）'"></span>
+            <span class="muted small" style="display: block; overflow-wrap: anywhere"
+                  x-text="'目录：' + w.run_name"></span>
           </div>
-          <div class="muted small" x-show="j.submitted_at"
-               x-text="timeText(j.submitted_at)"></div>
-          <div class="warn small" x-show="(j.inputs_changed || []).length"
-               x-text="'输入已变更：' + j.inputs_changed.join('、') + '（结果可能与提交时不同）'"></div>
+          <div class="muted small" x-show="w.submitted_at"
+               x-text="timeText(w.submitted_at)"></div>
         </div>
-        <span class="badge" :class="statusClass(j.status)" x-text="statusLabel(j.status)"></span>
+        <span class="badge" :class="statusClass(w.latest_status)"
+              x-text="'最新：' + statusLabel(w.latest_status)"></span>
 
-        <!-- 正式成片。播放器点开才挂：一次挂二十几个，页面会卡住。 -->
-        <template x-if="j.deliverable">
+        <!-- 正式成片挂在作品上；播放器点开才挂。 -->
+        <template x-if="w.film">
           <div class="delivery">
-            <template x-if="playingJob === j.job_id">
+            <template x-if="playingWork === w.run_name">
               <video class="delivery-player" controls preload="metadata"
-                     :src="'/media/' + j.deliverable.relpath"></video>
+                     :src="'/media/' + w.film"></video>
             </template>
             <div class="delivery-meta">
-              <span class="cell-strong" x-text="j.deliverable.name"></span>
-              <span class="muted small" x-text="durationText(j.manifest)"></span>
-              <button class="btn" type="button" x-show="playingJob !== j.job_id"
-                      @click="playJob(j)">▶ 播放</button>
-              <a class="btn primary" :href="'/media/' + j.deliverable.relpath"
-                 download x-text="'⬇ 下载成片'"></a>
+              <span class="cell-strong" x-text="w.film.split('/').pop()"></span>
+              <span class="muted small" x-text="durationText(workManifest(w))"></span>
+              <button class="btn" type="button" x-show="playingWork !== w.run_name"
+                      @click="playWork(w)">▶ 播放</button>
+              <a class="btn primary" :href="'/media/' + w.film"
+                 download>⬇ 下载成片</a>
             </div>
           </div>
         </template>
-        <p class="warn small" x-show="!j.deliverable && (j.segments || []).length"
-           x-text="'还没有成片，只有 ' + j.segments.length + ' 个分镜片段。'"></p>
+        <p class="warn small" x-show="!w.film">还没有成片。</p>
 
-        <details class="preview-block" x-show="(j.segments || []).length">
-          <summary x-text="'分镜片段（' + j.segments.length + '）'"></summary>
-          <div class="job-artifacts">
-            <template x-for="a in (j.segments || [])" :key="a.relpath">
-              <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
-                 x-text="a.name"></a>
-            </template>
-          </div>
-        </details>
-
-        <details class="preview-block" x-show="(j.audio || []).length || (j.technical || []).length">
-          <summary x-text="'声音与技术文件（' + ((j.audio || []).length + (j.technical || []).length) + '）'"></summary>
-          <div class="job-artifacts">
-            <template x-for="a in (j.audio || [])" :key="a.relpath">
-              <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
-                 x-text="a.name"></a>
-            </template>
-            <template x-for="a in (j.technical || [])" :key="a.relpath">
-              <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
-                 x-text="a.name"></a>
-            </template>
-          </div>
-        </details>
-
-        <div class="job-actions">
-          <button class="btn subtle" type="button"
-                  x-show="canContinue(j)" @click="continueJob(j)"
-                  :disabled="submitting"
-                  title="用同样的角色绑定和参数，接着这个任务继续生成">▶ 从这次继续</button>
-          <!-- U04：同样的配置，做一个新的运行（新目录新版本），
-               不是续跑。跳制作页核对后提交。 -->
-          <button class="btn subtle" type="button"
-                  x-show="j.script" @click="remakeJob(j)"
-                  title="带着这次的角色绑定和参数去制作页，生成一个新的运行">🔁 用本次配置再做一版</button>
-          <button class="btn subtle" type="button" @click="removeRecord(j)"
-                  title="从列表里移出这一条；硬盘上的成片不动">🗑️ 移出列表</button>
-          <button class="btn danger" type="button" @click="removeFiles(j)"
-                  x-show="j.run_name"
-                  title="连硬盘上的文件一起删掉，无法恢复">🗑️ 连文件一起删</button>
+        <!-- 声音在作品内直接试听（U06，复用统一播放器）。 -->
+        <div class="sample-row" x-show="(w.audios || []).length">
+          <span class="muted small">声音：</span>
+          <template x-for="(url, ai) in (w.audios || [])" :key="url">
+            <button class="btn subtle" type="button"
+                    @click="playSample('h:' + url, '/media/' + url)"
+                    :aria-label="'试听声音 ' + (ai + 1)"
+                    x-text="audioPreviewState.key === 'h:' + url && audioPreviewState.playing
+                      ? '⏸ ' + (ai + 1) : '▶ ' + (ai + 1)"></button>
+          </template>
         </div>
 
-        <p class="err small" x-show="j.error" x-text="j.error"></p>
+        <!-- 尝试列表：多尝试默认折叠，单尝试直接摊开。 -->
+        <div class="job-actions">
+          <button class="btn subtle" type="button"
+                  x-show="w.attempt_count > 1"
+                  @click="toggleExpanded(w.run_name)"
+                  x-text="isExpanded(w.run_name)
+                    ? '收起尝试列表' : '展开 ' + w.attempt_count + ' 次尝试'"></button>
+        </div>
+        <template x-if="w.attempt_count <= 1 || isExpanded(w.run_name)">
+          <div class="attempt-list">
+            <template x-for="j in w.attempts" :key="j.job_id || j.run_name">
+              <div class="attempt-row">
+                <div class="muted small">
+                  <span x-show="j.attempt" x-text="'第 ' + j.attempt + ' 版'"></span>
+                  <span x-show="j.continued" x-text=" · 续跑"></span>
+                  <span x-show="j.from_disk" x-text=" · 磁盘记录"></span>
+                  <span x-show="j.submitted_at" x-text="' · ' + timeText(j.submitted_at)"></span>
+                </div>
+                <span class="badge" :class="statusClass(j.status)"
+                      x-text="statusLabel(j.status)"></span>
+                <div class="warn small" x-show="(j.inputs_changed || []).length"
+                     x-text="'输入已变更：' + j.inputs_changed.join('、') + '（结果可能与提交时不同）'"></div>
+
+                <details class="preview-block" x-show="(j.segments || []).length">
+                  <summary x-text="'分镜片段（' + (j.segments || []).length + '）'"></summary>
+                  <div class="job-artifacts">
+                    <template x-for="a in (j.segments || [])" :key="a.relpath">
+                      <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
+                         x-text="a.name"></a>
+                    </template>
+                  </div>
+                </details>
+
+                <details class="preview-block" x-show="(j.audio || []).length || (j.technical || []).length">
+                  <summary x-text="'声音与技术文件（' + ((j.audio || []).length + (j.technical || []).length) + '）'"></summary>
+                  <div class="job-artifacts">
+                    <template x-for="a in (j.audio || [])" :key="a.relpath">
+                      <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
+                         x-text="a.name"></a>
+                    </template>
+                    <template x-for="a in (j.technical || [])" :key="a.relpath">
+                      <a class="artifact" :href="'/media/' + a.relpath" target="_blank" rel="noopener"
+                         x-text="a.name"></a>
+                    </template>
+                  </div>
+                </details>
+
+                <div class="job-actions">
+                  <button class="btn subtle" type="button"
+                          x-show="canContinue(j)" @click="continueJob(j)"
+                          :disabled="submitting"
+                          title="用同样的角色绑定和参数，接着这次尝试继续生成">▶ 从这次继续</button>
+                  <button class="btn subtle" type="button"
+                          x-show="j.script" @click="remakeJob(j)"
+                          title="带着这次的角色绑定和参数去制作页，生成一个新的运行">🔁 用本次配置再做一版</button>
+                  <button class="btn subtle" type="button" @click="removeRecord(j)"
+                          title="从列表里移出这次尝试；硬盘上的成片不动">🗑️ 移出这条</button>
+                  <button class="btn danger" type="button" @click="removeFiles(j)"
+                          x-show="j.run_name"
+                          title="连硬盘上的文件一起删掉，无法恢复">🗑️ 连文件一起删</button>
+                </div>
+                <p class="err small" x-show="j.error" x-text="j.error"></p>
+              </div>
+            </template>
+          </div>
+        </template>
       </div>
     </template>
 
@@ -141,7 +181,7 @@
       <button class="btn" type="button" @click="goTo(page - 1)"
               :disabled="page <= 1">← 上一页</button>
       <span class="muted small"
-            x-text="'第 ' + page + ' / ' + pages + ' 页'"></span>
+            x-text="'第 ' + page + ' / ' + pages + ' 页（按作品分页，尝试不会被拆散）'"></span>
       <button class="btn" type="button" @click="goTo(page + 1)"
               :disabled="page >= pages">下一页 →</button>
     </div>

@@ -561,7 +561,7 @@ STATUS_FILTERS = {
 
 
 def jobs(page: int = 1, per_page: int = 20, favorites_only: bool = False,
-         status: str = "") -> dict:
+         status: str = "", query: str = "", grouped: bool = False) -> dict:
     """The task history, ONE PAGE at a time.
 
     The history grows without bound - every render is a row - and the
@@ -571,6 +571,11 @@ def jobs(page: int = 1, per_page: int = 20, favorites_only: bool = False,
     The filter is applied BEFORE the page is cut: filtering after it
     would hide the runs that are on a later page, and the total would
     still count them.
+
+    ``grouped`` (U06) pages by WORK instead of by attempt: one run_name
+    is one work, its attempts ride inside it, and the totals count
+    works. A search ``query`` matches the work's run name, script or
+    title and keeps whole works together.
     """
     records = all_records()
     active = sum(1 for r in records if r.get("status") in ("running", "queued"))
@@ -579,6 +584,10 @@ def jobs(page: int = 1, per_page: int = 20, favorites_only: bool = False,
     wanted = STATUS_FILTERS.get(str(status or ""))
     if wanted:
         records = [r for r in records if r.get("status") in wanted]
+
+    if grouped:
+        return _jobs_grouped(records, page, per_page, active, query)
+
     total = len(records)
     per_page = max(1, int(per_page or 20))
     pages = max(1, (total + per_page - 1) // per_page)
@@ -591,6 +600,94 @@ def jobs(page: int = 1, per_page: int = 20, favorites_only: bool = False,
         _attach_artifacts(record, index=index)
     return {"items": window, "total": total, "page": page, "pages": pages,
             "per_page": per_page, "active": active}
+
+
+def _jobs_grouped(records: list, page: int, per_page: int, active: int,
+                  query: str) -> dict:
+    """The same history, told as WORKS: one run_name, many attempts.
+
+    The attempt rows stay intact (continue / remake / dismiss act on an
+    attempt); the work card carries the finished film, the counts and
+    the collapsed-at-first attempt list. Favorites follow the attempt
+    the star was set on - a starred attempt keeps its work on the
+    favorites page.
+    """
+    needle = str(query or "").strip().lower()
+    groups: dict = {}
+    order: list = []
+    for record in records:
+        run_name = record.get("run_name") or ""
+        if not run_name:
+            continue
+        if needle and not any(
+                needle in str(field or "").lower()
+                for field in (run_name, record.get("script"),
+                              record.get("title"), record.get("error"))):
+            continue
+        group = groups.get(run_name)
+        if group is None:
+            group = groups[run_name] = {"run_name": run_name, "attempts": [],
+                                        "favorite": False}
+            order.append(run_name)
+        group["attempts"].append(record)
+        if record.get("favorite"):
+            group["favorite"] = True
+
+    works = []
+    # 作品按“最新一次尝试的时间”倒序：最近的作品在最上面。
+    order.sort(key=lambda name: max(
+        r.get("submitted_at") or 0 for r in groups[name]["attempts"]),
+        reverse=True)
+    for run_name in order:
+        group = groups[run_name]
+        attempts = sorted(group["attempts"],
+                          key=lambda r: r.get("submitted_at") or 0,
+                          reverse=True)
+        newest = attempts[0]
+        finished = next((a for a in attempts
+                         if (a.get("artifacts") or []
+                             and any(x.get("kind") == "video"
+                                     for x in a["artifacts"]))), None)
+        statuses = sorted({a.get("status") or "" for a in attempts})
+        works.append({
+            "run_name": run_name,
+            "script": newest.get("script") or "",
+            "title": newest.get("title") or run_name,
+            "attempt_count": len(attempts),
+            "statuses": statuses,
+            "latest_status": newest.get("status") or "",
+            "favorite": group["favorite"],
+            "finished_at": newest.get("finished_at") or 0,
+            "submitted_at": newest.get("submitted_at") or 0,
+            "attempts": attempts,
+            "job_id": attempts[0].get("job_id") or "",
+        })
+
+    total = len(works)
+    per_page = max(1, int(per_page or 10))
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(int(page or 1), pages))
+    window = works[(page - 1) * per_page: page * per_page]
+    # The files of the page's works, one walk for all of them.
+    index = comfy.scan_output()
+    attempt_total = 0
+    for work in window:
+        for record in work["attempts"]:
+            _attach_artifacts(record, index=index)
+            attempt_total += 1
+        delivered = next((a for a in work["attempts"]
+                          if any(x.get("kind") == "video"
+                                 for x in (a.get("artifacts") or []))), None)
+        work["film"] = (delivered and delivered["artifacts"]
+                        and next((x["relpath"] for x in delivered["artifacts"]
+                                  if x.get("kind") == "video"), "")) or ""
+        work["audios"] = sorted({x["relpath"]
+                                 for a in work["attempts"]
+                                 for x in (a.get("artifacts") or [])
+                                 if x.get("kind") == "audio"})[:6]
+    return {"groups": window, "total": total, "page": page, "pages": pages,
+            "per_page": per_page, "active": active,
+            "attempts": attempt_total}
 
 
 def delete_record(job_id: str, delete_files: bool = False) -> dict:

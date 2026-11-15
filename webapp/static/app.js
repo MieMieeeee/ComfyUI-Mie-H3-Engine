@@ -1508,6 +1508,7 @@ function scriptsPage() {
       }
       this.draftForm.concept = "";
       this.draftOpen = true;
+      this.bringCardIntoView(".card:has(.auto-actions)", null);
     },
 
     async runDraft() {
@@ -1595,6 +1596,22 @@ function scriptsPage() {
       }
       this.intakeOpen = true;
       this.intakeRefreshModelInfo();
+      this.bringCardIntoView(".intake-card", ".intake-material textarea");
+    },
+
+    /* U08：窄屏上列表和说明占了首屏，表单在折叠线以下——打开就
+     * 滚过去，焦点落在第一个输入上。 */
+    bringCardIntoView(cardSelector, focusSelector) {
+      requestAnimationFrame(() => {
+        const card = document.querySelector(cardSelector);
+        if (card && card.scrollIntoView) {
+          card.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        if (focusSelector) {
+          const input = document.querySelector(focusSelector);
+          if (input) input.focus({ preventScroll: true });
+        }
+      });
     },
 
     /* U07：起草卡顶上说清“现在用的是谁”。没配置就给直达设置的入口；
@@ -2496,6 +2513,16 @@ function scriptsPage() {
           ok: !!data.validation.ok, checked: true,
           errors: data.validation.errors || [],
         };
+        // U08：错误带行号时把出错的那行带到眼前，而不是让作者滚着找。
+        if (s.validateState.errors.length
+            && s.validateState.errors.some((e) => e.event_index !== null)) {
+          requestAnimationFrame(() => {
+            const bad = document.querySelector(".intake-event .input-err");
+            if (bad && bad.scrollIntoView) {
+              bad.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          });
+        }
       } catch (error) {
         if (seq !== this.intakeValidateSeq) return;
         s.validateState = { ok: false, checked: true,
@@ -3753,23 +3780,56 @@ const jobView = {
 
 function historyPage() {
   return {
-    items: [],
+    works: [],             /* 一部作品一行（U06）；尝试在作品内 */
+    attemptsTotal: 0,
     total: 0,
     page: 1,
     pages: 1,
-    perPage: 20,
+    perPage: 10,
     filter: "all",
+    searchQuery: "",
+    expandedRuns: {},      /* 展开状态按 run_name 记，翻页回来还在 */
     activeCount: 0,        /* 全局在跑的任务数（不只看当前页） */
     loading: false,
     message: "",
     statusText: "",
     playingJob: "",
+    playingWork: "",
+    audioPreviewState: { key: "", playing: false, position: 0, duration: 0 },
     submitting: false,
     pollTimer: null,
 
     async init() {
+      audioPreview.listen((state) => { this.audioPreviewState = state; });
       await this.load();
       this.startPolling();
+    },
+
+    playSample(key, src) { audioPreview.toggle(key, src); },
+
+    isExpanded(runName) { return !!this.expandedRuns[runName]; },
+
+    toggleExpanded(runName) {
+      this.expandedRuns[runName] = !this.expandedRuns[runName];
+    },
+
+    /* 作品的成片播放：点开才挂播放器。 */
+    playWork(work) {
+      if (this.playingWork === work.run_name) return;
+      this.playingWork = work.run_name;
+    },
+
+    workManifest(work) {
+      const delivered = (work.attempts || []).find(
+        (a) => (a.manifest && (a.manifest.duration_seconds || a.manifest.clip_count)));
+      return (delivered && delivered.manifest) || null;
+    },
+
+    async favoriteWork(work) {
+      const carrier = (work.attempts || [])[0];
+      if (!carrier) return;
+      await this.toggleFavorite(carrier);
+      work.favorite = carrier.favorite;   // 星星亮在作品卡上
     },
 
     /* 有任务在跑就自己刷新：一次失败的提交原来会永远停在 "running"。 */
@@ -3791,17 +3851,22 @@ function historyPage() {
         // 总数也会算错。
         const query = `/api/render/jobs?page=${this.page}`
           + `&per_page=${this.perPage}`
+          + `&grouped=1`
           + (this.filter === "favorite" ? "&favorites=1" : "")
           + (["running", "done", "failed"].indexOf(this.filter) >= 0
-            ? `&status=${this.filter}` : "");
+            ? `&status=${this.filter}` : "")
+          + (this.searchQuery.trim()
+            ? `&q=${encodeURIComponent(this.searchQuery.trim())}` : "");
         const data = await api.get(query);
-        this.items = data.items || [];
+        this.works = data.groups || [];
+        this.attemptsTotal = data.attempts || 0;
         this.total = data.total || 0;
         this.page = data.page || 1;
         this.pages = data.pages || 1;
         // 在跑的任务是全局的：当前这一页没有，不代表没有人在跑。
         this.activeCount = data.active || 0;
-        this.statusText = this.total ? `共 ${this.total} 条` : "";
+        this.statusText = this.total
+          ? `共 ${this.total} 部作品` : "";
       } catch (error) {
         this.message = `读取失败：${error.message}`;
       } finally {

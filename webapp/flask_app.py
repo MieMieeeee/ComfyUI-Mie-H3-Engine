@@ -713,8 +713,11 @@ def create_app() -> Flask:
             per_page = 20
         favorites = request.args.get("favorites") in ("1", "true", "yes")
         status = str(request.args.get("status") or "")
+        grouped = request.args.get("grouped") in ("1", "true", "yes")
+        query = str(request.args.get("q") or "")
         return jsonify(runner.jobs(page=page, per_page=per_page,
-                                   favorites_only=favorites, status=status))
+                                   favorites_only=favorites, status=status,
+                                   query=query, grouped=grouped))
 
     @app.route("/api/render/jobs/<job_id>/delete", methods=["POST"])
     def api_render_delete(job_id):

@@ -530,7 +530,7 @@ def test_the_history_page_pages_favourites_and_deletes(page, web):
     page.get_by_role("button", name="★ 收藏").click()
     page.wait_for_timeout(900)
     card = visible(page, ".job-row").first
-    card.get_by_role("button", name="🗑️ 移出列表").click()
+    card.get_by_role("button", name="🗑️ 移出这条").click()
     page.wait_for_timeout(1200)
     assert visible(page, ".job-row").count() == 0, "the run is still there"
     # 硬盘上的文件还在。
@@ -2054,3 +2054,113 @@ def test_the_draft_card_names_the_model_or_offers_settings(page):
     if "未配置大模型" in head:
         assert page.locator(".intake-card a", has_text="去设置").count() == 1
         assert page.locator(".intake-card a", has_text="去设置").first.get_attribute("href") == "/llm"
+
+
+# --------------------------------------------------------------------------- #
+# Batch E browser coverage: works with attempts, narrow screens
+# --------------------------------------------------------------------------- #
+
+def _seed_history_work(page, script_name, statuses):
+    """A work of our own: submit (offline → interrupted record). The
+    engine takes a NEW run directory per attempt, so the SCRIPT name is
+    the searchable anchor, not any run name we pick."""
+    import urllib.request
+    # 剧本要先真的存在，提交才不会被拒。
+    from test_library import SCRIPT as _SCRIPT
+    _seed = json.loads(json.dumps(_SCRIPT))
+    _seed["name"] = script_name
+    req = urllib.request.Request(
+        BASE + "/api/scripts",
+        data=json.dumps({"json": json.dumps(_seed)}).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    urllib.request.urlopen(req, timeout=30).read()
+    for index, status in enumerate(statuses, 1):
+        body = json.dumps({"script": script_name,
+                           "role_assets": {"character_1": "甲"},
+                           "run_name": "", "width": 960, "height": 544,
+                           "steps": 20, "duration": 12}).encode()
+        request = urllib.request.Request(BASE + "/api/render/submit",
+                                         data=body,
+                                         headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(request, timeout=20).read()
+        except Exception:
+            pass   # offline ComfyUI leaves an interrupted record
+
+
+def test_history_shows_works_with_their_attempts(page):
+    """U06: one run is one work card - counts say works AND attempts,
+    the film sits on the work, attempts expand with time and status."""
+    # 共享库里前面的测试会消耗 sb_demo：自己种一部自己的作品再搜，
+    # 测试之间不抢数据。
+    _seed_history_work(page, "作品探针剧", ["interrupted"])
+    page.goto(BASE + "/history", wait_until="networkidle")
+    page.wait_for_timeout(1500)
+    # The header counts WORKS, not rows.
+    head = page.locator(".card-head").first.inner_text()
+    assert "部作品" in head and "次尝试" in head, head
+
+    # 搜索把整部作品一起带出来（轮询等结果收敛）。
+    page.fill(".history-search", "作品探针剧")
+    deadline = time.time() + 10
+    rows = []
+    while time.time() < deadline:
+        rows = page.locator(".work-row")
+        if rows.count() == 1 and "作品探针剧" in rows.first.inner_text():
+            break
+        page.wait_for_timeout(400)
+    assert rows.count() == 1 and "作品探针剧" in rows.first.inner_text(),         [r.inner_text()[:60] for r in rows.all()[:3]]
+
+    # 尝试与状态都可见；目录名认得出这部作品。
+    work_text = rows.first.inner_text()
+    assert "最新" in work_text
+    assert "目录：" in work_text
+
+
+def test_the_draft_card_comes_to_you_on_a_narrow_screen(page):
+    """U08: on a phone, opening the draft scrolls the form into view
+    and the tall script list becomes a picker."""
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(BASE + "/scripts", wait_until="networkidle")
+    # 列表收成选择入口，列表本体不占首屏。
+    assert page.locator(".narrow-picker").filter(visible=True).count() == 1
+    assert page.locator(".split-list").filter(visible=True).count() == 0
+    # 打开起草：卡片进入视口，焦点落在文字输入上。
+    button(page, "✨ AI 起草").click()
+    page.locator(".intake-card").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(900)
+    in_view = page.evaluate("""() => {
+        const card = document.querySelector('.intake-card');
+        const box = card.getBoundingClientRect();
+        const active = document.activeElement;
+        return { top: box.top, focused: active ? active.tagName : "" };
+    }""")
+    assert in_view["top"] >= -10, in_view          # card at/above the fold
+    assert in_view["focused"] == "TEXTAREA", in_view
+    overflow = page.evaluate(
+        "document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    assert overflow <= 1, "narrow screen scrolls sideways"
+
+
+def test_narrow_screens_stay_within_the_viewport(page):
+    """U08: the other pages keep their width on a 390px screen."""
+    page.set_viewport_size({"width": 390, "height": 844})
+    for path in ("/assets", "/video", "/history", "/llm"):
+        page.goto(BASE + path, wait_until="networkidle")
+        page.wait_for_timeout(700)
+        overflow, culprits = page.evaluate("""() => {
+            const doc = document.documentElement;
+            const wide = [];
+            if (doc.scrollWidth - doc.clientWidth <= 1) return [0, wide];
+            // 报“叶子级”超宽元素：祖先的宽只是传播。
+            for (const el of document.querySelectorAll('*')) {
+                const box = el.getBoundingClientRect();
+                if (box.right > doc.clientWidth + 1 && box.width > 0) {
+                    wide.push(el.tagName + "." + (el.className || '').toString()
+                        .split(' ')[0] + "@" + Math.round(box.right));
+                    if (wide.length >= 5) break;
+                }
+            }
+            return [doc.scrollWidth - doc.clientWidth, wide];
+        }""")
+        assert overflow <= 1, (path, overflow, " | ".join(culprits))

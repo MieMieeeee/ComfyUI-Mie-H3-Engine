@@ -1046,3 +1046,89 @@ def test_a_scene_asset_choice_travels_to_the_plan_preview(client, monkeypatch):
                                  "scene_asset": "天台"})
     assert response.status_code == 200, response.get_json()
     assert calls["scene"] == "天台"
+
+
+# --------------------------------------------------------------------------- #
+# Batch E backend: the history told as works (U06)
+# --------------------------------------------------------------------------- #
+
+def test_the_history_groups_attempts_by_run(plugin_root, monkeypatch):
+    """One run_name is one WORK: attempts ride inside, totals count
+    works, and paging cannot split a work across pages."""
+    from webapp.services import runner
+
+    def record(job_id, run_name, attempt, status, at):
+        return {"job_id": job_id, "number": attempt, "script": "剧本A",
+                "run_name": run_name, "title": "剧本A · 第 %d 版" % attempt,
+                "attempt": attempt, "submitted_at": at, "status": status,
+                "error": "", "role_assets": {}, "params": {},
+                "artifacts": [], "segments": [], "audio": [], "technical": []}
+
+    records = [
+        record("a1", "work_one", 1, "interrupted", 100),
+        record("a2", "work_one", 2, "success", 200),
+        record("a3", "work_two", 1, "success", 300),
+    ]
+    monkeypatch.setattr(runner, "all_records", lambda: records)
+
+    data = runner.jobs(grouped=True, per_page=2)
+    assert data["total"] == 2, data["total"]        # 作品数，不是尝试数
+    assert [w["run_name"] for w in data["groups"]] == ["work_two", "work_one"]
+    one = data["groups"][1]
+    assert one["attempt_count"] == 2
+    assert one["latest_status"] == "success"         # 最新的尝试说话
+    assert [a["job_id"] for a in one["attempts"]] == ["a2", "a1"]  # 新在前
+    # 分页在作品级：每页 2 部刚好一页装下，work_one 的尝试不会被拆。
+    assert data["pages"] == 1
+    assert data["attempts"] == 3
+
+
+def test_the_history_search_matches_whole_works(plugin_root, monkeypatch):
+    from webapp.services import runner
+
+    def record(job_id, run_name, script, status):
+        return {"job_id": job_id, "number": 1, "script": script,
+                "run_name": run_name, "title": script + " · 第 1 版",
+                "attempt": 1, "submitted_at": 1, "status": status,
+                "error": "", "role_assets": {}, "params": {},
+                "artifacts": [], "segments": [], "audio": [], "technical": []}
+
+    records = [
+        record("a1", "sb_web_abc", "天台剧本", "success"),
+        record("a2", "sb_web_def", "厨房剧本", "error"),
+    ]
+    monkeypatch.setattr(runner, "all_records", lambda: records)
+
+    by_script = runner.jobs(grouped=True, query="天台")
+    assert [w["run_name"] for w in by_script["groups"]] == ["sb_web_abc"]
+    by_error_text = runner.jobs(grouped=True, query="厨房")
+    assert [w["run_name"] for w in by_error_text["groups"]] == ["sb_web_def"]
+    # 运行名的一部分也能搜到，整部作品一起命中。
+    by_run = runner.jobs(grouped=True, query="sb_web_abc")
+    assert len(by_run["groups"]) == 1
+
+
+def test_a_film_lands_on_its_work(plugin_root, monkeypatch):
+    """The finished film belongs to the work, whichever attempt
+    delivered it - the work card carries it."""
+    from webapp.services import runner
+
+    records = [{
+        "job_id": "a1", "number": 1, "script": "剧本A", "run_name": "film_run",
+        "title": "剧本A · 第 1 版", "attempt": 1, "submitted_at": 1,
+        "status": "success", "error": "", "role_assets": {}, "params": {},
+        "artifacts": [], "segments": [], "audio": [], "technical": [],
+    }]
+    monkeypatch.setattr(runner, "all_records", lambda: records)
+
+    def fake_attach(record, index=None):
+        record["artifacts"] = [
+            {"kind": "video", "name": "film.mp4",
+             "relpath": "live_storyboards/film_run/film.mp4", "role": "final"},
+        ]
+
+    monkeypatch.setattr(runner, "_attach_artifacts", fake_attach)
+    monkeypatch.setattr(runner.comfy, "scan_output", lambda: {})
+    data = runner.jobs(grouped=True)
+    work = data["groups"][0]
+    assert work["film"] == "live_storyboards/film_run/film.mp4"

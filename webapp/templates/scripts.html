@@ -20,7 +20,16 @@
   </p>
 
   <div class="split">
-    <!-- 左：列表 -->
+    <!-- 左：列表。窄屏收成选择入口（U08），列表本身不占首屏。 -->
+    <label class="field narrow-picker">
+      <span class="muted small">剧本（<span x-text="items.length"></span>）</span>
+      <select class="input" @change="open($event.target.value); $event.target.value = ''">
+        <option value="">选择剧本…</option>
+        <template x-for="item in items" :key="item.name">
+          <option :value="item.name" x-text="item.name"></option>
+        </template>
+      </select>
+    </label>
     <div class="split-list">
       <div class="list-scroll">
         <template x-for="item in items" :key="item.name">
