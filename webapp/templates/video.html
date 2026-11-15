@@ -120,10 +120,10 @@
         </span>
       </label>
       <div class="field-grid">
-        <label class="field"><span>宽</span><input class="input" type="number" x-model.number="width"></label>
-        <label class="field"><span>高</span><input class="input" type="number" x-model.number="height"></label>
-        <label class="field"><span>步数</span><input class="input" type="number" x-model.number="steps"></label>
-        <label class="field"><span>目标秒</span><input class="input" type="number" x-model.number="duration"></label>
+        <label class="field"><span>宽</span><input class="input" type="number" x-model.number="width" @change="saveSession()"></label>
+        <label class="field"><span>高</span><input class="input" type="number" x-model.number="height" @change="saveSession()"></label>
+        <label class="field"><span>步数</span><input class="input" type="number" x-model.number="steps" @change="saveSession()"></label>
+        <label class="field"><span>目标秒</span><input class="input" type="number" x-model.number="duration" @change="saveSession()"></label>
       </div>
 
       <!-- 英文镜像过期：生成实际读的是英文，源文本改了而镜像没改，

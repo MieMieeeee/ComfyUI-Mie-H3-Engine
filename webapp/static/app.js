@@ -1577,6 +1577,7 @@ function scriptsPage() {
           caption: "", hasCaption: false, needsCaption: false,
           reading: null, readBusy: false, readError: "",
           eventDraft: null,   /* {mode, roles, events, unmapped, design} */
+          storySummary: "",     /* 一句话故事摘要（U05）：核对“这版在讲什么” */
           previousDraft: null,  /* 重新整理前的上一份（含作者的改动，F05） */
           showDraftChoice: false,
           validateState: { ok: null, errors: [], checked: false },
@@ -1588,10 +1589,39 @@ function scriptsPage() {
                               perspective: "observer" } },
           genBusy: false, genError: "", waited: 0, timer: null,
           candidate: null,      /* {json, notes, revision, forScript} */
+          modelInfo: null,      /* 当前平台/模型（U07），打开卡片时重读 */
           stashFailed: false,
         };
       }
       this.intakeOpen = true;
+      this.intakeRefreshModelInfo();
+    },
+
+    /* U07：起草卡顶上说清“现在用的是谁”。没配置就给直达设置的入口；
+     * 每次打开都重读——模型换过而理解/请求还揣着旧平台的假设，
+     * 是解读失败的常见根因。 */
+    async intakeRefreshModelInfo() {
+      const s = this.intake;
+      if (!s) return;
+      const before = s.modelInfo ? s.modelInfo.key : "";
+      try {
+        const data = await api.get("/api/llm/platforms");
+        const row = (data.platforms || []).find((x) => x.key === data.current);
+        s.modelInfo = data.current
+          ? { key: data.current, name: row ? row.name : data.current,
+              model: row ? (row.model || "") : "",
+              configured: !row || row.needs_key === false || row.has_key }
+          : null;
+      } catch {
+        s.modelInfo = null;
+      }
+      // 平台换过：在途请求作废，已确认内容保留（用户重读即可）。
+      if (before && s.modelInfo && s.modelInfo.key !== before) {
+        s.requestSeq += 1;
+        if (s.readBusy) { s.readBusy = false; s.step = "material"; }
+        s.readError = "大模型平台已切换为 " + s.modelInfo.name
+          + "：之前的理解结果按旧平台得出，建议重新解读一次。";
+      }
     },
 
     closeIntake() {
@@ -2449,7 +2479,10 @@ function scriptsPage() {
             audio_mode: s.form.audio_mode,
             camera: s.design.camera,
             look: s.design.look, setting: s.design.setting,
-            scene: s.design.scene, constraints: s.design.constraints,
+            scene: s.design.scene,
+            constraints: (s.design.constraints || "").trim()
+              + ((s.design.constraints || "").trim() && s.storySummary.trim() ? "\\n" : "")
+              + (s.storySummary.trim() ? "故事主线：" + s.storySummary.trim() : ""),
             light: "follow_image", light_text: "",
           });
         if (seq !== this.intakeValidateSeq) return;
@@ -2563,6 +2596,12 @@ function scriptsPage() {
           s.genError = "";
           return;
         }
+        // 一句话摘要进导演要求（U05）：锁定的事件不受影响，模型分镜
+        // 归组和写执行描述时以它为准。UI 上说明这个关系。
+        const constraints = (s.design.constraints || "").trim()
+          + ((s.design.constraints || "").trim() && s.storySummary.trim()
+             ? "\\n" : "")
+          + (s.storySummary.trim() ? "故事主线：" + s.storySummary.trim() : "");
         body = {
           mode: "script",
           roles: draft.roles.map((r) => ({
@@ -2582,11 +2621,13 @@ function scriptsPage() {
           critic: s.form.critic ? "on" : "off",
           camera: s.design.camera,
           look: s.design.look, setting: s.design.setting,
-          scene: s.design.scene, constraints: s.design.constraints,
+          scene: s.design.scene, constraints: constraints,
           light: "follow_image", light_text: "",
         };
       } else {
-        const concept = this.intakeConcept();
+        const summary = s.storySummary.trim();
+        const concept = (summary ? "这一版的故事：" + summary + "\\n\\n" : "")
+          + this.intakeConcept();
         if (!concept.trim()) {
           s.genError = "素材是空的：写一段文字，或放一张图并解读。";
           return;
@@ -2708,6 +2749,7 @@ function scriptsPage() {
           conflicts: s.reading.conflicts,
         } : null,
         eventDraft: s.eventDraft,
+        storySummary: s.storySummary,
         previousDraft: s.previousDraft,
         showDraftChoice: s.showDraftChoice,
         design: s.design,
@@ -2756,6 +2798,7 @@ function scriptsPage() {
       if (meta.eventDraft && Array.isArray(meta.eventDraft.events)) {
         s.eventDraft = meta.eventDraft;
       }
+      s.storySummary = meta.storySummary || "";
       if (meta.previousDraft && Array.isArray(meta.previousDraft.events)) {
         s.previousDraft = meta.previousDraft;
         s.showDraftChoice = !!meta.showDraftChoice;
@@ -2920,8 +2963,8 @@ function scriptsPage() {
     },
 
     async save() {
-      if (!this.model) return;
-      if (this.tab === "json" && !this.trySyncJson()) return;
+      if (!this.model) return false;
+      if (this.tab === "json" && !this.trySyncJson()) return false;
       try {
         const result = await api.post("/api/scripts",
           { json: this.buildPayload(), note: this.changeNote || "手工修改" });
@@ -2948,10 +2991,25 @@ function scriptsPage() {
         await this.load();
         await this.loadVersions(this.selected);
         this.queueValidate();
+        return true;
       } catch (error) {
         this.errors = [error.message];
         this.okMessage = "";
+        return false;
       }
+    },
+
+    /* U04：改了一半也要能直接去做——保存成功才走，失败留在当前稿。 */
+    async saveAndMake() {
+      if (!this.model) return;
+      let landed = true;
+      if (this.isDirty) landed = await this.save();
+      if (!landed) {
+        this.okMessage = "保存没成功：先处理上面的错误，再去制作。";
+        return;
+      }
+      window.location.href = "/video?script="
+        + encodeURIComponent(this.selected || "");
     },
 
     async remove() {
@@ -3235,8 +3293,84 @@ function videoPage() {
       if (wanted && this.scripts.includes(wanted)) {
         this.script = wanted;
         await this.loadScript();
+        this.applySession(wanted);   // 同一份剧本：接着上次的绑定
+      } else if (!wanted) {
+        // 没点名剧本：去补素材/配模型回来的人，接着上次的配置（U04）。
+        await this.restoreSession();
       }
       await this.refreshCount();
+    },
+
+    /* ---------------- 制作会话：跨页面的那份配置（U04） ---------------- */
+
+    get sessionKey() { return "mie-video-session:v1"; },
+
+    readSession() {
+      try {
+        const raw = window.localStorage.getItem(this.sessionKey);
+        const data = raw ? JSON.parse(raw) : null;
+        return data && data.script ? data : null;
+      } catch { return null; }
+    },
+
+    saveSession() {
+      if (!this.script) return;
+      try {
+        window.localStorage.setItem(this.sessionKey, JSON.stringify({
+          script: this.script,
+          roles: this.roles.map((r) => ({ id: r.id, asset: r.asset })),
+          sceneAsset: this.sceneAsset || "",
+          width: this.width, height: this.height,
+          steps: this.steps, duration: this.duration,
+          savedAt: Date.now(),
+        }));
+      } catch { /* 存不进就不承诺恢复 */ }
+    },
+
+    clearSession() {
+      try { window.localStorage.removeItem(this.sessionKey); } catch { /* 同上 */ }
+    },
+
+    /* 恢复：剧本还在才谈恢复；绑定逐个核对，失效的明确说出来。 */
+    async restoreSession() {
+      const session = this.readSession();
+      if (!session || !this.scripts.includes(session.script)) {
+        if (session) this.clearSession();
+        return;
+      }
+      this.script = session.script;
+      await this.loadScript();
+      this.applySession(session.script, session);
+    },
+
+    /* 把会话里的绑定套到当前剧本上：角色槽位还在的套用，不在的报失效。 */
+    applySession(scriptName, session = null) {
+      const data = session || this.readSession();
+      if (!data || data.script !== scriptName) return;
+      const stale = [];
+      this.roles.forEach((role) => {
+        const saved = (data.roles || []).find((r) => r.id === role.id);
+        if (!saved || !saved.asset) return;
+        if (this.characters.includes(saved.asset)) {
+          role.asset = saved.asset;
+          this.loadAssetDetail(saved.asset);
+        } else {
+          stale.push(`${role.name}（原绑定 ${saved.asset} 已不在库里）`);
+        }
+      });
+      if (data.sceneAsset && this.scenes.includes(data.sceneAsset)) {
+        this.sceneAsset = data.sceneAsset;
+        this.loadSceneDetail(this.sceneAsset);
+      }
+      if (typeof data.width === "number") this.width = data.width;
+      if (typeof data.height === "number") this.height = data.height;
+      if (typeof data.steps === "number") this.steps = data.steps;
+      if (typeof data.duration === "number") this.duration = data.duration;
+      const minutes = Math.max(1, Math.round((Date.now() - (data.savedAt || Date.now())) / 60000));
+      this.message = "已恢复上次的制作配置（约 " + minutes + " 分钟前）"
+        + (stale.length ? "；需要重选：" + stale.join("、") : "。");
+      this.saveSession();
+      this.preview();
     },
 
     /* 场景资产（U02）：选中后计划的 scene_1 槽用它，剧本自己的 scene
@@ -3264,6 +3398,7 @@ function videoPage() {
       audioPreview.stop();
       await this.loadSceneDetail(this.sceneAsset);
       await this.preview();
+      this.saveSession();
     },
 
     playSample(key, src) {
@@ -3306,6 +3441,7 @@ function videoPage() {
       audioPreview.stop();          // 换了人选，旧声音立刻停（U01）
       await this.loadAssetDetail(role.asset);
       await this.preview();
+      this.saveSession();
     },
 
     /* F08：按实际配音模式检查每个角色的媒体。参考配音必须有可用
@@ -3587,6 +3723,28 @@ const jobView = {
     return ["success", "error", "interrupted", "partial", "empty"].indexOf(
       job.status) >= 0;
   },
+
+  /* 用本次配置再做一版（U04）：不是续跑（那是“从这次继续”），而是
+   * 同样的角色/场景绑定与参数，做一个新的运行。写进制作页的会话，
+   * 跳过去让作者核对后提交。 */
+  remakeJob(job) {
+    if (!job || !job.script) return;
+    const params = job.params || {};
+    const roles = (job.role_assets || {});
+    try {
+      window.localStorage.setItem("mie-video-session:v1", JSON.stringify({
+        script: job.script,
+        roles: Object.keys(roles).map((id) => ({ id, asset: roles[id] })),
+        sceneAsset: job.scene_asset || "",
+        width: params.width || 960,
+        height: params.height || 544,
+        steps: params.steps || 20,
+        duration: params.duration || 18,
+        savedAt: Date.now(),
+      }));
+    } catch { /* 存不进就让制作页从头来 */ }
+    window.location.href = "/video?script=" + encodeURIComponent(job.script);
+  },
 };
 
 /* ------------------------------------------------------------------ */
@@ -3747,5 +3905,6 @@ function historyPage() {
     durationText(manifest) { return jobView.durationText(manifest); },
     timeText(stamp) { return jobView.timeText(stamp); },
     canContinue(job) { return jobView.canContinue(job); },
+    remakeJob(job) { return jobView.remakeJob(job); },
   };
 }

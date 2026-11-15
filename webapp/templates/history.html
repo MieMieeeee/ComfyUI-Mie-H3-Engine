@@ -121,6 +121,11 @@
                   x-show="canContinue(j)" @click="continueJob(j)"
                   :disabled="submitting"
                   title="用同样的角色绑定和参数，接着这个任务继续生成">▶ 从这次继续</button>
+          <!-- U04：同样的配置，做一个新的运行（新目录新版本），
+               不是续跑。跳制作页核对后提交。 -->
+          <button class="btn subtle" type="button"
+                  x-show="j.script" @click="remakeJob(j)"
+                  title="带着这次的角色绑定和参数去制作页，生成一个新的运行">🔁 用本次配置再做一版</button>
           <button class="btn subtle" type="button" @click="removeRecord(j)"
                   title="从列表里移出这一条；硬盘上的成片不动">🗑️ 移出列表</button>
           <button class="btn danger" type="button" @click="removeFiles(j)"

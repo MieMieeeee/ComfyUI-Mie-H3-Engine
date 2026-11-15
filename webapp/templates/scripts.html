@@ -103,12 +103,29 @@
           <div class="card-head">
             <h3>✨ 从图片或文字起草</h3>
             <div class="panel-head-actions">
+              <!-- U07：当前用的是谁、能不能看图，起草前就说清 -->
+              <span class="muted small" x-show="intake.modelInfo && intake.modelInfo.configured"
+                    :title="'当前平台 ' + intake.modelInfo.key"
+                    x-text="'模型：' + intake.modelInfo.name
+                      + (intake.modelInfo.model ? ' · ' + intake.modelInfo.model : '')"></span>
+              <span class="muted small" x-show="intake.reading && intake.reading.vision"
+                    x-text="intake.reading.vision === 'supported' ? '（已能看图）'
+                      : intake.reading.vision === 'unsupported' ? '（此平台看不了图，可补图注）' : ''"></span>
+              <span class="badge warn" x-show="!intake.modelInfo">未配置大模型</span>
+              <a class="btn" x-show="!intake.modelInfo" href="/llm"
+                 title="去大模型页选平台配 Key；素材在起草卡里等你">⚙️ 去设置</a>
+              <button class="btn subtle" type="button" x-show="intake.modelInfo"
+                      @click="intakeRefreshModelInfo()" title="重读当前平台">🔄</button>
               <span class="badge" x-text="intakeStepLabel"></span>
               <button class="btn" type="button"
                       :disabled="intake.readBusy || intake.genBusy"
                       @click="closeIntake()">收起</button>
             </div>
           </div>
+          <p class="muted small" style="margin: 0 0 8px" x-show="intake.modelInfo && !intake.modelInfo.configured">
+            当前平台（<span x-text="intake.modelInfo.name"></span>）还没配 Key：
+            <a href="/llm">去大模型页配置</a>，素材都还在。
+          </p>
 
           <!-- 素材：文字 + 可选图片。reading 忙碌时原样保留。 -->
           <div class="intake-material"
@@ -560,7 +577,7 @@
               <details class="intake-design">
                 <summary class="small"><strong>整体设计</strong>（场景与世界观的说明；这些是全剧本的全局设置）</summary>
                 <label class="field">
-                  <span>场景描述（scene）</span>
+                  <span>场景描述（scene：这幕发生在哪，画面里看得见的环境）</span>
                   <textarea class="input" rows="2" x-model="intake.design.scene"
                             @change="intakeTouchEvents()"></textarea>
                 </label>
@@ -632,6 +649,13 @@
           <!-- 生成参数：material 和 understanding 阶段可改 -->
           <div class="intake-form"
                x-show="intake.step === 'material' || intake.step === 'understanding' || intake.step === 'events'">
+            <!-- 一句话故事摘要（U05）：生成前核对“这版在讲什么”。 -->
+            <label class="field">
+              <span>一句话故事摘要（引导路径会作为导演要求的一部分传给生成；已确认的事件不受影响）</span>
+              <textarea class="input" rows="2" x-model="intake.storySummary"
+                        @change="intakeTouch()"
+                        placeholder="例如：两个陌生人在天台偶遇，互相说出了不敢说的话。"></textarea>
+            </label>
             <div class="field-row">
               <label class="field">
                 <span>名字</span>
@@ -743,8 +767,13 @@
                     x-text="'版本 ' + versionInfo.current"></span>
               <button class="btn" type="button" @click="versionOpen = !versionOpen"
                       x-show="selected" title="这一份剧本的版本历史">🕘 版本</button>
-              <a class="btn" x-show="selected" :href="'/video?script=' + encodeURIComponent(selected)"
+              <a class="btn" x-show="selected && !isDirty" :href="'/video?script=' + encodeURIComponent(selected)"
                  title="带着这份剧本去制作页">🎬 用此剧本制作</a>
+              <!-- U04：有未保存修改时，主动作变成“保存并制作”——
+                   保存的明确版本才是制作输入，失败留在当前稿。 -->
+              <button class="btn" type="button" x-show="selected && isDirty"
+                      @click="saveAndMake()"
+                      title="先保存这份修改（产生新版本），再带着它去制作页">💾 保存并制作</button>
               <button class="btn" type="button" @click="startDraft('revise')"
                       x-show="selected" title="以当前剧本为底稿，按修改意见生成下一版">✨ 修订</button>
               <button class="btn" type="button" @click="validateNow(true)">✔️ 校验</button>

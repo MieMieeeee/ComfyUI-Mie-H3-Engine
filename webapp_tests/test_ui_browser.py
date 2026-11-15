@@ -189,7 +189,7 @@ def test_a_character_can_be_created_edited_and_deleted(page):
     fields.nth(2).fill("young female")
     page.locator("input[type=file]").first.set_input_files(
         {"name": "p.png", "mimeType": "image/png", "buffer": png_bytes()})
-    button(page, "💾 保存").click()
+    page.get_by_role("button", name="💾 保存", exact=True).click()
     page.wait_for_timeout(1500)
 
     # The confirmation must be VISIBLE. It used to live inside the card
@@ -206,7 +206,7 @@ def test_a_character_can_be_created_edited_and_deleted(page):
     page.wait_for_timeout(400)
     fields = visible(page, ".card .field .input")
     fields.nth(1).fill("第二版描述")
-    button(page, "💾 保存").click()
+    page.get_by_role("button", name="💾 保存", exact=True).click()
     page.wait_for_timeout(1500)
 
     data = api_get("/api/assets/character/%E6%B5%8B%E8%AF%95%E8%A7%92%E8%89%B2")
@@ -235,7 +235,7 @@ def test_a_scene_can_be_created_edited_and_deleted(page):
     fields.nth(1).fill("第一版描述")
     page.locator("input[type=file]").first.set_input_files(
         {"name": "p.png", "mimeType": "image/png", "buffer": png_bytes()})
-    button(page, "💾 保存").click()
+    page.get_by_role("button", name="💾 保存", exact=True).click()
     page.wait_for_timeout(1500)
     assert "已保存" in message(page)
     assert row_named(page, "测试场景") is not None
@@ -254,7 +254,7 @@ def test_a_scene_can_be_created_edited_and_deleted(page):
     page.wait_for_timeout(400)
     fields = visible(page, ".card .field .input")
     fields.nth(1).fill("第二版描述")
-    button(page, "💾 保存").click()
+    page.get_by_role("button", name="💾 保存", exact=True).click()
     page.wait_for_timeout(1500)
     data = api_get("/api/assets/scene/%E6%B5%8B%E8%AF%95%E5%9C%BA%E6%99%AF")
     assert data["description"] == "第二版描述"
@@ -279,7 +279,7 @@ def test_a_script_can_be_created_edited_and_deleted(page):
     page.get_by_placeholder("剧本名字").fill("测试剧本")
     page.locator(".editor-pane textarea.code").fill("角色1：你好")
     page.wait_for_timeout(400)
-    button(page, "💾 保存").click()
+    page.get_by_role("button", name="💾 保存", exact=True).click()
     assert "已保存" in message(page, ".validation-box.ok")
     assert row_named(page, "测试剧本") is not None
     saved = api_get("/api/scripts/%E6%B5%8B%E8%AF%95%E5%89%A7%E6%9C%AC")
@@ -321,7 +321,7 @@ def test_a_script_can_be_created_edited_and_deleted(page):
     boxes = visible(page, ".validation-box").all_inner_texts()
     assert not any("契约不通过" in b for b in boxes), boxes
 
-    button(page, "💾 保存").click()
+    page.get_by_role("button", name="💾 保存", exact=True).click()
     page.wait_for_timeout(1500)
     data = api_get("/api/scripts/%E6%B5%8B%E8%AF%95%E5%89%A7%E6%9C%AC")
     assert data["json"]["constraints"] == "改过的约束"
@@ -557,7 +557,7 @@ def test_a_new_mirror_is_not_confirmed_against_a_moved_source(page, web):
     page.get_by_placeholder("剧本名字").fill("镜像测试")
     page.locator(".editor-pane textarea.code").fill("角色1：你好")
     page.wait_for_timeout(600)
-    button(page, "💾 保存").click()
+    page.get_by_role("button", name="💾 保存", exact=True).click()
     page.wait_for_timeout(1200)
 
     # 打开高级区，把执行镜像当成"刚换过"的样子：记下源文本指纹。
@@ -575,7 +575,7 @@ def test_a_new_mirror_is_not_confirmed_against_a_moved_source(page, web):
     ta = page.locator(".editor-pane textarea.code").first
     ta.fill(ta.input_value() + "\n角色1动作：他点了点头。")
     page.wait_for_timeout(900)
-    button(page, "💾 保存").click()
+    page.get_by_role("button", name="💾 保存", exact=True).click()
     page.wait_for_timeout(1500)
 
     # 存盘不该把过期镜像确认掉。问服务端：它有没有把"确认"记下来。
@@ -593,7 +593,7 @@ def test_the_making_page_shows_the_script_it_will_render(page, web):
     page.get_by_placeholder("剧本名字").fill("预览测试")
     page.locator(".editor-pane textarea.code").fill("角色1：你好\n角色1动作：他点了点头。")
     page.wait_for_timeout(600)
-    button(page, "💾 保存").click()
+    page.get_by_role("button", name="💾 保存", exact=True).click()
     page.wait_for_timeout(1500)
 
     page.goto(BASE + "/video", wait_until="networkidle")
@@ -623,7 +623,7 @@ def test_the_script_page_opens_the_script_it_was_asked_for(page, web):
     page.get_by_placeholder("剧本名字").fill("跳转测试")
     page.locator(".editor-pane textarea.code").fill("角色1：你好")
     page.wait_for_timeout(600)
-    button(page, "💾 保存").click()
+    page.get_by_role("button", name="💾 保存", exact=True).click()
     page.wait_for_timeout(1500)
 
     page.goto(BASE + "/scripts?script=%E8%B7%B3%E8%BD%AC%E6%B5%8B%E8%AF%95",
@@ -641,7 +641,7 @@ def _write_a_script(page, name, lines):
     page.get_by_placeholder("剧本名字").fill(name)
     page.locator(".editor-pane textarea.code").fill("\n".join(lines))
     page.wait_for_timeout(700)
-    button(page, "💾 保存").click()
+    page.get_by_role("button", name="💾 保存", exact=True).click()
     page.wait_for_timeout(1500)
     page.get_by_role("button", name="✏️ 编辑").click()
     page.wait_for_timeout(400)
@@ -828,7 +828,7 @@ def test_the_versions_of_a_script_are_kept(page, web):
     # 改一句台词再存：多一版，旧的那版还在。
     page.locator(".editor-pane textarea.code").fill("角色1：改过的台词")
     page.wait_for_timeout(900)
-    button(page, "💾 保存").click()
+    page.get_by_role("button", name="💾 保存", exact=True).click()
     page.wait_for_timeout(1800)
     panel = page.locator(".version-list")
     assert "版本 2" in panel.inner_text(), panel.inner_text()
@@ -1920,3 +1920,137 @@ def test_a_saved_scene_can_be_chosen_for_the_plan(page):
     # 场景卡显示描述与环境音；说明覆盖关系。
     block = page.locator(".roles-block", has_text="场景参考").first
     assert "天台，风很大" in block.inner_text() or "夜晚的天台" in block.inner_text()
+
+
+# --------------------------------------------------------------------------- #
+# Batch D browser coverage: save-and-make, session restore, remake, summary
+# --------------------------------------------------------------------------- #
+
+def test_save_and_make_takes_the_saved_version_to_video(page):
+    """U04: with unsaved edits, the make action saves FIRST - the saved
+    version is what renders; a failed save stays on the editor."""
+    _write_a_script(page, "衔接测试", ["角色1：原句"])
+    # 改台词：出现「保存并制作」。
+    page.locator(".editor-pane textarea.code").fill("角色1：改过的句子")
+    page.wait_for_timeout(700)
+    make = page.locator("button", has_text="保存并制作")
+    assert make.filter(visible=True).count() == 1
+    make.click()
+    page.wait_for_timeout(2500)
+    # 保存成功：带着明确版本进了制作页。
+    assert "/video" in page.url, page.url
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(1500)
+    assert page.evaluate(
+        "() => document.querySelector('select.input').value") == "衔接测试"
+    # 改过的内容真的是制作输入（剧本预览里读得到）。
+    assert "改过的句子" in page.locator(".split-detail").inner_text()
+
+    # 保存失败：坏剧本留在编辑页，说清错误。
+    page.goto(BASE + "/scripts", wait_until="networkidle")
+    row_named(page, "衔接测试").click()
+    page.get_by_role("button", name="✏️ 编辑").click()
+    page.wait_for_timeout(500)
+    page.locator(".editor-pane textarea.code").fill("这是一行没有角色的文字")
+    page.wait_for_timeout(700)
+    page.locator("button", has_text="保存并制作").filter(visible=True).first.click()
+    page.wait_for_timeout(1800)
+    assert "/scripts" in page.url
+    assert "无法识别" in page.locator(".split-detail").inner_text()
+
+
+def test_the_video_session_comes_back_after_a_side_trip(page):
+    """U04: go add a voice sample on the assets page, come back - the
+    casting, the scene and the frame size are still there."""
+    char_name = _api_put_character("跨页角色")["name"]
+    _write_a_script(page, "跨页剧本", ["角色1：你好"])
+    page.goto(BASE + "/video", wait_until="networkidle")
+    page.select_option("select.input >> nth=0", "跨页剧本")
+    page.wait_for_timeout(1200)
+    page.locator(".roles-block select.input").first.select_option(char_name)
+    page.wait_for_timeout(900)
+    page.locator(".field-grid input").first.fill("1280")
+    page.locator(".field-grid input").first.dispatch_event("change")
+    page.wait_for_timeout(400)
+
+    # 去资产页补素材，再回来（不带参数）。
+    page.goto(BASE + "/assets", wait_until="networkidle")
+    page.goto(BASE + "/video", wait_until="networkidle")
+    page.wait_for_timeout(1500)
+    # select_option() 对动态渲染的选项读不到选中态：直接读 DOM 值。
+    assert page.evaluate(
+        "() => document.querySelector('select.input').value") == "跨页剧本"
+    assert "已恢复上次的制作配置" in page.locator(".split-list").inner_text()
+    assert page.locator(".roles-block select.input").first.input_value() == char_name
+    assert page.locator(".field-grid input").first.input_value() == "1280"
+
+
+def test_remake_with_the_same_config_restores_the_setup(page):
+    """U04: 'remake with this config' lands on the video page with the
+    task's script and bindings restored - ready to submit a NEW run."""
+    char_name = _api_put_character("再版角色")["name"]
+    _write_a_script(page, "再版剧本", ["角色1：你好"])
+    # 造一条带绑定与参数的历史任务（真实接口；ComfyUI 不在线，排队失败
+    # 也会留下 interrupted 记录——够触发“再做一版”）。
+    import urllib.request
+    body = json.dumps({"script": "再版剧本",
+                       "role_assets": {"character_1": char_name},
+                       "scene_asset": "", "width": 1024, "height": 576,
+                       "steps": 24, "duration": 12}).encode()
+    request = urllib.request.Request(BASE + "/api/render/submit", data=body,
+                                     headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(request, timeout=20).read()
+    except Exception:
+        pass   # offline ComfyUI: the record still lands as interrupted
+    page.goto(BASE + "/history", wait_until="networkidle")
+    page.wait_for_timeout(1200)
+    button(page, "🔁 用本次配置再做一版").first.click()
+    page.wait_for_timeout(2000)
+    assert "/video" in page.url
+    assert page.evaluate(
+        "() => document.querySelector('select.input').value") == "再版剧本"
+    assert page.locator(".roles-block select.input").first.input_value() == char_name
+    assert page.locator(".field-grid input").first.input_value() == "1024"
+
+
+def test_the_story_summary_travels_into_the_request(page):
+    """U05: the one-line story summary is a confirmed input - it shows
+    before generating and rides along in the request."""
+    asset = _stub_asset()
+    auto_calls = []
+    _stub_validate(page, asset)
+
+    def auto_handler(route):
+        auto_calls.append(json.loads(route.request.post_data))
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"json": asset, "notes": []}))
+    page.route("**/api/scripts/auto", auto_handler)
+    page.route("**/api/scripts/intake/validate", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"code": "ok", "validation": {
+            "ok": True, "errors": [], "warnings": [],
+            "roles": [], "events": [], "source_script": "", "counts": {}}})))
+
+    _open_intake_events(page, "小明：一句台词。")
+    page.locator(".intake-form textarea").first.fill(
+        "两个陌生人在天台偶遇，互相说出了不敢说的话。")
+    page.locator(".intake-form textarea").first.dispatch_event("change")
+    page.wait_for_timeout(1800)   # debounce + precheck
+    button(page, "按已确认内容生成").click()
+    page.wait_for_timeout(800)
+    assert auto_calls and auto_calls[0]["mode"] == "script"
+    assert "故事主线：两个陌生人在天台偶遇" in (auto_calls[0]["constraints"] or ""), \
+        auto_calls[0]["constraints"]
+
+
+def test_the_draft_card_names_the_model_or_offers_settings(page):
+    """U07: the draft card says which model is current - and when
+    nothing is configured, the way to the settings is right there."""
+    _open_intake(page)
+    head = page.locator(".intake-card .card-head").inner_text()
+    # 隔离实例没配置平台：显示未配置 + 去设置入口。
+    assert ("未配置大模型" in head) or ("模型：" in head), head
+    if "未配置大模型" in head:
+        assert page.locator(".intake-card a", has_text="去设置").count() == 1
+        assert page.locator(".intake-card a", has_text="去设置").first.get_attribute("href") == "/llm"
