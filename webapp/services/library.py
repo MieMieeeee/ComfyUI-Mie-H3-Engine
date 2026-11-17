@@ -235,7 +235,7 @@ def to_wav_bytes(raw: bytes) -> bytes:
 
 def save_character(name: str, description: str = None, voice: str = None,
                    image_raw: bytes = None, audio_raw: bytes = None,
-                   on_exists: str = "upsert") -> dict:
+                   on_exists: str = "upsert", expected_hash: str = None) -> dict:
     """Create or update a character.
 
     ``image_raw`` / ``audio_raw`` of None mean "keep what is on disk", so
@@ -265,7 +265,8 @@ def save_character(name: str, description: str = None, voice: str = None,
         wav_bytes = [to_wav_bytes(audio_raw)]
     return _library.save_character(
         library_dir(), name, description, voice,
-        png_bytes_list=png_bytes, wav_bytes_list=wav_bytes, **_library_kwargs())
+        png_bytes_list=png_bytes, wav_bytes_list=wav_bytes,
+        expected_hash=expected_hash, **_library_kwargs())
 
 
 class AssetExistsError(FileExistsError):
@@ -297,7 +298,8 @@ def _refuse_existing(kind: str, name: str) -> None:
 
 
 def save_scene(name: str, description: str, ambience: str = None,
-               image_raw: bytes = None, on_exists: str = "upsert") -> dict:
+               image_raw: bytes = None, on_exists: str = "upsert",
+               expected_hash: str = None) -> dict:
     """Create or update a scene.
 
     ``ambience`` of None keeps the stored value; an empty string clears
@@ -313,7 +315,10 @@ def save_scene(name: str, description: str, ambience: str = None,
         png_bytes = [to_png_bytes(image_raw)]
     return _library.save_scene(
         library_dir(), name, description, png_bytes_list=png_bytes,
-        ambience=ambience, **_library_kwargs())
+        ambience=ambience, expected_hash=expected_hash, **_library_kwargs())
+
+
+AssetConflictError = _library.AssetConflictError
 
 
 def delete_character(name: str) -> dict:

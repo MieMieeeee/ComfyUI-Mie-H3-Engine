@@ -138,7 +138,7 @@ function rerollFixture(selectedBranch = branchId, scene = branchScene) {
         activeSceneFromOutput, refreshRestoredPlanEditors() {},
         randomSceneSeed() { throw new Error("Unexpected seed mutation"); },
     });
-    vm.runInContext(source.replace(/^import[\s\S]*?from "[^"]+";\n/gm, ""), context);
+    vm.runInContext(source.replace(/^import[\s\S]*?from "[^"]+";\r?\n/gm, ""), context);
     vm.runInContext(`
         root = {hidden: false}; actionButton = {disabled: false};
         status = {className: "", textContent: ""};

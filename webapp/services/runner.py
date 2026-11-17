@@ -37,6 +37,18 @@ _reserved: set = set()
 _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
 
+
+def render_busy() -> bool:
+    """True while a render is queued or running.
+
+    Mirror sync checks ``GET /api/health`` and waits while this is true.
+    """
+    with _jobs_lock:
+        return any(
+            item.get("status") in ("queued", "running")
+            for item in _jobs.values()
+        )
+
 #: How many job records are kept on disk. The list is a log of what was
 #: submitted, not an archive.
 _JOB_HISTORY = 50

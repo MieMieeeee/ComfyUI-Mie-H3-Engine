@@ -58,7 +58,7 @@ function harness({startClip = 1, sceneRange = "", endClip = 3, total = 3, nested
         window: {setTimeout}, console,
     };
     vm.createContext(context);
-    vm.runInContext(source.replace(/^import[\s\S]*?from "[^"]+";\n/gm, "").replace(/^export /gm, "") +
+    vm.runInContext(source.replace(/^import[\s\S]*?from "[^"]+";\r?\n/gm, "").replace(/^export /gm, "") +
         "\nglobalThis.handlers = {onExecuted, onExecutionSuccess, onTerminalFailure, onContinuationStart};", context);
     const handlers = context.handlers;
     const selection = () => ({start: start.widgets[0].value, range: start.widgets[1].value});

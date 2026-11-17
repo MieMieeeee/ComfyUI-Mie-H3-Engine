@@ -1,4 +1,5 @@
 import {app} from "/scripts/app.js";
+import {findPlanProvider, planInputConnected} from "./mieh3_plan_preview.js";
 import {bindNodeWheel} from "./h3_dom_wheel.mjs?v=0.7.1";
 import {api} from "/scripts/api.js";
 import {coalescedRefresh} from "./h3_coalesced_refresh.mjs?v=0.7.1";
@@ -739,6 +740,7 @@ function mountEditor(node) {
     }
 
     function syncPlan() {
+        if (planInputConnected(node)) return;
         if (!state.plan) return;
         const value = planToJson(state.plan);
         state.syncing = true;
@@ -1901,7 +1903,7 @@ function mountEditor(node) {
         root.replaceChildren();
         root.classList.toggle("h3c-show-advanced", state.advanced);
 
-        const externalPlanConnected = inputConnected(node, "plan_json_input");
+        const externalPlanConnected = planInputConnected(node);
         const header = element("div", "h3c-header");
         const openOutput = button(
             "Output",
@@ -1969,19 +1971,28 @@ function mountEditor(node) {
 
         const externalNotice = element("div", "h3c-external-plan");
         externalNotice.append(
-            element("strong", "", "External plan input connected. "),
+            element("strong", "", "外部 plan 接管，本面板只读。 "),
             document.createTextNode(
-                "A non-empty upstream string controls execution. The editor below " +
-                "shows and edits the local fallback used only when that string is empty " +
-                "or disconnected.",
+                "执行用 plan_json_input 上的字符串。下面的文本不再写回。",
             ),
         );
+        const providerNode = findPlanProvider(node);
+        if (providerNode) {
+            const shaLine = element("div", "", "当前预览 = …");
+            externalNotice.append(shaLine);
+            void providerNode.mieH3PlanProvider().fetchPlan().then((payload) => {
+                shaLine.textContent = `当前预览 = ${payload.plan_sha256 || ""}`;
+            }).catch((error) => {
+                shaLine.textContent = String(error?.message || error);
+            });
+        }
 
         const prefix = element("textarea", "h3c-prefix");
         prefix.setAttribute("aria-label", "Shared prompt");
         prefix.value = sharedPrompt(state.plan).text;
         prefix.placeholder = "Identity, wardrobe, style and continuity rules shared by every scene…";
         prefix.title = "Text automatically prepended to every scene prompt. Put identity, wardrobe, reference definitions, audio rules, style, and global continuity here instead of repeating them.";
+        prefix.readOnly = externalPlanConnected;
         prefix.spellcheck = true;
         prefix.addEventListener("input", () => {
             setSharedPrompt(state.plan, prefix.value);
@@ -2052,6 +2063,7 @@ function mountEditor(node) {
         const jsonPanel = element("section", `h3c-section h3c-json-panel${state.jsonOpen ? " h3c-open" : ""}`);
         const jsonArea = element("textarea", "h3c-json");
         jsonArea.value = planToJson(state.plan);
+        jsonArea.readOnly = externalPlanConnected;
         jsonArea.spellcheck = false;
         jsonArea.title = "Canonical plan JSON. Apply JSON replaces the visual editor contents after validation; saving the workflow also serializes this value.";
         bindTextareaHeight(jsonArea, "json", 260);
@@ -2109,7 +2121,7 @@ function mountEditor(node) {
                 "span",
                 "",
                 externalPlanConnected
-                    ? "Edits are serialized into fallback plan_json; non-empty external JSON takes precedence."
+                    ? "外部 plan 接管，本面板只读。执行用 socket 上的字符串。"
                     : "Edits are serialized into plan_json; connect plan_json_input for an external override.",
             ),
             Object.assign(element("a", "", "UI inspiration: nkxx188"), {

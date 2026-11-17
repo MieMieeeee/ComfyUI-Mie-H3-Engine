@@ -11,7 +11,7 @@ import {
 
 const source = fs.readFileSync(
     new URL("../web/h3_chain_cancel_reroll.js", import.meta.url), "utf8",
-).replace(/^import[\s\S]*?;\n/gm, "");
+).replace(/^import[\s\S]*?;\r?\n/gm, "");
 
 // Execute the real extension event handlers and cancellation flow. Only the
 // browser shell, transport and editor refresh are stubbed; no live job is run.

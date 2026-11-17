@@ -166,6 +166,9 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
 
 WEB_DIRECTORY = "./web"
 
+from . import plan_preview as _plan_preview
+_plan_preview.register_with_prompt_server()
+
 __all__ = [
     "NODE_CLASS_MAPPINGS",
     "NODE_DISPLAY_NAME_MAPPINGS",

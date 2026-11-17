@@ -74,19 +74,20 @@
 | **1.10** | **Phase 1** | **两处"最新者胜"改按内容时间戳** —— 活跃 checkpoint 指针改按 `segment.created_at`（`chain_nodes.py:10350`、`run_manager.py:447`） | 指针里的 `created_at` 是**内容里的**时间戳，robocopy /COPYALL 会连它一起拷走，**不受文件系统 mtime 影响** | `chain_nodes.py`、`run_manager.py` | ✅ 已做 |
 | **1.11** | **Phase 1** | **新增 `tests/_mie_checkpoint_identity_unit_test.py`** | 钉住降级规则：网络共享 / FAT / exFAT / ino=0 / 被 pin 的目录 ⇒ 一律退回哈希；普通本地 NTFS ⇒ 保留信号。**该测试当场抓出一个真 bug**（`"exFAT"` 与 `"EXFAT"` 大小写不一致导致 exFAT 分支失效） | `tests/_mie_checkpoint_identity_unit_test.py`（新增） | ✅ 已做 |
 | **1.5** | **Phase 1** | **新增 `tests/_mie_mtime_selection_unit_test.py`** | 把上面三条钉成可执行事实。**逐项负对照已做**：用上游原实现跑，三条**全部报红**（"an ambiguous legacy pointer must not be promoted" / "the snapshot with the newer sealed_at must win" / "a descriptor that does not match its file name must be rejected"）；用我们的实现跑，三条**全部通过** | `tests/_mie_mtime_selection_unit_test.py` | ✅ 已做 |
-| **1.2** | **Phase 1** | **P0-b：三处"按 mtime 选源"改按各自规则选源** | 外部覆写（robocopy /COPYALL 保留 mtime）能把旧文件推成正式产物 | `chain_nodes.py` `:28453-28458` / `:22055` / `:4940` | ⬜ 未做（规则见 PLAN §8.6.1） |
-| **1.3** | **Phase 1** | **P0-c：`<64MB` 一律直接哈希** | 把 P0 暴露面缩到只剩大文件 | `chain_nodes.py` `:24681` 附近 | ⬜ 未做 |
-| **1.4** | **Phase 1** | **P0-e：`GetVolumeInformationW` 识别 FAT/exFAT ⇒ 无身份信号 ⇒ 强制 strict** | exFAT 的 file index 来自目录项位置、原地覆写不变，且**非 0**——只看 `ino == 0` 会误放行 | 新模块（优先，不原地改） | ⬜ 未做 |
-| **1.5** | **Phase 1** | **P0-f：run 输出目录 write-once + 恢复路径显式豁免 + 恢复按内容选源** | 把"checkpoint 不可变"从未强制的不变量变成事实；但恢复路径必须豁免，否则与 `:28458` 撞车 | 新模块 | ⬜ 未做 |
-| 1.6 | Phase 1 | Windows 无符号链接/硬链接权限降级（WinError 1314） | 本机开发者模式未开时上游会崩 | `chain_nodes.py` / `project_assets.py` | ⬜ 未做 |
-| 1.7 | Phase 1 | Node 24 `vm.runInContext` ESM 兼容 | 10 个 `.mjs` 测试在本机红 | `tests/_*.mjs` | ⬜ 未做 |
-| **2.1** | **Phase 2** | **节点类型名加 `\|MieH3` 后缀（87 个）** | ComfyUI `nodes.py:2305-2308` 对重名**静默覆盖**、无告警；同装两包会执行错实现 | `__init__.py` + 各模块 `NODE_CLASS_MAPPINGS` | ⬜ 未做 |
-| **2.2** | **Phase 2** | **`web/` 里 47 个硬编码类型名、20+ 个文件一起改** | 上游前端用字符串比对类型名；只改 Python ⇒ 扩展挂不上 `\|MieH3` 节点，两包同装时还会挂到上游原名节点上 | `web/*.js`、`web/*.mjs` | ⬜ 未做 |
-| 2.3 | Phase 2 | `tools/node_rename_map.json` **自动生成** + `tools/migrate_workflows.py` | 87 条手写必漏；迁移脚本要处理 subgraph 嵌套、幂等、目录批量 | `tools/` | ⬜ 未做 |
-| **3.1** | **Phase 3** | **`POST /mieh3/plan_preview` 路由** | 前端在图执行前读不到 socket 的值 ⇒ 需要自己的通道；编译留在 Python 一处 | 新模块 | ⬜ 未做 |
-| 3.2 | Phase 3 | `mieH3PlanProvider` 前端约定 | Scene Prompt Editor / Plan Studio 现在只读 widget，接外部 plan 时显示的是上游默认样例 | `web/` 新文件 | ⬜ 未做 |
+| **1.2** | **Phase 1** | **P0-b** | 与上方 1.2–1.5 已做条目重复 | — | 作废（见上） |
+| **1.3** | **Phase 1** | **P0-c** | 与上方 1.6 已做条目重复 | — | 作废（见上） |
+| **1.4** | **Phase 1** | **P0-e** | 与上方 1.7 已做条目重复 | — | 作废（见上） |
+| **1.5** | **Phase 1** | **P0-f** | 与上方 1.8 已做条目重复 | — | 作废（见上） |
+| 1.6 | Phase 1 | Windows 无符号链接/硬链接权限降级（WinError 1314） | 见本表后面标成已做的 1.6 | — | 作废（见下） |
+| 1.7 | Phase 1 | Node 24 `vm.runInContext` 在 CRLF 源码上剥不掉 `import` | 剥 import 的正则改成接受 `\r?\n`。浏览器测试仍要本机 Chrome，不是这条 | `tests/_cancel_reroll_js_test.mjs` 等 | ✅ 已做 |
+| **2.1** | **Phase 2** | 类型名后缀 | 与上方 2.1 已做条目重复 | — | 作废（见上） |
+| **2.2** | **Phase 2** | 前端类型名 | 与上方 2.5 已做条目重复；`web/` 里已有 `\|MieH3` | — | 作废（见上） |
+| 2.3 | Phase 2 | 改名表与迁移脚本 | 与上方 2.4 / 2.6 已做条目重复 | — | 作废（见上） |
+| **3.1** | **Phase 3** | **`POST /mieh3/plan_preview`** | 图执行前读不到 socket。路由用 `mie_craft` 的 `assemble_plan` 编译剧本；`script_ref` 只能是资产 id 或 `storyboards/<name>/storyboard.json`，拒绝绝对路径、`..` 和符号链接 | `plan_preview.py`、`__init__.py` | ✅ 已做 |
+| **3.2** | **Phase 3** | **`mieH3PlanProvider`** | `MieH3ScriptToPlan` 提供 fetch。两个 Scene Prompt Editor 在 `plan_json_input` 连上时拉预览、横幅显示 `plan_sha256` 前 8 位、源变了提示过期；编辑不写回 widget。Plan 编辑器在 socket 模式下只读 | `web/mieh3_plan_preview.js`、两个 scene editor、`h3_chain_plan_editor.js` | ✅ 已做 |
 | 3.3 | Phase 3 | `plan_json` 校验合并为一份（上游 `_normalize_plan` + 我们的 `validate_plan`） | 同一契约的两个半实现，各自漂移 | 新模块 | ⬜ 未做 |
-| 4.1 | Phase 4 | 资产/剧本/plan 的 ComfyUI 外壳节点（薄壳，逻辑在 `ComfyUI-Mie-Core`） | 计划 D11 | 新模块 | ⬜ 未做 |
+| 1.6 | Phase 1 | 硬链接权限不足时改为复制或改名，不再崩 | WinError 1314。`png_video_export` 把 1314 算进可降级错误；SelfLift 下载在 `os.link` 失败时 `os.replace`。其余生产 `os.link` 本来就捕获 `OSError` 后复制 | `png_video_export.py`、`selflift_runtime/alternative_lifts.py` | ✅ 已做 |
+| 4.1 | Phase 4 | 薄壳节点 | 与上方 4.1 已做条目重复：`mie_nodes.py` | — | 作废（见上） |
 
 ---
 

@@ -139,7 +139,7 @@ def _publish_frame(source, target):
         # Windows ERROR_INVALID_FUNCTION / ERROR_NOT_SUPPORTED can both map
         # to EINVAL on shares/filesystems without hard links. Do not swallow
         # unrelated EINVAL (bad paths/parameters) or other real I/O failures.
-        unsupported_windows_link = getattr(exc, "winerror", None) in (1, 50)
+        unsupported_windows_link = getattr(exc, "winerror", None) in (1, 50, 1314)
         if (exc.errno not in (errno.EACCES, errno.EPERM, errno.EXDEV, errno.EOPNOTSUPP, errno.ENOSYS)
                 and not unsupported_windows_link):
             raise

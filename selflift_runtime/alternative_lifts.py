@@ -58,6 +58,11 @@ def _download_checkpoint(destination):
                 os.link(partial, destination)
             except FileExistsError:
                 _verify_checkpoint(destination)
+            except OSError:
+                # WinError 1314 (privilege not held) and filesystems without
+                # hard links. The temp file is already the full download.
+                os.replace(partial, destination)
+                return destination
         finally:
             # This exact file was created by this download attempt only.
             Path(partial).unlink(missing_ok=True)

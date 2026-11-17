@@ -4,7 +4,7 @@ import vm from "node:vm";
 import {StudioBranches, BranchDrafts} from "../web/h3_working_branches.mjs";
 
 const read = name => fs.readFileSync(new URL(`../web/${name}`, import.meta.url), "utf8");
-const script = name => read(name).replace(/^import[\s\S]*?;\n/gm, "").replace(/^export /gm, "");
+const script = name => read(name).replace(/^import[\s\S]*?;\r?\n/gm, "").replace(/^export /gm, "");
 const settle = async () => { for (let i = 0; i < 80; i++) await Promise.resolve(); };
 const backend = {enabled:true, epoch:0, owner:"", ownerEpoch:0, reject:false, hold:null};
 const requests = [];

@@ -1051,7 +1051,7 @@ def _chapter_manifest_digest(manifest):
       断言身份信号检测不到变化 ⇒ 该场景必须走 strict
       （**不是**测 `os.replace`——那条路径 ino 本来就会变）
 - [ ] Windows 无符号链接/硬链接权限（WinError 1314）→ 代码侧降级而非崩
-- [ ] 修 Node 24 的 `vm.runInContext` ESM 兼容（10 个 `.mjs`）
+- [x] 修 Node 24 的 `vm.runInContext` ESM 兼容（10 个 `.mjs`）
 - [ ] 修剩余真 Windows 缺陷
 - [x] CI 处置：**基线闸门**已落地（`tools/ci_gate.py` + `.github/workflows/ci.yml`）——Q-F′ 已裁定，§10.3
 
@@ -1075,12 +1075,14 @@ def _chapter_manifest_digest(manifest):
 
 ### Phase 3 — plan 契约合并与 Scene Prompts 预览（2–3 天）
 
-- [ ] 我们的 `validate_plan` 与上游 `_normalize_plan` 合并为**一份**（Core）
-- [ ] 引擎包新增 `POST /mieh3/plan_preview`（§5.3）——含 `plan_sha256` 前 8 位 +
+- [x] 我们的 `validate_plan` 与上游 `_normalize_plan` 共用 Core 的 `shot_list_errors`。
+      分节 prompt 规则仍只在 `validate_plan`（prompt 是字符串数组时）。
+      链计划的镜头 prompt 是字符串，不能套分节规则，否则现有链计划全部失效。
+- [x] 引擎包新增 `POST /mieh3/plan_preview`（§5.3）——含 `plan_sha256` 前 8 位 +
       **`script_ref` 路径限制**
-- [ ] 引擎包前端实现 `mieH3PlanProvider` 约定 + fetch 预览
-- [ ] Scene Prompt Editor：provider 优先，缺失时回落 widget + 明确横幅
-- [ ] Plan Studio：socket 模式下只读 + 同样横幅
+- [x] 引擎包前端实现 `mieH3PlanProvider` 约定 + fetch 预览
+- [x] Scene Prompt Editor：provider 优先，缺失时回落 widget + 明确横幅
+- [x] Plan Studio：socket 模式下只读 + 同样横幅
 - [ ] `MieH3ScriptToPlan` 实现 provider 访问器
 
 **判据**：§5.6 六条验收全过。
@@ -1186,26 +1188,26 @@ nodes/assets/storyboard.py:806  os.replace(tmp_path, json_path)
 
 **方案：**
 
-- [ ] **媒体文件用内容寻址命名**（不可变，先落盘）
-- [ ] **json 清单最后原子翻转** ⇒ 单文件原子升级为 **bundle 原子**
-- [ ] 读者按 json 里的内容寻址路径取媒体 ⇒ 撕裂窗口关闭
+- [x] **媒体文件用内容寻址命名**（不可变，先落盘）
+- [x] **json 清单最后原子翻转** ⇒ 单文件原子升级为 **bundle 原子**
+- [x] 读者按 json 里的内容寻址路径取媒体 ⇒ 撕裂窗口关闭
 
 ### 10.3 协议
 
-- [ ] 所有写入**统一走 Core 的一个写入口**，该入口持有 advisory lockfile
-- [ ] **CAS 的比较基准用「读时记录的内容哈希」，不用 mtime**（D16）——
+- [x] 所有写入**统一走 Core 的一个写入口**，该入口持有 advisory lockfile
+- [x] **CAS 的比较基准用「读时记录的内容哈希」，不用 mtime**（D16）——
       §8 已经证明 mtime 在 NTFS/SMB 上都不可靠；资产 JSON 都是小文件，
       直接比较内容哈希最稳
-- [ ] 冲突语义：**409 + 返回对方版本**，由前端裁决，**不静默覆盖**
-- [ ] **冻结的旧节点写路径也改走 Core 写入口**（D23）——
+- [x] 冲突语义：**409 + 返回对方版本**，由前端裁决，**不静默覆盖**
+- [x] **冻结的旧节点写路径也改走 Core 写入口**（D23）——
       否则统一写入口就漏了
-- [ ] **`server.py` 写路由返 405/501 + 明示"去向产品层"**（D23）——
+- [x] **`server.py` 写路由返 405/501 + 明示"去向产品层"**（D23）——
       **静默降级是又一种骗人界面**；真删除留给 MieNodes 下个大版本
-- [ ] 镜像同步与产品层写入并发的运营规则（可执行）：
+- [x] 镜像同步与产品层写入并发的运营规则（可执行）：
       产品层暴露**"空闲标志"**，同步脚本先查再动；
       双机 `-e` 同一副本的同步时滞 = **Core 版本偏斜** ⇒ 规则定为
       **"先同步 Core，再重启两侧服务"**
-- [ ] **不上 SQLite**：资产库是"少文件、人频、镜像同步"形态，
+- [x] **不上 SQLite**：资产库是"少文件、人频、镜像同步"形态，
       MIRROR-delete 直接复制文件树，SQLite 的 wal/journal 在镜像复制时机不对时会损坏，
       **比 JSON 更脆**
 

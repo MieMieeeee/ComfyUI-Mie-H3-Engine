@@ -134,6 +134,7 @@ def create_app() -> Flask:
             "app": "comfyui-mie-web",
             "version": APP_VERSION,
             "plugin_root": str(config.PLUGIN_ROOT),
+            "idle": not runner.render_busy(),
         })
 
     # ------------------------------------------------------------------ #
@@ -219,19 +220,33 @@ def create_app() -> Flask:
         # the edit flows.
         on_exists = str(form.get("on_exists") or data.get("on_exists")
                         or "upsert")
+        expected_hash = form.get("expected_hash")
+        if expected_hash is None:
+            expected_hash = data.get("expected_hash")
+        if expected_hash == "":
+            expected_hash = None
         try:
             if kind == "character":
                 result = library.save_character(
                     name, description, voice,
                     image_raw=image_raw, audio_raw=audio_raw,
-                    on_exists=on_exists)
+                    on_exists=on_exists, expected_hash=expected_hash)
             elif kind == "scene":
                 ambience = _field(data, form, "ambience")
                 result = library.save_scene(
                     name, description, ambience=ambience,
-                    image_raw=image_raw, on_exists=on_exists)
+                    image_raw=image_raw, on_exists=on_exists,
+                    expected_hash=expected_hash)
             else:
                 abort(404)
+        except library.AssetConflictError as exc:
+            return jsonify({
+                "error": str(exc),
+                "code": "conflict",
+                "kind": exc.kind,
+                "name": exc.name,
+                "current_hash": exc.current_hash,
+            }), 409
         except library.AssetExistsError as exc:
             existing = dict(exc.detail or {})
             existing.pop("images", None)

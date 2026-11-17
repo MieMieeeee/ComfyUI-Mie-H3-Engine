@@ -1,4 +1,5 @@
 import {app} from "/scripts/app.js";
+import {findPlanProvider, mountPreviewBanner, planInputConnected} from "./mieh3_plan_preview.js";
 import {bindNodeWheel} from "./h3_dom_wheel.mjs?v=0.7.1";
 import {api} from "/scripts/api.js";
 import {workingBranchId} from "./h3_working_branches.mjs?v=0.7.31";
@@ -736,6 +737,7 @@ function mount(node) {
 
     node.properties ??= {};
     const root = element("div", "h3sp-root");
+    const previewBanner = mountPreviewBanner(root);
     root.classList.toggle("h3sp-assistant-enabled", PROMPT_ASSISTANT_ENABLED);
     root.title = "Edit the active scene prompt stored in the connected H3 Chain Plan.";
     for (const eventName of [
@@ -900,6 +902,10 @@ function mount(node) {
     }
 
     function flushPlanEffects() {
+        if (state.externalPreview) {
+            if (state.status) state.status.textContent = "外部 plan 接管，本面板只读";
+            return;
+        }
         if (state.planSyncTimer != null) {
             window.clearTimeout(state.planSyncTimer);
             state.planSyncTimer = null;
@@ -973,6 +979,10 @@ function mount(node) {
         status, message = "Saved to connected Plan",
         {deferEffects = false} = {},
     ) {
+        if (state.externalPreview) {
+            if (state.status) state.status.textContent = "外部 plan 接管，本面板只读";
+            return;
+        }
         const value = planToJson(state.plan);
         commitShotFields(state.plan.shots[state.active]);
         state.lastValue = value;
@@ -3000,12 +3010,51 @@ function mount(node) {
             }
             return;
         }
-        const value = String(planWidget.value ?? "");
         const runName = String(planNode.widgets?.find(
             (item) => item.name === "run_name",
         )?.value ?? "").trim();
+        if (planInputConnected(planNode)) {
+            const providerNode = findPlanProvider(planNode);
+            if (providerNode) {
+                state.externalPreview = true;
+                if (!force && state.previewSha) return;
+                void providerNode.mieH3PlanProvider().fetchPlan().then((payload) => {
+                    if (state.disposed) return;
+                    const sha = String(payload.plan_sha256 || "");
+                    if (state.previewSha && sha && sha !== state.previewSha && !force) {
+                        state.previewExpired = true;
+                        previewBanner.show(
+                            `预览已过期，点击刷新 · 当前 ${state.previewSha}`,
+                            () => { state.previewSha = ""; loadPlan(true); });
+                        return;
+                    }
+                    state.previewExpired = false;
+                    state.previewSha = sha;
+                    previewBanner.show(
+                        `外部 plan 接管，本面板只读 · 当前预览 = ${sha}`,
+                        () => { state.previewSha = ""; loadPlan(true); });
+                    adoptPlan(String(payload.plan_json ?? ""), planNode, planWidget, runName);
+                }).catch((error) => {
+                    showFailure(String(error?.message || error));
+                });
+                return;
+            }
+            state.externalPreview = true;
+            previewBanner.show(
+                "外部 plan 已连接，上游没有预览通道。执行用 socket，不看下面的 widget。",
+                () => loadPlan(true));
+        } else {
+            state.externalPreview = false;
+            state.previewSha = "";
+            previewBanner.hide();
+        }
+        const value = String(planWidget.value ?? "");
         if (!force && planNode === state.planNode && value === state.lastValue
             && runName === state.lastRunName) return;
+        adoptPlan(value, planNode, planWidget, runName);
+    }
+
+    function adoptPlan(value, planNode, planWidget, runName) {
         try {
             const previousPlan = state.plan;
             const previousActive = state.active;
