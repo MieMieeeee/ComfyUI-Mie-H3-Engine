@@ -1815,8 +1815,21 @@ function scriptsPage() {
       const lines = s.text.split("\n")
         .map((t) => t.trim())
         .filter((t) => t && !t.startsWith("#"));
-      const labelled = lines.filter((t) =>
-        /^[^\s：:，,]{1,40}(\s*(动作|对白|入场|离场))?\s*(\[(zh|en)\])?\s*[：:]/.test(t));
+      // A role label is a NAME and a short line: "小明：今天天气不错。".
+      // Prose with a colon - "末班车上只剩两个人：一个抱着吉他箱的年轻人…"
+      // - looks like one to a naive regex, and treating it as a script
+      // would eat the whole paragraph as one line of dialogue (found by
+      // the 2026-11-15 verification run).
+      const labelled = lines.filter((t) => {
+        const m = /^([^\s：:，,]{1,12})(\s*(动作|对白|入场|离场))?\s*(\[(zh|en)\])?\s*[：:](.*)$/.exec(t);
+        if (!m) return false;
+        // The groups: 1 name, 2 kind, 3 kind word, 4 [lang], 5 lang, 6 body.
+        const body = (m[6] || "").trim();
+        if (!body || body.length > 30) return false;
+        // A body with clauses is prose, not a line of dialogue.
+        if (body.length > 15 && /[，,、]/.test(body)) return false;
+        return true;
+      });
       const looksLabelled = lines.length > 0 && labelled.length === lines.length;
       if (!s.policyChosen) {
         s.textPolicy = looksLabelled ? "keep" : "adapt";
@@ -2566,6 +2579,14 @@ function scriptsPage() {
       const s = this.intake;
       const parts = [];
       if (s.text.trim()) parts.push(s.text.trim());
+      // The scene statement goes in as a SCENE: the generator fills the
+      // script's scene field from it, and the English mirror may then
+      // mirror that scene. Without it the model writes an execution
+      // scene the script never had, and the contract refuses the asset
+      // three times in a row (2026-11-15 verification).
+      if (s.design.scene && s.design.scene.trim()) {
+        parts.push("场景：" + s.design.scene.trim());
+      }
       const reading = s.reading;
       const lines = [];
       if (reading) {

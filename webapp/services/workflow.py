@@ -177,6 +177,15 @@ def build(script_name: str, script_json: dict,
         picture_index += 1
         sampler["inputs"]["ref_images.ref_image_%d" % (picture_index - 1)] = [
             _ID_SLOTS, picture_index]
+    # The scene asset is the LAST picture in the slot's picture numbering
+    # (on-screen characters first, then the scene) - and it has to reach
+    # the sampler. The engine's ``to_runtime`` drops the text scene when
+    # a scene asset is wired: "the scene picture owns the visual world".
+    # A scene that never reaches the sampler leaves the shot with NO
+    # environment at all (found 2026-11-15 in a real render).
+    if scene_name:
+        sampler["inputs"]["ref_images.ref_image_%d" % picture_index] = [
+            _ID_SLOTS, picture_index + 1]
     for index, (role, node_id) in enumerate(asset_nodes):
         sampler["inputs"]["ref_audios.ref_audio_%d" % index] = [
             _ID_SLOTS, 11 + index]

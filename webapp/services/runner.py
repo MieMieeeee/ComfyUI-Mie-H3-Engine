@@ -72,7 +72,7 @@ def _save_jobs() -> None:
              ("job_id", "number", "script", "run_name", "title", "attempt",
               "continued", "submitted_at",
               "status", "error", "nodes", "role_assets", "asset_hashes",
-              "script_hash", "params", "snapshot_dir")}
+              "script_hash", "params", "snapshot_dir", "scene_asset")}
             for record in records]
     try:
         config.ensure_dirs()
@@ -298,8 +298,34 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
                 library_dir=snapshot_dir,
                 scene_asset=(original or {}).get("scene_asset") or scene_asset)
             result = comfy.submit(graph, client_id=client_id)
-        except Exception:
+        except Exception as exc:
             _release(effective)
+            # A submission that never reached the engine still HAPPENED:
+            # the author pressed "render" and something went wrong. The
+            # record says so, with the reason - otherwise the click
+            # leaves no trace at all and the task list cannot tell them
+            # apart from never having tried (2026-11-15 verification:
+            # with ComfyUI down, the render left nothing behind).
+            failed = {
+                "job_id": "failed-%s" % uuid.uuid4().hex[:12],
+                "number": None,
+                "script": script_name,
+                "run_name": effective,
+                "title": runname.work_title(script_name, attempt),
+                "attempt": attempt,
+                "continued": bool(continue_run),
+                "role_assets": role_assets,
+                "scene_asset": scene_asset,
+                "submitted_at": _now(),
+                "status": "error",
+                "error": "提交失败：%s" % exc,
+                "nodes": 0,
+                "params": {"width": width, "height": height, "steps": steps,
+                           "duration": duration},
+                "snapshot_dir": "",
+                "finished_at": _now(),
+            }
+            _remember(failed)
             raise
 
     record = {
@@ -468,6 +494,10 @@ def _apply_status(record: dict, queued: tuple = None) -> dict:
     return outputs
 
 
+#: Files already collected for a run, waiting to be attached.
+_READY_ARTIFACTS: dict = {}
+
+
 def _attach_artifacts(record: dict, outputs: dict = None,
                        index: list = None) -> None:
     """Put the delivery on the record: the film first, then the shots,
@@ -476,7 +506,12 @@ def _attach_artifacts(record: dict, outputs: dict = None,
     The author wants the film, not the nineteen files that came with
     it.
     """
-    artifacts = comfy.collect_artifacts(record.get("run_name") or "", index)
+    run_name = record.get("run_name") or ""
+    # The grouped history buckets the whole output tree once and hands
+    # this run its files (one pass instead of one walk per run).
+    artifacts = _READY_ARTIFACTS.pop(run_name, None)
+    if artifacts is None:
+        artifacts = comfy.collect_artifacts(run_name, index)
     for node_out in (outputs or {}).values():
         if node_out.get("images"):
             artifacts = artifacts + [
@@ -668,11 +703,18 @@ def _jobs_grouped(records: list, page: int, per_page: int, active: int,
     pages = max(1, (total + per_page - 1) // per_page)
     page = max(1, min(int(page or 1), pages))
     window = works[(page - 1) * per_page: page * per_page]
-    # The files of the page's works, one walk for all of them.
+    # The files of the page's works: ONE pass over the output tree,
+    # bucketed by run (per-run walks made a 200-record page take seconds).
     index = comfy.scan_output()
+    buckets = comfy.group_artifacts_by_run(index)
     attempt_total = 0
     for work in window:
         for record in work["attempts"]:
+            run_name = record.get("run_name") or ""
+            prepared = buckets.get(run_name)
+            if prepared is None:
+                prepared = comfy.collect_artifacts(run_name, index)
+            _READY_ARTIFACTS[run_name] = prepared
             _attach_artifacts(record, index=index)
             attempt_total += 1
         delivered = next((a for a in work["attempts"]

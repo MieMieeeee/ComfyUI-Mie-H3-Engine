@@ -327,10 +327,21 @@ def read_materials(text: str, image_data_url: str = None,
 
 #: One line that already looks like the shared parser's event format:
 #: a role label, an optional type, an optional language tag, a colon.
+#: A role-labelled event line: a SHORT name, then a colon, then the
+#: line. The name is capped at 12 characters and the body at 30, so
+#: prose that happens to contain a colon ("末班车上只剩两个人：一个…")
+#: is NOT mistaken for a script - that mistake ate a whole paragraph as
+#: one line of dialogue (found by the 2026-11-15 verification run).
 _LABELLED_LINE = re.compile(
-    r"^\s*(?P<name>[^\s：:|，,、]{1,40}?)\s*"
+    r"^\s*(?P<name>[^\s：:|，,、]{1,12}?)\s*"
     r"(?:(?P<kind>动作|对白|入场|离场)\s*)?"
     r"(?:\[(?P<lang>zh|en)\]\s*)?[：:]\s*(?P<text>\S.*)$")
+
+#: How long one event line may be before it reads as prose.
+_MAX_EVENT_LINE = 30
+
+#: A body with clauses and more than this many characters is prose.
+_PROSE_BODY_MIN = 15
 
 _EVENTS_SYSTEM = (
     "你把一段普通的故事文字整理成短剧的事件稿。输出一个 JSON 对象，"
@@ -377,6 +388,16 @@ def try_labelled_parse(text: str):
             name = match.group("name").strip()
             if not name:
                 return None
+            body = match.group("text").strip()
+            if len(body) > _MAX_EVENT_LINE or (
+                    len(body) > _PROSE_BODY_MIN and
+                    ("，" in body or "," in body or "、" in body)):
+                # A long sentence with clauses after a colon is prose,
+                # not a line of dialogue: let the model structure it. The
+                # cost of a wrong guess is one model call; the cost of
+                # eating a whole paragraph as one line of dialogue is the
+                # author's paragraph (2026-11-15 verification).
+                return None
             if name not in names:
                 names.append(name)
             # 事件认领的是整行（含角色标签）：标签不是“没分配的故事内容”。
@@ -414,8 +435,14 @@ def _mapped_pieces(text: str, spans: list) -> list:
 
     def unclaimed(block_text):
         block = block_text.strip()
-        if block and not block.startswith("#"):   # a comment is not content
-            pieces.append({"text": block[:200]})
+        if not block or block.startswith("#"):
+            return                      # a comment is not content
+        # Punctuation the model's source quotes did not cover is not
+        # content the author has to rule on (found 2026-11-15: every
+        # sentence left a "，" for the author to clear by hand).
+        if not re.search(r"[0-9A-Za-z㐀-鿿]", block):
+            return
+        pieces.append({"text": block[:200]})
 
     for start, end in claimed:
         if start > cursor:

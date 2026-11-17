@@ -2033,9 +2033,9 @@ def test_the_story_summary_travels_into_the_request(page):
             "roles": [], "events": [], "source_script": "", "counts": {}}})))
 
     _open_intake_events(page, "小明：一句台词。")
-    page.locator(".intake-form textarea").first.fill(
+    page.get_by_label("一句话故事摘要").fill(
         "两个陌生人在天台偶遇，互相说出了不敢说的话。")
-    page.locator(".intake-form textarea").first.dispatch_event("change")
+    page.get_by_label("一句话故事摘要").dispatch_event("change")
     page.wait_for_timeout(1800)   # debounce + precheck
     button(page, "按已确认内容生成").click()
     page.wait_for_timeout(800)

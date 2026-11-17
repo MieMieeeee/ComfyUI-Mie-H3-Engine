@@ -123,22 +123,46 @@ def history(prompt_id: str) -> dict:
     return data.get(prompt_id, {})
 
 
-def queue_ids() -> tuple:
+#: The queue answer is reused for a couple of seconds. The task list
+#: polls every three seconds and asks the same question every time; when
+#: ComfyUI is NOT reachable the question costs a full connect timeout,
+#: and the page must not pay it on every poll.
+_QUEUE_TTL = 2.0
+_queue_cache: dict = {"at": 0.0, "value": (set(), set())}
+
+
+def queue_ids(timeout: float = 1.5) -> tuple:
     """The prompt ids ComfyUI is running, and the ones it is waiting for.
 
     Two sets, not one: a prompt that is WAITING is not running, and the
     task list has to say so. A prompt that is in neither set and has no
     history entry is gone - it failed before its history was written, was
     cancelled, or was evicted.
+
+    The answer is cached for a couple of seconds, and the call gets a
+    SHORT timeout on purpose: this is a read of a queue that changes
+    slowly, not a command that has to succeed. A page that waits out
+    the full timeout on every poll feels broken when ComfyUI is down.
     """
-    data = _json(base_url() + "/queue")
+    now = time.time()
+    if now - _queue_cache["at"] < _QUEUE_TTL:
+        return _queue_cache["value"]
+    try:
+        data = _json(base_url() + "/queue", timeout=timeout)
+    except ComfyUnavailable:
+        # ComfyUI is not reachable: nothing is known to be running.
+        _queue_cache["at"] = now
+        _queue_cache["value"] = (set(), set())
+        raise
     running, pending = set(), set()
-    for entry in data.get("queue_running") or []:
+    for entry in (data or {}).get("queue_running") or []:
         if len(entry) > 1 and entry[1]:
             running.add(str(entry[1]))
-    for entry in data.get("queue_pending") or []:
+    for entry in (data or {}).get("queue_pending") or []:
         if len(entry) > 1 and entry[1]:
             pending.add(str(entry[1]))
+    _queue_cache["at"] = now
+    _queue_cache["value"] = (running, pending)
     return running, pending
 
 
@@ -270,6 +294,38 @@ def collect_artifacts(run_name: str, index: list = None) -> list[dict]:
         found.append({key: entry[key] for key in
                       ("name", "relpath", "size", "kind", "role")})
     return found
+
+
+def group_artifacts_by_run(index: list = None) -> dict:
+    """The whole output tree, bucketed by the run each file belongs to.
+
+    ``collect_artifacts`` walks the tree per run: with two hundred runs
+    on the list that is two hundred walks of a tree with thousands of
+    entries, and the answer takes seconds. Bucketing walks it ONCE and
+    hands every run its own files - same matching rules, one pass.
+
+    The flat directory (live_storyboards) has no run directory, so its
+    files are bucketed under the run name they carry.
+    """
+    entries = index if index is not None else scan_output()
+    buckets: dict = {}
+    for entry in entries:
+        parts = entry.get("parts") or []
+        if len(parts) >= 3:
+            # h3_chains/<run>/<sub>/<file> - the run is the second part.
+            owner = parts[1]
+        elif len(parts) == 2:
+            # h3_chains/<run>/<file> - still the run directory.
+            owner = parts[1].rsplit(".", 1)[0]
+        else:
+            # The flat directory: the file is named "<run>_<date>.mp4".
+            stem = entry["name"].rsplit(".", 1)[0]
+            head, _, tail = stem.rpartition("_")
+            owner = stem if not head else (head if _looks_like_date(tail) else stem)
+        buckets.setdefault(owner, []).append(
+            {key: entry[key] for key in
+             ("name", "relpath", "size", "kind", "role")})
+    return buckets
 
 
 def _belongs_to_run(entry: dict, run_name: str) -> bool:

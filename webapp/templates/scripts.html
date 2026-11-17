@@ -585,11 +585,6 @@
               <!-- 整体设计（全局画面参数；script 模式会锁定它们） -->
               <details class="intake-design">
                 <summary class="small"><strong>整体设计</strong>（场景与世界观的说明；这些是全剧本的全局设置）</summary>
-                <label class="field">
-                  <span>场景描述（scene：这幕发生在哪，画面里看得见的环境）</span>
-                  <textarea class="input" rows="2" x-model="intake.design.scene"
-                            @change="intakeTouchEvents()"></textarea>
-                </label>
                 <div class="field-row">
                   <label class="field">
                     <span>世界观（setting）</span>
@@ -658,11 +653,21 @@
           <!-- 生成参数：material 和 understanding 阶段可改 -->
           <div class="intake-form"
                x-show="intake.step === 'material' || intake.step === 'understanding' || intake.step === 'events'">
+            <!-- 场景说明：两条路径都要它。模型据此填场景字段，
+                 英文镜像才不会凭空造一个源剧本没有的场景（契约会拒）。 -->
+            <label class="field">
+              <span>场景说明（这幕发生在哪，画面里看得见的环境；可选，但有图时强烈建议写）</span>
+              <textarea class="input" rows="2" x-model="intake.design.scene"
+                        @change="intakeTouch()"
+                        aria-label="场景说明"
+                        placeholder="例如：城市街边的人行道，午后。"></textarea>
+            </label>
             <!-- 一句话故事摘要（U05）：生成前核对“这版在讲什么”。 -->
             <label class="field">
               <span>一句话故事摘要（引导路径会作为导演要求的一部分传给生成；已确认的事件不受影响）</span>
               <textarea class="input" rows="2" x-model="intake.storySummary"
                         @change="intakeTouch()"
+                        aria-label="一句话故事摘要"
                         placeholder="例如：两个陌生人在天台偶遇，互相说出了不敢说的话。"></textarea>
             </label>
             <div class="field-row">
