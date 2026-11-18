@@ -163,11 +163,29 @@
 ### 引擎侧本轮改动
 
 - `.gitignore`：排除 `asset_library/` 与 `mie_llm_keys.json`
-- `__init__.py`：`os.environ.setdefault("MIE_ASSET_LIBRARY", <引擎根>/asset_library)`
+- `asset_root.py`（新）：**唯一的归属规则** —— 自己的 `asset_library` → sibling（老布局）→ 自己。
+  节点侧与网页侧都调它，两边不可能解析出两个库
+- `__init__.py`：`os.environ.setdefault("MIE_ASSET_LIBRARY", asset_root.asset_library_dir())`
   —— 节点侧与网页侧看到同一份库，又不干扰 MieNodes
 - `webapp/config.py`：`_find_asset_pack()` 改为「自己的目录 → sibling（老布局）→ 自己」，
   **删掉那个跨机器的硬编码兜底**
 - `webui_node.py`：`settings_path()`（第一轮）
+
+### 一处返工：节点侧与网页侧解析成了两个库
+
+上面那版 `__init__.py` 把 `MIE_ASSET_LIBRARY` **无条件**指向 `<引擎根>/asset_library`。
+老布局下引擎目录里根本没有这个目录，于是：
+
+| 进程 | 解析到的库 | 里面的角色 |
+| --- | --- | --- |
+| ComfyUI 节点侧 | `F:\ComfyUI-Mie-H3-Engine\asset_library`（新建的空库） | **0** |
+| 工作台网页侧（启动器起） | `custom_nodes\comfyui_mienodes\asset_library` | 358 |
+
+页面列出 358 个角色，渲染时节点说「找不到」—— 正是「老布局不受影响」这句话要防的事。
+实测（本机，真实安装）：`resolve_library_dir("")` 在两个进程里给出两个不同目录。
+
+改法：归属规则收进 `asset_root.py` 一处，节点侧与网页侧调同一个函数；
+`MIE_ASSET_LIBRARY` 的值改成**解析出来的那个库**，不再是「引擎根下那个还不存在的目录」。
 
 ### 验收结果（本轮）
 
@@ -176,3 +194,7 @@
   `start`（2.3 秒就绪）→ `/api/health` 回 `plugin_root = 引擎自己的目录` → CLI 退出后服务仍可访问、
   日志持续写入（文件直写）→ `stop` 干净收尾
 - 新增 `tests/unit/test_companion_installer.py`（8 例，含**「更新后用户数据原样还在」**这条核心保证）
+- 新增 `webapp_tests/test_asset_root.py`（6 例）：归属三态 + 「网页侧与节点侧必须同一个库」
+- 本机实测（真实安装，插件按 ComfyUI 的方式 import）：97 个节点注册成功，
+  `MIE_ASSET_LIBRARY` = `custom_nodes\comfyui_mienodes\asset_library`，节点侧可见 358 个角色 —— 与工作台一致
+

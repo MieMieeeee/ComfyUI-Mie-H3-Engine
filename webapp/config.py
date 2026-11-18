@@ -11,6 +11,13 @@ from __future__ import annotations
 import os
 import pathlib
 
+try:
+    # The plugin root is on sys.path whenever this package is importable
+    # (the launcher and the tests both put it there).
+    import asset_root as _asset_root
+except ImportError:  # pragma: no cover - imported as part of the plugin
+    from .. import asset_root as _asset_root
+
 #: The web app's own root (the repository, when running from a checkout).
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -41,31 +48,23 @@ def _find_asset_pack() -> pathlib.Path:
     file. It does not depend on the MieNodes pack for them.
 
     A launcher can point it elsewhere with MIE_PLUGIN_ROOT. Standalone runs
-    fall back to our own directory, and - for the older layout where the
-    library still lived in the sibling MieNodes pack - to that sibling.
+    fall back to the one rule in ``asset_root.py``: our own directory if we
+    have a library, otherwise the sibling MieNodes pack that still holds the
+    user's assets in the older layout, otherwise ours.
 
     Note: there is deliberately **no hard-coded machine path** here any more.
     The old fallback pointed at one particular installation of this package:
     on any other machine it silently named a directory that does not exist,
     and where it did exist it was somebody else's asset library.
+
+    The same rule, in the same module, is what the ComfyUI nodes use - see
+    asset_root.find_asset_owner. One rule, so the page and the nodes cannot
+    read different libraries.
     """
     from_env = os.environ.get("MIE_PLUGIN_ROOT")
     if from_env:
         return pathlib.Path(from_env)
-
-    # 不用 resolve: 整合包里这个插件常常是 junction, resolve 会把它变成源码目录,
-    # 于是「同一个 custom_nodes 下的兄弟包」(老布局里的 MieNodes 资产包) 就找不到了.
-    here = _plugin_root_asis()
-    # Our own asset library (the current layout).
-    if (here / "asset_library").is_dir():
-        return here
-    # The older layout: the library still lived in the sibling MieNodes pack.
-    for name in ("comfyui_mienodes", "ComfyUI_MieNodes", "ComfyUI-MieNodes"):
-        candidate = here.parent / name
-        if (candidate / "asset_library").is_dir():
-            return candidate
-    # Neither yet: ours. The directory is created on first use.
-    return here
+    return _asset_root.find_asset_owner(_plugin_root_asis())
 
 
 #: The pack that owns the asset library and the LLM keys. The library lives
