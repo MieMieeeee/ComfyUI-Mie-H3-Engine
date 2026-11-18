@@ -102,6 +102,34 @@ The MultiRef pack provides the maintained public Motion Context node. Context
 Loop uses it automatically for compatible Guide scenes and keeps its own
 specialized fallback for loop-only modes.
 
+## Dependencies and package sources
+
+This pack declares its dependencies by name only:
+
+```
+flask>=3.0
+soundfile>=0.12
+comfyui-mie-llm>=0.2.0
+comfyui-mie-prompt>=0.2.0
+comfyui-mie-craft>=0.2.0
+```
+
+**No index URL, no `-i`, no `--extra-index-url`.** Which PyPI mirror (if any) is
+used is a **deployment** decision, not a package decision: whoever installs this
+pack picks the source (the Mie launcher reads the mirror the user configured in
+its start page; a manual install uses whatever `pip` is configured with). A
+package that pins a mirror locks users out of the official index and breaks
+whenever that mirror lags behind - and mirrors *do* lag: a fresh release can be
+missing from the Chinese mirrors for a while, which is why the release process
+for those packages asks the mirrors to pull the new version (see
+`tools/notify_mirrors.py` in the package repos).
+
+If an install fails with `No matching distribution found` for one of the `mie_*`
+packages, that is a mirror lag, not a broken dependency: install from the
+official index for that package
+(`pip install -i https://pypi.org/simple comfyui-mie-craft`) or wait for the
+mirror to catch up.
+
 ## Make your first video
 
 1. Open [T2V Normal](<example_workflows/T2V Normal - MiniMax H3 0.6.json>) in
