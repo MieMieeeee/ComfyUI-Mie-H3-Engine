@@ -85,16 +85,14 @@ def test_no_link_points_at_a_node_the_build_replaced(plugin_root):
     assert dangling == [], dangling
 
 
-def test_the_display_node_follows_the_new_plan_node(plugin_root):
-    """The Show-and-save node shows the plan; it used to point at the
-    plan node the build had just deleted."""
-    graph = workflow.build("测试剧本", SCRIPT, {"character_1": "甲"})
-    display = next((n for n in graph.values()
-                    if n["class_type"].startswith("ShowAndSaveAnything")), None)
-    assert display is not None
-    target = display["inputs"]["anything"][0]
-    assert target in graph
-    assert graph[target]["class_type"] == "MieH3ScriptToPlan"
+def test_legacy_preset_output_follows_the_new_plan_node(plugin_root):
+    preset = workflow._preset()
+    old_plan = next(key for key, node in preset.items()
+                    if node["class_type"] == "MieH3ScriptToPlan")
+    preset["50"] = {"class_type": "ShowAndSaveAnything|Mie",
+                    "inputs": {"anything": [old_plan, 0]}}
+    graph = workflow.build("测试剧本", SCRIPT, {"character_1": "甲"}, workflow=preset)
+    assert graph["50"]["inputs"]["anything"] == ["901", 0]
 
 
 def json_copy(value):
@@ -146,3 +144,23 @@ def test_a_token_is_masked(plugin_root):
     assert llm.mask("short") == "*****"
     masked = llm.mask("abcdefghijklmnop")
     assert masked.startswith("abcdef") and masked.endswith("(16)")
+
+
+def test_default_render_has_no_mienodes_requirement(plugin_root):
+    graph = workflow.build("测试剧本", SCRIPT, {"character_1": "甲"}, scene_asset="客厅")
+    assert graph["910"]["class_type"] == "MieH3LoadAsset"
+    assert graph["908"]["class_type"] == "MieH3LoadAsset"
+    assert graph["902"]["class_type"] == "MieH3AssetToSlots"
+    assert not any(node["class_type"].endswith("|Mie") for node in graph.values())
+
+
+def test_render_preflight_names_missing_nodes_without_submitting(monkeypatch):
+    from webapp.services import comfy
+
+    def request(url):
+        assert url.endswith("/object_info")
+        return {"ExistingNode": {}}
+
+    monkeypatch.setattr(comfy, "_json", request)
+    with pytest.raises(comfy.ComfyUnavailable, match="MissingNode"):
+        comfy.submit({"1": {"class_type": "MissingNode"}})

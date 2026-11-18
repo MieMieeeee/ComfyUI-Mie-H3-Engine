@@ -22,12 +22,7 @@ The rule:
 The launcher applies the same rule when it starts the web front end and
 passes the answer down as ``MIE_PLUGIN_ROOT`` / ``MIE_ASSET_LIBRARY``.
 
-Known limit: ``MIE_ASSET_LIBRARY`` is per process, not per pack. Once
-this pack owns a library of its own (rule 1), the MieNodes pack's own
-nodes - same ComfyUI process - would follow this variable too, because
-``mie_craft`` reads the environment before the plugin root. Fixing that
-means every pack passing its own root explicitly instead of relying on
-the environment; it is worth doing when the library is actually moved.
+The ComfyUI nodes pass their library explicitly so other packs keep their own.
 """
 
 from __future__ import annotations

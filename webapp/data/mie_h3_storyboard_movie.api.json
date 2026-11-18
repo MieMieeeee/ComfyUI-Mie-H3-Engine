@@ -12,7 +12,7 @@
     }
   },
   "79": {
-    "class_type": "LoadAssetV2|Mie",
+    "class_type": "MieH3LoadAsset",
     "inputs": {
       "kind": "character",
       "library_dir": "",
@@ -20,12 +20,12 @@
     },
     "_meta": {
       "title": "角色资产 · Load 小D",
-      "cnr_id": "ComfyUI_MieNodes",
+      "cnr_id": "comfyui-minimaxh3-contex-loop",
       "ver": "1"
     }
   },
   "80": {
-    "class_type": "LoadAssetV2|Mie",
+    "class_type": "MieH3LoadAsset",
     "inputs": {
       "kind": "character",
       "library_dir": "",
@@ -33,7 +33,7 @@
     },
     "_meta": {
       "title": "角色资产 · Load Claude娘",
-      "cnr_id": "ComfyUI_MieNodes",
+      "cnr_id": "comfyui-minimaxh3-contex-loop",
       "ver": "1"
     }
   },
@@ -60,7 +60,7 @@
     }
   },
   "57": {
-    "class_type": "AssetToSlots|Mie",
+    "class_type": "MieH3AssetToSlots",
     "inputs": {
       "assets": [
         "86",
@@ -69,7 +69,7 @@
     },
     "_meta": {
       "title": "资产转槽位 · Asset → Slots",
-      "cnr_id": "ComfyUI_MieNodes",
+      "cnr_id": "comfyui-minimaxh3-contex-loop",
       "ver": "1"
     }
   },
@@ -621,32 +621,6 @@
     "_meta": {
       "title": "Assemble Final Video",
       "cnr_id": "comfyui-minimaxh3-contex-loop",
-      "ver": "1"
-    }
-  },
-  "50": {
-    "class_type": "ShowAndSaveAnything|Mie",
-    "inputs": {
-      "save_to_log": true,
-      "log_file_name": "show_anything.log",
-      "displaytext": "新架构工作流 · New-architecture workflow\n\n剧本 → 计划：MieH3LoadScriptAsset → MieH3ScriptToPlan（引擎侧，零 LLM，与 MieNodes 共用同一个 builder）\n链路：全部走 |MieH3 节点，即引擎自己的实现，而不是上游的\n\n旧工作流（mie_nodes_movie.json）用 MieNodes 的生成器 + 上游节点；这一版只换架构，镜头内容不变，可以直接对比。",
-      "anything": [
-        "86",
-        0
-      ]
-    },
-    "_meta": {
-      "title": "Show And Save Anything 🐑",
-      "cnr_id": "ComfyUI_MieNodes",
-      "ver": "1"
-    }
-  },
-  "53": {
-    "class_type": "AboutAuthorNode|Mie",
-    "inputs": {},
-    "_meta": {
-      "title": "About Author 🐑",
-      "cnr_id": "ComfyUI_MieNodes",
       "ver": "1"
     }
   }

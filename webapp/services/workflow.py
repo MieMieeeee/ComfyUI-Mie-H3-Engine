@@ -61,7 +61,7 @@ def build(script_name: str, script_json: dict,
           width: int = 960, height: int = 544,
           steps: int = 20, duration: int = 18,
           workflow: dict = None, library_dir: str = "",
-          scene_asset: str = "") -> dict:
+          scene_asset: str = "", asset_library_dir: str = "") -> dict:
     """The API-format workflow for one run.
 
     ``role_assets`` maps a role id (``character_1``) to the asset name
@@ -75,23 +75,31 @@ def build(script_name: str, script_json: dict,
     nodes = json.loads(json.dumps(workflow if workflow is not None else _preset()))
     roles = script_roles(script_json)
 
-    # The preset's asset section is replaced wholesale. Which node
-    # replaces which is remembered: every link the preset made to one of
-    # them has to follow, or it dangles and ComfyUI rejects that node on
-    # validation (the display node pointed at the old plan node, and the
-    # submission came back with a validation error for it).
-    replaced_types = (
-        "MieH3LoadScriptAsset", "MieH3ScriptToPlan",
-        "AssetToSlots|Mie", "MieH3LoadAssetRoster", "LoadAssetV2|Mie",
-    )
-    old_ids = {}
-    for node_id in list(nodes):
-        if nodes[node_id]["class_type"] in replaced_types:
-            old_ids.setdefault(nodes[node_id]["class_type"], []).append(node_id)
-            del nodes[node_id]
+    # Understand both shipped and older presets. A custom output referring to
+    # the old asset section keeps the same output indices after the rebuild.
+    asset_types = {"MieH3LoadAsset", "LoadAssetV2|Mie"}
+    slot_types = {"MieH3AssetToSlots", "AssetToSlots|Mie"}
+    old_cast_ids = []
+    old_scene_ids = []
+    replacement = {}
+    fixed_ids = {
+        "MieH3LoadScriptAsset": _ID_SCRIPT,
+        "MieH3ScriptToPlan": _ID_PLAN,
+        "MieH3LoadAssetRoster": _ID_ROSTER,
+        **dict.fromkeys(slot_types, _ID_SLOTS),
+    }
+    for node_id, node in list(nodes.items()):
+        class_type = node["class_type"]
+        if class_type in fixed_ids:
+            replacement[node_id] = fixed_ids[class_type]
+        elif class_type in asset_types:
+            ids = old_scene_ids if node["inputs"].get("kind") == "scene" else old_cast_ids
+            ids.append(node_id)
+        else:
+            continue
+        del nodes[node_id]
 
     engine = "comfyui-minimaxh3-contex-loop"
-    mienodes = "ComfyUI_MieNodes"
 
     nodes[_ID_SCRIPT] = _node(
         "MieH3LoadScriptAsset",
@@ -107,9 +115,9 @@ def build(script_name: str, script_json: dict,
             raise ValueError(
                 "role %s (%s) has no asset wired" % (role["id"], role["name"]))
         nodes[node_id] = _node(
-            "LoadAssetV2|Mie",
-            {"kind": "character", "library_dir": "", "name": name},
-            "角色资产 · Load %s" % name, mienodes)
+            "MieH3LoadAsset",
+            {"kind": "character", "library_dir": asset_library_dir, "name": name},
+            "角色资产 · Load %s" % name, engine)
         asset_nodes.append((role, node_id))
 
     plan_inputs = {"storyboard": [_ID_SCRIPT, 0]}
@@ -118,20 +126,20 @@ def build(script_name: str, script_json: dict,
     scene_name = (scene_asset or "").strip()
     if scene_name:
         nodes[_ID_SCENE] = _node(
-            "LoadAssetV2|Mie", {"kind": "scene", "library_dir": "",
+            "MieH3LoadAsset", {"kind": "scene", "library_dir": asset_library_dir,
                                 "name": scene_name},
-            "场景资产 · Load %s" % scene_name, mienodes)
+            "场景资产 · Load %s" % scene_name, engine)
         plan_inputs["scene_1"] = [_ID_SCENE, 5]
     nodes[_ID_PLAN] = _node(
         "MieH3ScriptToPlan", plan_inputs,
         "剧本转计划 · Script → Plan (MieH3)", engine)
 
     nodes[_ID_SLOTS] = _node(
-        "AssetToSlots|Mie", {"assets": [_ID_PLAN, 3]},
-        "资产转槽位 · Asset → Slots", mienodes)
+        "MieH3AssetToSlots", {"assets": [_ID_PLAN, 3]},
+        "资产转槽位 · Asset → Slots", engine)
 
     nodes[_ID_ROSTER] = _node(
-        "MieH3LoadAssetRoster", {"library_dir": "", "kind": "character"},
+        "MieH3LoadAssetRoster", {"library_dir": asset_library_dir, "kind": "character"},
         "库内角色清单 · Library Roster (MieH3)", engine)
 
     # The plan node: the assembled plan wins over the literal.
@@ -190,18 +198,9 @@ def build(script_name: str, script_json: dict,
         sampler["inputs"]["ref_audios.ref_audio_%d" % index] = [
             _ID_SLOTS, 11 + index]
 
-    # Follow the replaced nodes: a link the preset made to one of them
-    # now points at its replacement. The slot stays the same - the
-    # replacement has the same class, so it has the same outputs.
-    replacement = {}
-    for class_type, new_ids in (
-            ("MieH3LoadScriptAsset", [_ID_SCRIPT]),
-            ("MieH3ScriptToPlan", [_ID_PLAN]),
-            ("AssetToSlots|Mie", [_ID_SLOTS]),
-            ("MieH3LoadAssetRoster", [_ID_ROSTER]),
-            ("LoadAssetV2|Mie", [node_id for _role, node_id in asset_nodes])):
-        for old_id, new_id in zip(old_ids.get(class_type, []), new_ids):
-            replacement[old_id] = new_id
+    replacement.update(zip(old_cast_ids, (node_id for _role, node_id in asset_nodes)))
+    if scene_name:
+        replacement.update(dict.fromkeys(old_scene_ids, _ID_SCENE))
     if replacement:
         for node in nodes.values():
             for key, value in (node.get("inputs") or {}).items():

@@ -103,16 +103,26 @@ def test_the_plugin_roots_own_path_is_not_resolved(tmp_path, monkeypatch):
     assert asset_root.plugin_root_asis() != root.resolve() or root == root.resolve()
 
 
-def test_an_explicit_setting_is_never_overwritten(tmp_path, monkeypatch):
-    """The launcher passes the answer down; setdefault must respect it."""
-    engine = tmp_path / "engine"
-    engine.mkdir()
-    monkeypatch.setenv("MIE_ASSET_LIBRARY", str(tmp_path / "elsewhere"))
+def test_web_library_uses_the_explicit_launcher_path(tmp_path, monkeypatch):
+    from webapp.services import library
 
-    # This is what __init__.py does.
-    os.environ.setdefault("MIE_ASSET_LIBRARY", str(asset_root.asset_library_dir()))
-    assert os.environ["MIE_ASSET_LIBRARY"] == str(tmp_path / "elsewhere")
+    override = tmp_path / "launcher-asset-library"
+    monkeypatch.setenv("MIE_ASSET_LIBRARY", str(override))
+    assert library.library_dir() == str(override)
 
 
-if __name__ == "__main__":
-    sys.exit(pytest.main([__file__, "-q"]))
+def test_h3_assets_ignore_shared_process_override(tmp_path, monkeypatch):
+    from test_e2e_webui import _load_engine_module
+
+    nodes = _load_engine_module("mie_nodes")
+    h3_library = tmp_path / "h3"
+    other_library = tmp_path / "other"
+    monkeypatch.setenv("MIE_ASSET_LIBRARY", str(other_library))
+    monkeypatch.setattr(nodes.asset_root, "asset_library_dir", lambda: h3_library)
+    seen = []
+    monkeypatch.setattr(nodes.library, "list_characters",
+                        lambda path: seen.append(path) or {})
+    node = nodes.MieH3LoadAssetRoster()
+    node.load()
+    node.load(str(other_library))
+    assert seen == [str(h3_library), str(other_library)]

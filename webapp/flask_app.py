@@ -134,6 +134,8 @@ def create_app() -> Flask:
             "app": "comfyui-mie-web",
             "version": APP_VERSION,
             "plugin_root": str(config.PLUGIN_ROOT),
+            "settings_file": str(config.SETTINGS_FILE),
+            "pid": os.getpid(),
             "idle": not runner.render_busy(),
         })
 

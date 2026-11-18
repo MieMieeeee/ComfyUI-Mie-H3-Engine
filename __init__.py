@@ -43,32 +43,6 @@ from .tokenizer_compat import (
 
 _MINIMAX_TOKENIZER_COMPAT_STATUS = _install_minimax_tokenizer_compat()
 
-# The asset library belongs to THIS pack (2026-11-18): the H3 engine owns its
-# own characters / scenes / storyboards and does not depend on the MieNodes
-# pack for them.
-#
-# Which library that is, is decided by ONE rule (asset_root.py), so the
-# ComfyUI nodes and the web front end (a separate process) cannot end up
-# reading different ones: our own library if we have one, otherwise the
-# sibling MieNodes pack that still holds the user's assets in the older
-# layout. The web front end and the launcher apply the same rule.
-#
-# MIE_ASSET_LIBRARY (not MIE_PLUGIN_ROOT) on purpose: MIE_PLUGIN_ROOT is the
-# "pack that owns the asset library" switch that mie_craft reads, and the
-# MieNodes pack sets it to ITSELF. Using it here would move MieNodes' library
-# too. MIE_ASSET_LIBRARY is the per-process override that wins over both
-# (mie_craft.assets.library.resolve_library_dir: explicit arg → this env →
-# <plugin_root>/asset_library).
-#
-# setdefault: an explicit setting (the launcher passes it for the web app)
-# always wins. The library resolves at CALL time (mie_craft reads the env
-# then), so setting it here is enough - no import-order race.
-import os as _os
-
-from . import asset_root as _asset_root
-
-_os.environ.setdefault("MIE_ASSET_LIBRARY", str(_asset_root.asset_library_dir()))
-
 from .nodes import (
     NODE_CLASS_MAPPINGS as _CONTEXT_NODE_CLASS_MAPPINGS,
     NODE_DISPLAY_NAME_MAPPINGS as _CONTEXT_NODE_DISPLAY_NAME_MAPPINGS,
@@ -123,6 +97,8 @@ from .audio_refine import (
 )
 
 from .mie_nodes import (
+    MieH3AssetToSlots,
+    MieH3LoadAsset,
     MieH3LoadAssetRoster,
     MieH3LoadScriptAsset,
     MieH3ScriptToPlan,
@@ -178,6 +154,8 @@ NODE_CLASS_MAPPINGS.update({
     "MieH3LoadScriptAsset": MieH3LoadScriptAsset,
     "MieH3ScriptToPlan": MieH3ScriptToPlan,
     "MieH3LoadAssetRoster": MieH3LoadAssetRoster,
+    "MieH3LoadAsset": MieH3LoadAsset,
+    "MieH3AssetToSlots": MieH3AssetToSlots,
     # The web front end ships with this plugin, so it is started from
     # here - with ComfyUI's own interpreter.
     "MieH3StartWebUI": MieH3StartWebUI,
@@ -188,6 +166,8 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "MieH3LoadScriptAsset": "Mie H3 Load Script Asset",
     "MieH3ScriptToPlan": "Mie H3 Script to Plan",
     "MieH3LoadAssetRoster": "Mie H3 Load Asset Roster",
+    "MieH3LoadAsset": "Mie H3 Load Asset",
+    "MieH3AssetToSlots": "Mie H3 Asset to Slots",
 })
 
 WEB_DIRECTORY = "./web"

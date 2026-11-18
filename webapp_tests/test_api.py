@@ -1021,7 +1021,7 @@ def test_the_scene_asset_wires_into_the_plan_graph(plugin_root):
     plan = graph[workflow._ID_PLAN]
     assert plan["inputs"]["scene_1"] == [workflow._ID_SCENE, 5]
     scene_node = graph[workflow._ID_SCENE]
-    assert scene_node["class_type"] == "LoadAssetV2|Mie"
+    assert scene_node["class_type"] == "MieH3LoadAsset"
     assert scene_node["inputs"]["kind"] == "scene"
     assert scene_node["inputs"]["name"] == "天台"
     # The graph still verifies against the same rules (webapp 拼的图要用

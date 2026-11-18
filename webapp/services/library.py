@@ -38,7 +38,8 @@ def plugin_root() -> pathlib.Path:
 
 def library_dir() -> str:
     """The library root, as the library itself resolves it."""
-    return _library.resolve_library_dir("", plugin_root=plugin_root())
+    return _library.resolve_library_dir(
+        os.environ.get("MIE_ASSET_LIBRARY") or str(plugin_root() / "asset_library"))
 
 
 def _library_kwargs() -> dict:

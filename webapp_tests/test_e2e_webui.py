@@ -108,7 +108,8 @@ def temp_plugin_root(tmp_path, monkeypatch):
     root = tmp_path / "plugin"
     for kind in ("characters", "scenes", "storyboards"):
         (root / "asset_library" / kind).mkdir(parents=True)
-    monkeypatch.setenv("MIE_PLUGIN_ROOT", str(root))
+    monkeypatch.setenv("MIE_PLUGIN_ROOT", str(tmp_path / "unrelated-plugin"))
+    monkeypatch.setattr(webui_node, "find_asset_owner", lambda root_path: root)
     monkeypatch.setenv("MIE_WEB_SETTINGS", str(tmp_path / "settings.json"))
     # Whatever the plugin's own settings say, the test's own root wins.
     monkeypatch.setenv("MIE_WEB_PORT", str(PORT))
@@ -311,3 +312,12 @@ def test_explicit_plugin_root_takes_precedence(monkeypatch, tmp_path):
     selected = tmp_path / "selected" / "comfyui_mienodes"
     monkeypatch.setenv("MIE_PLUGIN_ROOT", str(selected))
     assert config._find_asset_pack() == selected
+
+
+def test_stop_refuses_an_unidentified_listener(monkeypatch):
+    calls = []
+    monkeypatch.setattr(webui_node, "_probe", lambda port: {"status": "ok"})
+    monkeypatch.setattr(webui_node, "_pid_on_port", lambda port: 123)
+    monkeypatch.setattr(webui_node, "_terminate", calls.append)
+    assert webui_node.MieH3StopWebUI().disable(8200)[1] is False
+    assert calls == []

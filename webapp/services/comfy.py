@@ -107,8 +107,15 @@ def queue() -> dict:
 
 def submit(prompt: dict, client_id: str = "") -> dict:
     """Queue a prompt. Returns {prompt_id, number}."""
+    url = base_url()
+    registry = _json(url + "/object_info")
+    if not isinstance(registry, dict):
+        raise ComfyUnavailable("ComfyUI returned an invalid node registry")
+    missing = sorted({node["class_type"] for node in prompt.values()} - registry.keys())
+    if missing:
+        raise ComfyUnavailable("ComfyUI 缺少工作流节点: " + ", ".join(missing))
     body = {"prompt": prompt, "client_id": client_id}
-    result = _json(base_url() + "/prompt", body, timeout=180)
+    result = _json(url + "/prompt", body, timeout=180)
     if not result or "prompt_id" not in result:
         raise ComfyUnavailable("the prompt was rejected: %s" % json.dumps(
             result, ensure_ascii=False)[:600])

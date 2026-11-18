@@ -307,7 +307,7 @@ def submit(script_name: str, role_assets: dict[str, str], run_name: str = "",
             graph = workflow.build(
                 script_name, script["json"], role_assets, run_name=effective,
                 width=width, height=height, steps=steps, duration=duration,
-                library_dir=snapshot_dir,
+                library_dir=snapshot_dir, asset_library_dir=library.library_dir(),
                 scene_asset=(original or {}).get("scene_asset") or scene_asset)
             result = comfy.submit(graph, client_id=client_id)
         except Exception as exc:
@@ -791,8 +791,7 @@ def _inputs_changed(record: dict) -> list:
     """The assets that changed since this run was submitted.
 
     The script is pinned into a snapshot, so it cannot change under the
-    render. The assets cannot be pinned (the MieNodes loader ignores
-    ``library_dir``), so they are watched by content hash instead.
+    render. The reference assets are loaded live and watched by content hash.
     """
     if record.get("status") not in ("running", "queued"):
         return []
