@@ -22,21 +22,19 @@ PACKAGE_ROOT = pathlib.Path(__file__).resolve().parent
 def _find_asset_pack() -> pathlib.Path:
     """The MieNodes pack - it owns the asset library and the LLM keys.
 
-    The two packs are siblings in ComfyUI's custom_nodes directory, so
-    the engine pack can find its sibling by looking next to itself. That
-    beats a hard coded path, which breaks the moment the packs are
-    installed elsewhere.
+    A launcher can select the asset pack explicitly. Standalone runs also
+    look for it next to the engine inside ComfyUI's custom_nodes directory.
     """
+    from_env = os.environ.get("MIE_PLUGIN_ROOT")
+    if from_env:
+        return pathlib.Path(from_env)
+
     here = pathlib.Path(__file__).resolve().parent.parent
     for name in ("comfyui_mienodes", "ComfyUI_MieNodes", "ComfyUI-MieNodes"):
         candidate = here / name
         if (candidate / "asset_library").is_dir():
             return candidate
-    # A junction or a different layout: fall back to the environment, and
-    # then to this machine's default (see F:/Mie-Skills/AGENTS.md).
-    from_env = os.environ.get("MIE_PLUGIN_ROOT")
-    if from_env:
-        return pathlib.Path(from_env)
+    # Keep the known machine layout for existing standalone launches.
     return pathlib.Path(
         r"C:\PP\V9\V9-Large\ComfyUI_Mie_2026_V9.0_Large\ComfyUI\custom_nodes\comfyui_mienodes")
 
@@ -90,7 +88,7 @@ COMFYUI_ROOT = pathlib.Path(
 #: The web app listens here. ComfyUI keeps 8188; the plan's D2 says the
 #: product layer picks a free port and binds 0.0.0.0 for the LAN.
 WEB_HOST = os.environ.get("MIE_WEB_HOST", "0.0.0.0")
-WEB_PORT = int(os.environ.get("MIE_WEB_PORT", "8199"))
+WEB_PORT = int(os.environ.get("MIE_WEB_PORT", "8200"))
 
 #: Never reload: a second process would fight over the render queue.
 WEB_DEBUG = os.environ.get("MIE_WEB_DEBUG", "0") == "1"

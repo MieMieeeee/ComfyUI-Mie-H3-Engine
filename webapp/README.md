@@ -49,7 +49,7 @@ MieH3LoadScriptAsset  →  MieH3ScriptToPlan  →  MiniMaxH3ChainPlanModern|MieH
 ## 跑起来
 
 **从 ComfyUI 里**：加一个 `MieH3StartWebUI` 节点（分类 MieNodes/web），运行它。
-它用 ComfyUI 的 embedded python 把网页端起在 8199，端口占用时不会重复起。
+它用 ComfyUI 的 embedded python 把网页端起在 8200，端口占用时不会重复起。
 
 **不用 ComfyUI**：插件根目录的 `start_webui.bat`（GBK 编码，cmd 读的就是
 系统 ANSI 码页）。
@@ -75,7 +75,7 @@ cmd /c "C:\PP\V9\V9-Large\ComfyUI_Mie_2026_V9.0_Large\ComfyUI启动器-CLI.cmd" 
 | `MIE_PLUGIN_ROOT` | 引擎旁边的 MieNodes 插件目录 | 资产库与 `mie_llm_keys.json` 的所在（默认自动找同级的 `comfyui_mienodes`） |
 | `MIE_LLM_KEYS_FILE` | `<插件根>/mie_llm_keys.json` | 密钥文件 |
 | `MIE_COMFYUI_URL` | `http://127.0.0.1:8188` | ComfyUI 地址 |
-| `MIE_WEB_HOST` / `MIE_WEB_PORT` | `0.0.0.0` / `8199` | 本工作台监听 |
+| `MIE_WEB_HOST` / `MIE_WEB_PORT` | `0.0.0.0` / `8200` | 本工作台监听 |
 | `MIE_WEB_WORKFLOW` | `webapp/data/mie_h3_storyboard_movie.api.json` | 渲染用的工作流模板 |
 | `MIE_COMFYUI_ROOT` | 本机 ComfyUI 根 | 产物目录（`/media` 从这里读） |
 

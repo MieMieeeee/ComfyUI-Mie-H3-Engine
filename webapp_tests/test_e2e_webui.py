@@ -74,7 +74,7 @@ if COMFY is not None and str(COMFY) not in sys.path:
 
 webui_node = _load_engine_module("webui_node")
 
-# NOT 8199: the start node STOPS whatever is on the port before it
+# NOT 8200: the start node STOPS whatever is on the port before it
 # starts, so the test would kill the workbench the person is using -
 # and then serve them a throwaway library until it stops.
 PORT = 8298
@@ -293,3 +293,21 @@ def _message(page, timeout=8000):
 def _q(text):
     import urllib.parse
     return urllib.parse.quote(text, safe="")
+
+def test_h3_workbench_default_port(monkeypatch):
+    from webapp import config
+    monkeypatch.delenv("MIE_WEB_PORT", raising=False)
+    spec = importlib.util.spec_from_file_location("h3_default_config", config.__file__)
+    defaults = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(defaults)
+    assert defaults.WEB_PORT == webui_node.DEFAULT_PORT == 8200
+
+
+def test_explicit_plugin_root_takes_precedence(monkeypatch, tmp_path):
+    from webapp import config
+    checkout = tmp_path / "source"
+    (checkout / "comfyui_mienodes" / "asset_library").mkdir(parents=True)
+    monkeypatch.setattr(config, "__file__", str(checkout / "webapp" / "config.py"))
+    selected = tmp_path / "selected" / "comfyui_mienodes"
+    monkeypatch.setenv("MIE_PLUGIN_ROOT", str(selected))
+    assert config._find_asset_pack() == selected

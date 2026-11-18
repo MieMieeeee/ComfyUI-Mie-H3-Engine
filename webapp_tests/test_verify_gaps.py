@@ -27,7 +27,7 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 PLUGIN_ROOT = pathlib.Path(__file__).resolve().parents[1]
 WEBAPP_MAIN = PLUGIN_ROOT / "webapp" / "__main__.py"
-# Not 8199 (the person's workbench) and not 8299 (the other browser
+# Not 8200 (the person's workbench) and not 8299 (the other browser
 # suite's server): this file gets its own.
 PORT = 8297
 BASE = "http://127.0.0.1:%d" % PORT

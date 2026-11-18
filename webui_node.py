@@ -8,7 +8,7 @@ same files, with nothing to keep in step.
 
 It is still a SEPARATE PROCESS (the plan's D2): the web app must not
 share ComfyUI's event loop, because a slow page would then stall the
-render queue. ComfyUI keeps port 8188; the web app takes 8199.
+render queue. ComfyUI keeps port 8188; the web app takes 8200.
 
 If the server is already up, the node just reports the URL.
 """
@@ -25,7 +25,7 @@ import urllib.request
 from .fork_identity import display_name as _display_name
 
 #: Where the web app listens. Kept in step with webapp.config.
-DEFAULT_PORT = 8199
+DEFAULT_PORT = 8200
 DEFAULT_HOST = "0.0.0.0"
 
 #: How long to wait for the server to answer before giving up.
@@ -33,6 +33,32 @@ START_TIMEOUT_SECONDS = 40
 
 #: The web app's own directory - the plugin root.
 _PLUGIN_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__)))
+
+
+def settings_path() -> str:
+    """Where the web app keeps its settings, jobs and snapshots.
+
+    The launcher (ComfyUI-Mie-Package-Launcher) starts the very same web app
+    as a companion service, and it points MIE_WEB_SETTINGS at
+    ``<package root>/launcher/h3-engine/settings.json`` so the settings, the
+    job list and the snapshots live with the launcher state and are **per
+    environment**. This node has to agree with it, otherwise the user sees a
+    different job list depending on who started the app.
+
+    Falls back to ``<plugin root>/web_settings.json`` when the plugin does
+    not sit in the usual ``<package>/ComfyUI/custom_nodes/<plugin>`` layout -
+    a junction pointing somewhere else cannot be mapped back to a package
+    root, and guessing one would scatter state over the disk.
+    """
+    try:
+        custom_nodes = os.path.dirname(_PLUGIN_ROOT)
+        if os.path.basename(custom_nodes) == "custom_nodes":
+            pkg = os.path.dirname(os.path.dirname(custom_nodes))
+            if os.path.isdir(os.path.join(pkg, "ComfyUI", "custom_nodes")):
+                return os.path.join(pkg, "launcher", "h3-engine", "settings.json")
+    except Exception:
+        pass
+    return os.path.join(_PLUGIN_ROOT, "web_settings.json")
 
 
 def _probe(port: int, timeout: float = 1.5) -> dict:
@@ -54,10 +80,10 @@ def _spawn(port: int) -> int:
     env = dict(os.environ)
     env.setdefault("MIE_WEB_PORT", str(port))
     env.setdefault("MIE_WEB_HOST", DEFAULT_HOST)
-    # The web app's own settings live beside the plugin, not in the user
-    # profile of whoever happens to be logged in.
-    env.setdefault("MIE_WEB_SETTINGS",
-                   os.path.join(_PLUGIN_ROOT, "web_settings.json"))
+    # The web app's own settings live with the launcher state, not in the
+    # user profile of whoever happens to be logged in - and the launcher
+    # points at the same file (see settings_path).
+    env.setdefault("MIE_WEB_SETTINGS", settings_path())
 
     kwargs = {"cwd": _PLUGIN_ROOT, "env": env}
     if sys.platform == "win32":
@@ -147,7 +173,7 @@ class MieH3StartWebUI:
     """Start the short-drama web front end (or report that it is up).
 
     The web app is a separate process on its own port - ComfyUI keeps
-    8188, the web app takes 8199 - so a slow page never stalls a render.
+    8188, the web app takes 8200 - so a slow page never stalls a render.
     """
 
     CATEGORY = "MieNodes/web"

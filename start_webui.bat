@@ -19,18 +19,9 @@ REM ============================================================
 
 cd /d "%~dp0"
 
-set "WEBUI_PORT=8199"
+set "WEBUI_PORT=8200"
+if defined MIE_WEB_PORT set "WEBUI_PORT=%MIE_WEB_PORT%"
 set "DISPLAY_HOST=127.0.0.1"
-
-REM --- 0. 清理占用端口的旧进程 ---
-echo [1/4] 检查端口 %WEBUI_PORT% ...
-set "KILLED=0"
-for /f "tokens=5" %%P in ('netstat -ano -p tcp ^| findstr ":%WEBUI_PORT% " ^| findstr "LISTENING"') do (
-    echo       结束占用进程 PID=%%P ...
-    taskkill /F /PID %%P >nul 2>&1
-    set "KILLED=1"
-)
-if "!KILLED!"=="0" (echo       端口空闲。) else (ping -n 2 127.0.0.1 >nul)
 
 REM --- 1. 找 ComfyUI 的 embedded python ---
 echo [2/4] 找 ComfyUI 的 embedded python ...

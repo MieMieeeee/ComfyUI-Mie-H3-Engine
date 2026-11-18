@@ -23,7 +23,7 @@
 - 连不上某个平台、密钥、finish_reason、预算重试：改 `mie_llm`。`services/llm.py` 是 `from mie_llm.client import *`。
 - 链上的缓存、mtime、checkpoint、恢复、导出校验：改引擎，不要改上游 `ComfyUI-MiniMaxH3-Context-Loop`。
 - 图还没跑就能看到剧本计划、`plan_json_input` 接上后编辑器只读：改引擎的 `plan_preview.py` 和 `web/mieh3_plan_preview.js`，以及两个 scene editor。
-- 短剧网页的页面、路由、任务记录、`/api/health` 的 `idle`：改引擎的 `webapp/`。启动方式是在引擎根目录执行 ComfyUI 自带的 `python webapp\__main__.py`，端口 8199。
+- 短剧网页的页面、路由、任务记录、`/api/health` 的 `idle`：改引擎的 `webapp/`。启动方式是在引擎根目录执行 ComfyUI 自带的 `python webapp\__main__.py`，端口 8200。
 - 节点多了一个插座、控件文案、前端下拉：改 MieNodes 的对应 `nodes/**` 和 `js/`。逻辑仍放在包里，壳只负责把 ComfyUI 的类型接进去。
 - `POST /mie_nodes/assets/delete` 固定返回 405，指向工作台。队列里的删除节点仍调用 `mie_craft`。不要把删除做回这个 HTTP 路由。
 
