@@ -19,6 +19,20 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = pathlib.Path(__file__).resolve().parent
 
 
+def _plugin_root_asis() -> pathlib.Path:
+    """插件根目录, **不解析 junction**.
+
+    整合包里 custom_nodes/ComfyUI-Mie-H3-Engine 常常是指向源码目录的 junction
+    (实测: C:\\PP\\V9\\...\\custom_nodes\\ComfyUI-Mie-H3-Engine → F:\\ComfyUI-Mie-H3-Engine).
+    pathlib.Path(...).resolve() 会把 junction 解析成**目标**, 于是:
+      - 插件根变成 F:\\ComfyUI-Mie-H3-Engine → 旁边的 custom_nodes 兄弟目录
+        (MieNodes 资产包) 就找不到了;
+      - 从插件位置反推 ComfyUI 目录也失效 (parent.parent 变成盘根).
+    所以凡是「靠目录位置判断布局」的地方, 一律用 abspath (不解析 reparse point).
+    """
+    return pathlib.Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
 def _find_asset_pack() -> pathlib.Path:
     """The pack that owns the asset library and the LLM keys.
 
@@ -39,13 +53,15 @@ def _find_asset_pack() -> pathlib.Path:
     if from_env:
         return pathlib.Path(from_env)
 
-    here = pathlib.Path(__file__).resolve().parent.parent
+    # 不用 resolve: 整合包里这个插件常常是 junction, resolve 会把它变成源码目录,
+    # 于是「同一个 custom_nodes 下的兄弟包」(老布局里的 MieNodes 资产包) 就找不到了.
+    here = _plugin_root_asis()
     # Our own asset library (the current layout).
     if (here / "asset_library").is_dir():
         return here
     # The older layout: the library still lived in the sibling MieNodes pack.
     for name in ("comfyui_mienodes", "ComfyUI_MieNodes", "ComfyUI-MieNodes"):
-        candidate = here / name
+        candidate = here.parent / name
         if (candidate / "asset_library").is_dir():
             return candidate
     # Neither yet: ours. The directory is created on first use.
@@ -88,13 +104,29 @@ COMFYUI_URL = os.environ.get("MIE_COMFYUI_URL", "http://127.0.0.1:8188")
 #: The LAN box. It is often off, so the app must treat it as optional.
 LAN_COMFYUI_URL = os.environ.get("MIE_LAN_COMFYUI_URL", "http://192.168.31.150:8188")
 
+def _default_comfyui_root() -> pathlib.Path:
+    """ComfyUI 的目录 (工作台往那儿写上传素材、收集成片).
+
+    插件装在 <ComfyUI>/custom_nodes/<插件> 时, 从自己的位置反推 —— 别再钉死
+    某台机器的路径 (换台机器就指向一个不存在的目录, 而工作台会「安静地」收不到
+    成片). 启动器总会显式注入 MIE_COMFYUI_ROOT, 这条只是独立运行时的兜底.
+    """
+    plugin_root = _plugin_root_asis()
+    candidates = [
+        plugin_root.parent.parent,        # <ComfyUI>/custom_nodes/<插件> → <ComfyUI>
+        plugin_root.parent / "ComfyUI",   # 开发检出: 旁边就是 ComfyUI
+        plugin_root.parent / "Comfyui",
+    ]
+    for cand in candidates:
+        if (cand / "comfy").is_dir() or (cand / "main.py").is_file():
+            return cand
+    return candidates[0]
+
+
 #: Where uploaded assets go. Same-machine deployment (the plan's D8): the
 #: role portraits and voice samples land in ComfyUI's input/ directory.
 COMFYUI_ROOT = pathlib.Path(
-    os.environ.get(
-        "MIE_COMFYUI_ROOT",
-        r"C:\PP\V9\V9-Large\ComfyUI_Mie_2026_V9.0_Large\ComfyUI",
-    )
+    os.environ.get("MIE_COMFYUI_ROOT", str(_default_comfyui_root()))
 )
 
 #: The web app listens here. ComfyUI keeps 8188; the plan's D2 says the
