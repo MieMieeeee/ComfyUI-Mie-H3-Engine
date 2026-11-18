@@ -39,6 +39,19 @@ Thumbs.db
 webui.log
 webui.pid
 
+# ---- User data that lives inside the plugin directory ----
+#
+# The asset library (the user's characters / scenes / storyboards) and the
+# LLM keys file belong to THIS plugin (2026-11-18: the H3 engine owns its
+# own asset pack; it does not depend on the MieNodes pack for it).
+#
+# They MUST stay out of git, otherwise "git fetch + reset --hard" (the
+# launcher's update path) restores the tracked versions and silently
+# destroys the user's work. Untracked + ignored files survive a reset --
+# same trick the MieNodes pack uses.
+asset_library/
+mie_llm_keys.json
+
 # ZCode session state (agents, workflows) - local tooling, not the repo
 .zcode/
 

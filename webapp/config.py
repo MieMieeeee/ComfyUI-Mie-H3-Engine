@@ -20,28 +20,40 @@ PACKAGE_ROOT = pathlib.Path(__file__).resolve().parent
 
 
 def _find_asset_pack() -> pathlib.Path:
-    """The MieNodes pack - it owns the asset library and the LLM keys.
+    """The pack that owns the asset library and the LLM keys.
 
-    A launcher can select the asset pack explicitly. Standalone runs also
-    look for it next to the engine inside ComfyUI's custom_nodes directory.
+    That is **this plugin** (2026-11-18): the H3 engine owns its own asset
+    library - its characters, scenes and storyboards - and its own LLM keys
+    file. It does not depend on the MieNodes pack for them.
+
+    A launcher can point it elsewhere with MIE_PLUGIN_ROOT. Standalone runs
+    fall back to our own directory, and - for the older layout where the
+    library still lived in the sibling MieNodes pack - to that sibling.
+
+    Note: there is deliberately **no hard-coded machine path** here any more.
+    The old fallback pointed at one particular installation of this package:
+    on any other machine it silently named a directory that does not exist,
+    and where it did exist it was somebody else's asset library.
     """
     from_env = os.environ.get("MIE_PLUGIN_ROOT")
     if from_env:
         return pathlib.Path(from_env)
 
     here = pathlib.Path(__file__).resolve().parent.parent
+    # Our own asset library (the current layout).
+    if (here / "asset_library").is_dir():
+        return here
+    # The older layout: the library still lived in the sibling MieNodes pack.
     for name in ("comfyui_mienodes", "ComfyUI_MieNodes", "ComfyUI-MieNodes"):
         candidate = here / name
         if (candidate / "asset_library").is_dir():
             return candidate
-    # Keep the known machine layout for existing standalone launches.
-    return pathlib.Path(
-        r"C:\PP\V9\V9-Large\ComfyUI_Mie_2026_V9.0_Large\ComfyUI\custom_nodes\comfyui_mienodes")
+    # Neither yet: ours. The directory is created on first use.
+    return here
 
 
-#: The ComfyUI pack that owns the asset library and the LLM keys. The
-#: library lives in <pack>/asset_library, and the keys file sits next to
-#: the pack's README.
+#: The pack that owns the asset library and the LLM keys. The library lives
+#: in <pack>/asset_library, and the keys file sits next to it.
 PLUGIN_ROOT = _find_asset_pack()
 
 #: The LLM platform keys. It lives in the pack, NOT next to the installed

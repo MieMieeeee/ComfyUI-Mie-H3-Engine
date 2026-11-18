@@ -43,6 +43,27 @@ from .tokenizer_compat import (
 
 _MINIMAX_TOKENIZER_COMPAT_STATUS = _install_minimax_tokenizer_compat()
 
+# The asset library belongs to THIS pack (2026-11-18): the H3 engine owns its
+# own characters / scenes / storyboards and does not depend on the MieNodes
+# pack for them. Point the library at our own directory so the ComfyUI nodes
+# and the web front end (a separate process) resolve the SAME one.
+#
+# MIE_ASSET_LIBRARY (not MIE_PLUGIN_ROOT) on purpose: MIE_PLUGIN_ROOT is the
+# "pack that owns the asset library" switch that mie_craft reads, and the
+# MieNodes pack sets it to ITSELF. Using it here would move MieNodes' library
+# too. MIE_ASSET_LIBRARY is the per-process override that wins over both
+# (mie_craft.assets.library.resolve_library_dir: explicit arg → this env →
+# <plugin_root>/asset_library).
+#
+# setdefault: an explicit setting (the launcher passes it for the web app)
+# always wins. The library resolves at CALL time (mie_craft reads the env
+# then), so setting it here is enough - no import-order race.
+import os as _os
+
+_ENGINE_ROOT = _os.path.dirname(_os.path.abspath(__file__))
+_os.environ.setdefault("MIE_ASSET_LIBRARY",
+                       _os.path.join(_ENGINE_ROOT, "asset_library"))
+
 from .nodes import (
     NODE_CLASS_MAPPINGS as _CONTEXT_NODE_CLASS_MAPPINGS,
     NODE_DISPLAY_NAME_MAPPINGS as _CONTEXT_NODE_DISPLAY_NAME_MAPPINGS,

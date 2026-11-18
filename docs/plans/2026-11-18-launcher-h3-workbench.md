@@ -105,3 +105,74 @@
   并把 mie_* 装进该环境的 embedded python。
 - `requires_comfyui=False`，所以工作台可在 ComfyUI 离线时用；停止 H3 不会影响 ComfyUI 的
   渲染队列（工作台只是提交任务给 ComfyUI，停止它不会改队列）。
+
+---
+
+## 第二轮：与 WebUI 工作台同构的下载/安装/更新（2026-11-18）
+
+### 核实到的关键事实（推翻了我第一轮的说法）
+
+**H3 引擎的代码从来就不依赖 MieNodes 资产包。**
+
+| 事实 | 证据 |
+|---|---|
+| 引擎要的是 **pip 包**，不是 MieNodes 这个 custom node | `requirements.txt` 注释：*comfyui-mie-craft … It is the same package MieNodes uses; **the three authoring packages have independent versions*** |
+| 引擎仓库里 `MIE_PLUGIN_ROOT` 只出现在网页那一层 | 全仓 grep：只有 `webapp/config.py` 与 `webapp/flask_app.py`，**节点侧一处都没有** |
+| 资产库位置本来就是可配置的 | `mie_craft.assets.library.resolve_library_dir()`：显式参数 → **`$MIE_ASSET_LIBRARY`** → `<plugin_root>/asset_library`；`resolve_plugin_root()` 的 docstring 明写「自带资产的 pack 把 MIE_PLUGIN_ROOT 指向**自己**」 |
+| 节点侧只认一个 `library_dir` 输入框（默认空） | `mie_nodes.py:41` |
+
+所以「H3 找 MieNodes」是 `webapp/config.py::_find_asset_pack()` **主动去 sibling 扫 + 硬编码兜底**的结果，
+是一个**可选耦合**，不是技术必需。**我第一轮把它当成硬依赖写进了启动器的依赖闸门 —— 那是错的，已改。**
+
+### 定下来的归属（用户拍板）
+
+**资产库（角色/场景/分镜）与 LLM 密钥归 H3 引擎插件目录**，但**更新时绝不能影响它们**。
+
+- 位置：`<插件根>/asset_library/`、`<插件根>/mie_llm_keys.json`
+- 老布局（资产还在同级 MieNodes 资产包里，实测 220MB）→ 继续用那个 sibling，**不遮住用户数据**；
+  全新安装 → 引擎目录里建空库
+- 引擎侧只设 `MIE_ASSET_LIBRARY`（不设 `MIE_PLUGIN_ROOT` —— 那是「谁拥有资产库」的全局开关，
+  MieNodes 自己会指向它，引擎抢了会打断它）
+
+### 「更新不影响用户资产」的两层保护
+
+1. **引擎仓库 `.gitignore` 排除 `asset_library/` 与 `mie_llm_keys.json`** —— 未跟踪 + 被忽略的文件
+   不受 `git reset --hard` 影响（已实测；MieNodes 仓库当年就是这么干的）
+2. **启动器更新前体检**（`installer.protect_user_data`）：`git ls-files` 发现数据曾被跟踪 →
+   **先挪到仓库外暂存**，更新完再搬回
+
+> ⚠️ 只「从索引摘除」**不够**：`reset --hard` 会把索引重置成 `origin/HEAD` 的树，远端历史里若含那些路径
+> （用户曾 `git add -f` 提交过），工作树里的文件照样被还原 —— **这条是被测试抓出来的**。
+
+### 安装链（与 WebUI 工作台同构）
+
+| action | 做什么 |
+|---|---|
+| `service install h3-engine` | `git clone --depth 1` → `<包根>/ComfyUI/custom_nodes/ComfyUI-Mie-H3-Engine`（目录已有内容则跳过，**不删用户数据**）；走用户配置的 git 代理 |
+| `service setup h3-engine` | 引擎 `requirements.txt` 逐包容错装进该环境的 embedded python；镜像上没有的新版本自动回退官方 PyPI |
+| `service update h3-engine` | `git fetch` + `git reset --hard origin/HEAD`（与 webui 一致） |
+
+通用实现放在启动器 `core/companion/installer.py`（从 `core/webui_installer.py` 泛化）。
+
+### 镜像滞后（实测踩到）
+
+华为云/阿里云镜像只有 `comfyui-mie-craft` 0.1.x，PyPI 已有 0.2.0 → `No matching distribution found`。
+`installer.install_requirements` 因此加了回退：镜像上「没有」的包改用**官方 PyPI 显式地址**重装。
+⚠️ 不能传 `None`（那是「用 pip 自己的配置」，而 `python_embeded/pip.ini` 里钉着镜像）。
+
+### 引擎侧本轮改动
+
+- `.gitignore`：排除 `asset_library/` 与 `mie_llm_keys.json`
+- `__init__.py`：`os.environ.setdefault("MIE_ASSET_LIBRARY", <引擎根>/asset_library)`
+  —— 节点侧与网页侧看到同一份库，又不干扰 MieNodes
+- `webapp/config.py`：`_find_asset_pack()` 改为「自己的目录 → sibling（老布局）→ 自己」，
+  **删掉那个跨机器的硬编码兜底**
+- `webui_node.py`：`settings_path()`（第一轮）
+
+### 验收结果（本轮）
+
+- 全量 unit + e2e 通过
+- 真机跑通整条链（V8 环境）：`install`（clone 走 gh-proxy）→ `setup`（6 个依赖，含镜像回退）→
+  `start`（2.3 秒就绪）→ `/api/health` 回 `plugin_root = 引擎自己的目录` → CLI 退出后服务仍可访问、
+  日志持续写入（文件直写）→ `stop` 干净收尾
+- 新增 `tests/unit/test_companion_installer.py`（8 例，含**「更新后用户数据原样还在」**这条核心保证）
