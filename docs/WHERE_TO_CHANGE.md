@@ -9,8 +9,8 @@
 | 你在改什么 | 仓库 | 代码在哪 |
 |---|---|---|
 | 平台、密钥、请求、重试、预算、多模态 data URL | `F:\ComfyUI-Mie-LLM` | `mie_llm/`（`client.py`、`platforms.py`、`budget.py`、`media.py`） |
-| 提示词正文、族模板、loader、翻译用的语言表、宽高比字符串 | `F:\ComfyUI-Mie-Prompt` | `mie_prompt/` 与 `mie_prompt/prompts/<族>/` |
-| 资产怎么落盘、剧本契约、零 LLM 组装、critic、对白、loop 增强的文本、镜头列表规则 | `F:\ComfyUI-Mie-Craft` | `mie_craft/`（`assets/`、`script/`、`h3_loop_prompts.py`、`loop_enhancer.py`） |
+| 提示词正文、族模板、loader、各族 enhancer、通用生成流程、翻译语言表、宽高比字符串 | `F:\ComfyUI-Mie-Prompt` | `mie_prompt/` 与 `mie_prompt/prompts/<族>/` |
+| 资产落盘、剧本契约、零 LLM 组装、critic、对白、完整 H3 loop/storyboard 生成编排、镜头列表规则 | `F:\ComfyUI-Mie-Craft` | `mie_craft/`（`assets/`、`script/`、`h3_loop_prompts.py`、`loop_enhancer.py`、`loop_generator.py`、`minimax_h3_storyboard_generator.py`） |
 | H3 链怎么跑、checkpoint、缓存、恢复、`\|MieH3` 节点、预览路由、场景编辑器、短剧工作台页面 | `F:\ComfyUI-Mie-H3-Engine` | 仓库根的链代码、`web/`、`webapp/`、`mie_nodes.py`、`plan_preview.py` |
 | ComfyUI 上的节点壳：插座、控件、tensor 和 data URL 互转、`\|Mie` 显示名、本包自己的前端和仍挂在 ComfyUI 上的 HTTP | `C:\Users\administered\PycharmProjects\ComfyUI-MieNodes` | `nodes/`、`js/`、`services/llm.py`（壳） |
 
@@ -33,6 +33,6 @@
 
 - 引擎的 ComfyUI 副本是 junction：`custom_nodes\ComfyUI-Mie-H3-Engine` → `F:\ComfyUI-Mie-H3-Engine`。改 F: 盘，重启 ComfyUI 即生效。
 - `custom_nodes\comfyui_mienodes` **不是** `PycharmProjects\ComfyUI-MieNodes` 的 junction。改开发仓不会自动进正在跑的 ComfyUI。要测 MieNodes 的 HTTP 或节点壳，得把开发仓装进那个 custom_nodes，或单独对开发仓跑 pytest。
-- 系统 Python 和 `C:\PP\V9\V9-Large\ComfyUI_Mie_2026_V9.0_Large\python_embeded\python.exe` 都用可编辑安装指向 `F:\ComfyUI-Mie-LLM`、`F:\ComfyUI-Mie-Prompt`、`F:\ComfyUI-Mie-Craft`。改这三个仓库的源码，两个解释器同时看到。发 PyPI 是另一次发布，不是每次修改的必做步骤。
+- 2026-11-18 收尾后：系统 Python 与 embedded Python 的 LLM/Prompt/Craft 均为生产 PyPI 0.2.0 wheel 普通安装，已移除 editable。改 F: 开发仓源码不会自动改变运行环境；需构建发布并在空闲窗口安装、定向部署节点壳、重启。
 - ComfyUI 的启停走 `C:\PP\V9\V9-Large\ComfyUI_Mie_2026_V9.0_Large\ComfyUI启动器-CLI.cmd` 的 `status --json` / `start` / `stop`。
 - 交给本地 agent 的测试步骤在 MieNodes：`docs/TEST_PLAN_WORKBENCH.md`。

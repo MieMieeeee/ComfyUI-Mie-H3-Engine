@@ -8,10 +8,10 @@
 #   comfyui-mie-craft - the zero-LLM plan assembler and the asset library.
 #     mie_nodes.py imports them at module level, so without this package the
 #     engine's own nodes do not load. It is the same package MieNodes uses;
-#     the three authoring packages ship as one train with one version.
+#     the three authoring packages have independent versions.
 #
 #   torchaudio - the audio paths need it. ComfyUI does not ship it.
-comfyui-mie-craft>=0.1.4
+comfyui-mie-craft>=0.2.0
 torchaudio
 
 # The web front end (webapp/), which ships with this plugin and runs on
@@ -27,5 +27,5 @@ torchaudio
 # Pillow is not listed: ComfyUI ships it.
 flask>=3.0
 soundfile>=0.12
-comfyui-mie-llm>=0.1.5
-comfyui-mie-prompt>=0.1.5
+comfyui-mie-llm>=0.2.0
+comfyui-mie-prompt>=0.2.0

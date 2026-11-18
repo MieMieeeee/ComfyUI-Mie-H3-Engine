@@ -15,9 +15,9 @@ dependencies = [
     # plan assembler - lives in the craft package, on top of the prompt and
     # llm packages. They have to be installed into ComfyUI's own python,
     # not just the system one.
-    "comfyui-mie-llm>=0.1.0",
-    "comfyui-mie-prompt>=0.1.0",
-    "comfyui-mie-craft>=0.1.0",
+    "comfyui-mie-llm>=0.2.0",
+    "comfyui-mie-prompt>=0.2.0",
+    "comfyui-mie-craft>=0.2.0",
 ]
 authors = [
     { name = "NikoDemon80", email = "262659861+NikoDemon80@users.noreply.github.com" },
