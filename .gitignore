@@ -44,3 +44,6 @@ webui.pid
 
 # The restart's stderr log (same deal as webui.log)
 webui.err.log
+
+# Machine-local acceptance media, installed wheels and rollback copies
+notes/split-release-*/

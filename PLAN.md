@@ -10,6 +10,11 @@
 
 ---
 
+> **2026-11-18 实施核对**：拆分已落地为 LLM / Prompt / Craft 三个独立 pip 包；
+> 非 H3 提示词族与 loader 的后续迁移也已完成。本文部分历史勾选、Core 旧名称与
+> FastAPI 设想尚未同步；工作台实际使用 Flask。首轮证据见
+> [拆分实施审计](notes/split-implementation-audit-2026-11-18.md)，后续 [收尾完成记录](notes/split-completion-2026-11-18.md) 已完成生成编排迁移、三个 0.2.0 包发布、本机部署与三镜头真实渲染。局域网按用户要求排除本次验收。
+
 ## 0. TL;DR
 
 > ### 治本原则（2026-11-06 定调）
@@ -1083,7 +1088,7 @@ def _chapter_manifest_digest(manifest):
 - [x] 引擎包前端实现 `mieH3PlanProvider` 约定 + fetch 预览
 - [x] Scene Prompt Editor：provider 优先，缺失时回落 widget + 明确横幅
 - [x] Plan Studio：socket 模式下只读 + 同样横幅
-- [ ] `MieH3ScriptToPlan` 实现 provider 访问器
+- [x] `MieH3ScriptToPlan` 实现 provider 访问器（`web/mieh3_plan_preview.js`）
 
 **判据**：§5.6 六条验收全过。
 
@@ -1108,18 +1113,18 @@ def _chapter_manifest_digest(manifest):
 
 ### Phase 4 — 抽 Core + 搬资产层（4–5 天，**含安装与配套，不只是搬文件**）
 
-- [ ] 建 **`ComfyUI-Mie-LLM` / `ComfyUI-Mie-Prompt` / `ComfyUI-Mie-Craft`** 仓（**纯 pip 包**，D12）
-- [ ] 按 §7.1 搬 11 项（含生成器全族 D11；LLM 拆分 D13）
-- [ ] **删掉 `services/llm.py` 的三个死重依赖**（numpy / cv2 / torch，D14）
-- [ ] **重指 `asset_auto_describe.py` 的 `library` import 到 Core**（D26）
-- [ ] **冻结节点的写路径改走 Core 写入口**（D23）
-- [ ] 按 §4.5 迁移 `tests/**`、SYNC PAIR 守护测试、critic 实测测试
-- [ ] 引擎包加 §7.4 的薄壳节点
-- [ ] 端到端：剧本资产 → `MieH3ScriptToPlan` → `plan_json` →
+- [x] 建 **`ComfyUI-Mie-LLM` / `ComfyUI-Mie-Prompt` / `ComfyUI-Mie-Craft`** 仓（**纯 pip 包**，D12）
+- [x] D11 全族共享生成逻辑上移：完整 H3 loop/storyboard 编排在 Craft；各族 enhancer、Ideogram 格式校验和十个通用生成方法在 Prompt；宿主路径、控件、插座、tensor 适配与中断绑定留节点壳。0.2.0 已发布并部署。
+- [x] **删掉 `services/llm.py` 的三个死重依赖**（numpy / cv2 / torch，D14）
+- [x] **`asset_auto_describe.py` 经 `nodes.assets.library` shim 调 Core**（D26）
+- [x] **冻结节点的写路径改走 Core 写入口**（D23）
+- [x] 按 §4.5 迁移 `tests/**`、SYNC PAIR 守护测试、critic 实测测试（历史回归记录见审计）
+- [x] 引擎包加 §7.4 的薄壳节点
+- [x] 端到端：剧本资产 → `MieH3ScriptToPlan` → `plan_json` →
       `MiniMaxH3ChainPlanModern|MieH3` → 渲染
-- [ ] **零 LLM 渲染路径保持字节级可复现**
-- [ ] **部署**：ComfyUI 环境 `pip install -e Core`（本机 + 局域网）；产品层 venv 同样安装
-- [ ] **变更窗口**：Core 先建可装 → MieNodes 与引擎**各一个 commit** → 部署脚本一次性切换
+- [x] **零 LLM 渲染路径保持字节级可复现**（全量 golden/equivalence 回归通过）
+- [x] **本次部署**：系统与 embedded Python 均安装生产 0.2.0 wheel；用户明确本次只验收本机，局域网不在范围内。不再依赖 editable。
+- [x] **变更窗口**：发布并核验 Core wheel → 两端无依赖升级安装 → 空闲时定向备份部署节点壳 → 重启并真实渲染。
 
 **判据**：
 - 同剧本 + 同资产 + 同 seed ⇒ 同 `plan_json` 字节
