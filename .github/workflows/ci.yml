@@ -64,7 +64,7 @@ jobs:
           # here too. Its tests never touch the real asset library: each
           # one gets a temporary plugin root.
           python -m pip install flask soundfile pytest
-          python -m pip install "comfyui-mie-llm>=0.1.5" "comfyui-mie-prompt>=0.1.5" "comfyui-mie-craft>=0.1.5"
+          python -m pip install "comfyui-mie-llm>=0.2.0" "comfyui-mie-prompt>=0.2.0" "comfyui-mie-craft>=0.2.0"
           # The browser tests drive the pages: they are the only ones
           # that can see what a person sees. Two bugs got past the API
           # tests and were caught here - a confirmation box inside the

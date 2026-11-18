@@ -785,6 +785,13 @@ def _make_junction(link, target):
     import os
     import subprocess
 
+    if os.name != "nt":
+        try:
+            link.symlink_to(target, target_is_directory=True)
+            return link.exists()
+        except OSError:
+            return False
+
     result = subprocess.run(
         ["cmd", "/c", "mklink", "/J", str(link), str(target)],
         capture_output=True)   # 输出是本地代码页，不去解它

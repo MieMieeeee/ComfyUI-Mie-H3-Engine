@@ -730,11 +730,11 @@ def _jobs_grouped(records: list, page: int, per_page: int, active: int,
             _attach_artifacts(record, index=index)
             attempt_total += 1
         delivered = next((a for a in work["attempts"]
-                          if any(x.get("kind") == "video"
+                          if any(x.get("role") in ("deliverable", "final") and x.get("kind") == "video"
                                  for x in (a.get("artifacts") or []))), None)
         work["film"] = (delivered and delivered["artifacts"]
                         and next((x["relpath"] for x in delivered["artifacts"]
-                                  if x.get("kind") == "video"), "")) or ""
+                                  if x.get("role") in ("deliverable", "final") and x.get("kind") == "video"), "")) or ""
         work["audios"] = sorted({x["relpath"]
                                  for a in work["attempts"]
                                  for x in (a.get("artifacts") or [])

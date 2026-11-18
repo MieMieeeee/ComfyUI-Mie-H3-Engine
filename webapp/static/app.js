@@ -1602,16 +1602,22 @@ function scriptsPage() {
     /* U08：窄屏上列表和说明占了首屏，表单在折叠线以下——打开就
      * 滚过去，焦点落在第一个输入上。 */
     bringCardIntoView(cardSelector, focusSelector) {
-      requestAnimationFrame(() => {
+      const afterLayout = () => requestAnimationFrame(() => {
         const card = document.querySelector(cardSelector);
-        if (card && card.scrollIntoView) {
-          card.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
         if (focusSelector) {
           const input = document.querySelector(focusSelector);
           if (input) input.focus({ preventScroll: true });
         }
+        requestAnimationFrame(() => {
+          if (card && card.scrollIntoView) {
+            card.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        });
       });
+      // Alpine must first reveal the card; focusing must finish before
+      // scrolling, or Chromium can move the title above the viewport.
+      if (this.$nextTick) this.$nextTick(afterLayout);
+      else afterLayout();
     },
 
     /* U07：起草卡顶上说清“现在用的是谁”。没配置就给直达设置的入口；
