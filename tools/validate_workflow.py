@@ -18,12 +18,32 @@ import pathlib
 import sys
 
 
+def _find_comfy_root() -> pathlib.Path:
+    """ComfyUI 的根目录.
+
+    顺序: COMFYUI_ROOT 环境变量 → 从插件位置反推 (<ComfyUI>/custom_nodes/<插件>)
+    → 旁边的 ComfyUI/Comfyui. **不钉死某台机器的路径** —— 换台机器就指向一个
+    不存在的目录, 而工具会安静地报一个看不懂的错.
+    """
+    env = os.environ.get("COMFYUI_ROOT")
+    if env:
+        return pathlib.Path(env)
+    plugin_root = pathlib.Path(__file__).resolve().parent.parent
+    for cand in (plugin_root.parent.parent,      # <ComfyUI>/custom_nodes/<插件> → <ComfyUI>
+                 plugin_root.parent / "ComfyUI",
+                 plugin_root.parent / "Comfyui"):
+        if (cand / "comfy").is_dir() or (cand / "main.py").is_file():
+            return cand
+    return plugin_root.parent.parent
+
+
 def main() -> int:
     workflow = pathlib.Path(sys.argv[1]).resolve()
-    comfy_root = pathlib.Path(
-        os.environ.get("COMFYUI_ROOT")
-        or r"C:\PP\V9\V9-Large\ComfyUI_Mie_2026_V9.0_Large\ComfyUI"
-    )
+    comfy_root = _find_comfy_root()
+    if not (comfy_root / "comfy").is_dir():
+        print("找不到 ComfyUI 目录: %s" % comfy_root, file=sys.stderr)
+        print("用 COMFYUI_ROOT 环境变量指一个。", file=sys.stderr)
+        return 2
     os.chdir(comfy_root)
     sys.path.insert(0, str(comfy_root))
     sys.path.insert(0, str(comfy_root / "custom_nodes"))
