@@ -72,7 +72,7 @@ jobs:
           # that followed the save.
           python -m pip install playwright
           python -m playwright install --with-deps chromium
-          python -m pytest webapp_tests -q
+          python -m pytest webapp_tests -q --maxfail=1
 
       - name: The web app starts and serves its pages
         shell: bash

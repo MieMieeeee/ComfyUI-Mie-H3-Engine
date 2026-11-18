@@ -631,7 +631,9 @@ def _is_link(path: pathlib.Path) -> bool:
 def _remove_link(path: pathlib.Path) -> bool:
     """Remove the link itself, never what it points at."""
     try:
-        if path.is_dir():
+        if path.is_symlink():
+            os.unlink(path)
+        elif path.is_dir():
             os.rmdir(path)
         else:
             os.unlink(path)
