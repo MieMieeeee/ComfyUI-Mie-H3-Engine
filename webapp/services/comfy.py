@@ -61,7 +61,9 @@ def base_url() -> str:
     """The ComfyUI address, overridable from the app's settings."""
     try:
         saved = json.loads(config.SETTINGS_FILE.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        # A settings file that cannot be read is not a reason to fail:
+        # the built-in address is the fallback.
         saved = {}
     return str(saved.get("comfyui_url") or config.COMFYUI_URL).rstrip("/")
 
@@ -108,8 +110,8 @@ def queue() -> dict:
 def submit(prompt: dict, client_id: str = "") -> dict:
     """Queue a prompt. Returns {prompt_id, number}."""
     url = base_url()
-    registry = _json(url + "/object_info")
-    if not isinstance(registry, dict):
+    registry = object_info()
+    if not registry:
         raise ComfyUnavailable("ComfyUI returned an invalid node registry")
     missing = sorted({node["class_type"] for node in prompt.values()} - registry.keys())
     if missing:
@@ -119,7 +121,83 @@ def submit(prompt: dict, client_id: str = "") -> dict:
     if not result or "prompt_id" not in result:
         raise ComfyUnavailable("the prompt was rejected: %s" % json.dumps(
             result, ensure_ascii=False)[:600])
+    # The queue answer we may be holding describes the queue BEFORE this
+    # prompt was added: it cannot know about a run that did not exist
+    # yet. Judging the new run by it would call it "gone" while it is
+    # still running - and a run that is called gone is never asked about
+    # again. So the remembered answer goes, and the next read is a fresh
+    # one that includes this prompt.
+    forget_queue_cache()
     return result
+
+
+#: The node registry is a big answer (every node of every plugin), and
+#: the page asks for it whenever it wants to know which models exist.
+#: It is kept for a few seconds: the page polls, and the list of
+#: installed models does not change between two polls.
+_REGISTRY_TTL = 5.0
+_registry_cache: dict = {"at": 0.0, "value": {}}
+
+
+def object_info() -> dict:
+    """ComfyUI's node registry: what every node accepts.
+
+    The answer is empty when ComfyUI cannot be reached - the caller
+    decides what to do about that. It is kept for a few seconds, so a
+    page that polls does not ask ComfyUI the same heavy question over
+    and over.
+    """
+    now = time.time()
+    if now - _registry_cache["at"] < _REGISTRY_TTL:
+        return _registry_cache["value"]
+    try:
+        data = _json(base_url() + "/object_info")
+    except ComfyUnavailable:
+        _registry_cache["at"] = now
+        _registry_cache["value"] = {}
+        return {}
+    value = data if isinstance(data, dict) else {}
+    _registry_cache["at"] = now
+    _registry_cache["value"] = value
+    return value
+
+
+def native_request(path: str, payload=None, method: str = "GET",
+                   timeout: float = TIMEOUT) -> tuple:
+    """Call one of the engine's OWN routes (the H3 chain's own API).
+
+    The engine's routes answer with a JSON body and a status code. A
+    refusal is information, not a transport failure: "this review
+    already has a decision" (409) and "there is no such review" (404)
+    are answers the caller has to read, so the status code comes back
+    instead of an exception. Only a transport failure raises.
+    """
+    url = base_url() + path
+    data = None
+    headers = {}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            raw = response.read()
+            status = int(getattr(response, "status", 200) or 200)
+    except urllib.error.HTTPError as exc:
+        try:
+            raw = exc.read()
+        except Exception:  # noqa: BLE001 - the body is a nicety
+            raw = b""
+        status = int(exc.code)
+    except Exception as exc:  # noqa: BLE001 - transport failures are one bucket
+        raise ComfyUnavailable("%s: %s" % (type(exc).__name__, exc))
+    try:
+        body = json.loads(raw) if raw else {}
+    except ValueError:
+        body = {}
+    if not isinstance(body, dict):
+        body = {"data": body}
+    return status, body
 
 
 def history(prompt_id: str) -> dict:
@@ -135,7 +213,18 @@ def history(prompt_id: str) -> dict:
 #: ComfyUI is NOT reachable the question costs a full connect timeout,
 #: and the page must not pay it on every poll.
 _QUEUE_TTL = 2.0
-_queue_cache: dict = {"at": 0.0, "value": (set(), set())}
+
+#: The cached queue answer, the engine it came from, and WHY it is what
+#: it is.
+#:
+#: A failed read is cached AS A FAILURE, never as an empty queue: "the
+#: engine could not be reached" and "nothing is running" are two
+#: different facts, and the second one must never be invented.
+#:
+#: The cache belongs to ONE engine: a changed URL is a different engine,
+#: and its answer must not be served out of the old one's cache.
+_queue_cache: dict = {"url": "", "at": 0.0, "value": (set(), set()),
+                      "error": ""}
 
 
 def queue_ids(timeout: float = 1.5) -> tuple:
@@ -150,17 +239,34 @@ def queue_ids(timeout: float = 1.5) -> tuple:
     SHORT timeout on purpose: this is a read of a queue that changes
     slowly, not a command that has to succeed. A page that waits out
     the full timeout on every poll feels broken when ComfyUI is down.
+
+    An engine that cannot be reached RAISES - both when the read fails
+    and when the cached answer is a remembered failure. It never
+    answers with two empty sets: that would say "nothing is running"
+    about an engine nobody was able to ask.
     """
+    url = base_url()
     now = time.time()
-    if now - _queue_cache["at"] < _QUEUE_TTL:
+    if (_queue_cache.get("url") == url
+            and now - _queue_cache.get("at", 0.0) < _QUEUE_TTL):
+        if _queue_cache.get("error"):
+            # The remembered answer is a failure. Saying "nothing is
+            # running" here would be a lie about an engine that was
+            # never reached.
+            raise ComfyUnavailable(str(_queue_cache["error"]))
         return _queue_cache["value"]
     try:
-        data = _json(base_url() + "/queue", timeout=timeout)
-    except ComfyUnavailable:
-        # ComfyUI is not reachable: nothing is known to be running.
-        _queue_cache["at"] = now
-        _queue_cache["value"] = (set(), set())
+        data = _json(url + "/queue", timeout=timeout)
+    except ComfyUnavailable as exc:
+        _queue_cache.update({"url": url, "at": now, "value": (set(), set()),
+                             "error": str(exc) or "ComfyUI 没有应答"})
         raise
+    if not isinstance(data, dict):
+        # The engine answered, but not with a queue. Nothing is known.
+        error = "ComfyUI 没有给出可读的队列答案"
+        _queue_cache.update({"url": url, "at": now, "value": (set(), set()),
+                             "error": error})
+        raise ComfyUnavailable(error)
     running, pending = set(), set()
     for entry in (data or {}).get("queue_running") or []:
         if len(entry) > 1 and entry[1]:
@@ -168,9 +274,25 @@ def queue_ids(timeout: float = 1.5) -> tuple:
     for entry in (data or {}).get("queue_pending") or []:
         if len(entry) > 1 and entry[1]:
             pending.add(str(entry[1]))
-    _queue_cache["at"] = now
-    _queue_cache["value"] = (running, pending)
+    _queue_cache.update({"url": url, "at": now, "value": (running, pending),
+                         "error": ""})
     return running, pending
+
+
+def queue_ok() -> bool:
+    """Did the engine answer the last queue question?
+
+    The queue answer is cached for a couple of seconds, so a second
+    question inside that window comes from the cache - including the
+    "could not reach it" answer. This says which one it was, so a
+    caller can tell "nothing is running" from "we cannot know".
+
+    A remembered failure is NOT a reachable empty queue: this says False
+    for it, and for a cache that belongs to another engine.
+    """
+    if _queue_cache.get("url") != base_url():
+        return False
+    return not _queue_cache.get("error")
 
 
 def prompt_outputs(prompt_id: str) -> dict:
@@ -189,24 +311,65 @@ def prompt_outputs(prompt_id: str) -> dict:
     return out
 
 
-def interrupt() -> bool:
-    """Ask ComfyUI to stop the running prompt."""
+def interrupt(prompt_id: str) -> bool:
+    """Ask ComfyUI to stop ONE prompt.
+
+    ComfyUI's ``/interrupt`` is GLOBAL when the body carries no prompt
+    id: the server reads ``json_data.get('prompt_id')`` and, when that
+    is empty, stops whatever happens to be running. An empty id is
+    therefore not "stop this one" - it is "stop everything", which
+    would take down somebody else's render on the same server. So the
+    id has to be a real one, and this refuses to send one that is not.
+
+    The server answers 200 even when it did nothing (the prompt was not
+    running), so the answer means "the request went through", not "the
+    prompt was stopped".
+    """
+    prompt_id = str(prompt_id or "").strip()
+    if not prompt_id:
+        return False
     try:
-        _request(base_url() + "/interrupt", {"prompt_id": ""}, method="POST")
+        _request(base_url() + "/interrupt", {"prompt_id": prompt_id},
+                 method="POST")
         return True
     except ComfyUnavailable:
         return False
 
 
+def delete_queued(prompt_id: str) -> bool:
+    """Take ONE pending prompt out of the queue.
+
+    ``/queue`` with ``{"delete": [id]}`` removes the pending entry with
+    that id - and only that one. A running prompt is not in the pending
+    list, so this does nothing for it; and a prompt that is not ours is
+    not in the list either.
+    """
+    prompt_id = str(prompt_id or "").strip()
+    if not prompt_id:
+        return False
+    try:
+        _request(base_url() + "/queue", {"delete": [prompt_id]},
+                 method="POST")
+        return True
+    except ComfyUnavailable:
+        return False
+
+
+def forget_queue_cache() -> None:
+    """Drop the cached queue answer, so the next read goes to ComfyUI.
+
+    The queue is cached for a couple of seconds, which is right for a
+    page that polls it - and wrong for a stop request, which has to see
+    the queue as it is NOW. The remembered FAILURE goes with it: a stop
+    request must not be refused because of a failure that is two
+    seconds old.
+    """
+    _queue_cache.update({"url": "", "at": 0.0, "value": (set(), set()),
+                         "error": ""})
+
+
 def output_files(subfolder: str = "") -> list[dict]:
     """The files in ComfyUI's output directory."""
-    url = base_url() + "/view?filename="
-    try:
-        data = _json(base_url() + "/object_info")
-    except ComfyUnavailable:
-        return []
-    if not data:
-        return []
     return []
 
 
@@ -318,12 +481,8 @@ def group_artifacts_by_run(index: list = None) -> dict:
     buckets: dict = {}
     for entry in entries:
         parts = entry.get("parts") or []
-        if len(parts) >= 3:
-            # h3_chains/<run>/<sub>/<file> - the run is the second part.
-            owner = parts[1]
-        elif len(parts) == 2:
-            # h3_chains/<run>/<file> - still the run directory.
-            owner = parts[1].rsplit(".", 1)[0]
+        if len(parts) >= 2:
+            owner = parts[0]
         else:
             # The flat directory: the file is named "<run>_<date>.mp4".
             stem = entry["name"].rsplit(".", 1)[0]
@@ -350,7 +509,7 @@ def _belongs_to_run(entry: dict, run_name: str) -> bool:
     """
     parts = entry["parts"]
     if len(parts) > 1:
-        return run_name in parts[:-1]
+        return run_name == parts[0]
     name = entry["name"]
     stem = name.rsplit(".", 1)[0]
     if stem == run_name:
@@ -379,10 +538,12 @@ def _role_of(relpath: str) -> str:
     """
     parts = relpath.split("/")
     name = parts[-1].lower()
-    if len(parts) >= 2 and parts[-2] == "final" and name.endswith(
-            (".mp4", ".webm", ".mkv", ".mov")):
+    if ((len(parts) >= 2 and parts[-2] == "final")
+            or ("exports" in parts and "videos" in parts)) and name.endswith(
+                (".mp4", ".webm", ".mkv", ".mov")):
         return "deliverable"
-    if "segments" in parts or "blend_segments" in parts:
+    if ("segments" in parts or "blend_segments" in parts
+            or ("generation" in parts and "clips" in parts)):
         return "segment"
     if name.endswith((".wav", ".mp3", ".m4a", ".flac")):
         return "audio"
@@ -490,9 +651,15 @@ def _walk_runs(root: pathlib.Path) -> list[dict]:
             continue
         final = run_dir / "final"
         videos = sorted(final.glob("*.mp4")) if final.is_dir() else []
+        exports = run_dir / "exports" / "videos"
+        if exports.is_dir():
+            videos.extend(sorted(exports.rglob("*.mp4")))
         images = sorted(final.glob("*.png")) if final.is_dir() else []
         clips = sorted((run_dir / "segments").glob("*.mp4")) \
             if (run_dir / "segments").is_dir() else []
+        generation = run_dir / "generation" / "clips"
+        if generation.is_dir():
+            clips.extend(sorted(generation.glob("*.mp4")))
         if not videos and not clips:
             continue
         manifest = run_dir / "manifest.json"

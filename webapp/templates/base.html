@@ -15,8 +15,18 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=app_version) }}">
   <style id="theme-injector">{{ theme_css_content | safe }}</style>
 
-  <!-- app.js 必须先加载, 再加载 Alpine (Alpine 启动时需要 appShell 已定义) -->
-  <script defer src="{{ url_for('static', filename='app.js', v=app_version) }}"></script>
+  <!-- 前端脚本：按「哪一页、哪一块基础设施」拆成了几个文件。没有构建
+       步骤，浏览器按 defer 的顺序依次执行，所以这个顺序就是依赖的
+       顺序：网络层 → 外壳 → 各页 → Alpine。Alpine 必须最后加载 ——
+       它启动时 appShell 已经定义好了。 -->
+  <script defer src="{{ url_for('static', filename='js/api.js', v=app_version) }}"></script>
+  <script defer src="{{ url_for('static', filename='js/shell.js', v=app_version) }}"></script>
+  <script defer src="{{ url_for('static', filename='js/llm.js', v=app_version) }}"></script>
+  <script defer src="{{ url_for('static', filename='js/assets.js', v=app_version) }}"></script>
+  <script defer src="{{ url_for('static', filename='js/scripts-intake.js', v=app_version) }}"></script>
+  <script defer src="{{ url_for('static', filename='js/scripts-editor.js', v=app_version) }}"></script>
+  <script defer src="{{ url_for('static', filename='js/video.js', v=app_version) }}"></script>
+  <script defer src="{{ url_for('static', filename='js/history.js', v=app_version) }}"></script>
   <script defer src="{{ url_for('static', filename='alpine.min.js', v=app_version) }}"></script>
 </head>
 <body data-theme="{{ theme_id }}" data-tab="{{ active }}" x-data="appShell()">
@@ -38,10 +48,24 @@
          :class="{ active: currentTab === 'history' }">🗂️ 制作历史</a>
     </div>
     <div class="main-tabs-status" x-data="{}">
+      <select class="input" data-select="theme" style="width: auto; padding: 3px 8px; font-size: 12px;"
+              aria-label="切换主题" x-ref="themeSelect" :disabled="themeSwitching"
+              @change="switchTheme($event.target.value)">
+        {% for t in themes %}
+        <option value="{{ t.id }}"{% if t.id == theme_id %} selected{% endif %}>{{ t.name }}</option>
+        {% endfor %}
+      </select>
+      <span class="err small" role="status" x-show="themeError" x-text="themeError"></span>
       <span class="status-pill" :class="comfyStatusClass" :title="comfyStatusTitle">
         <span class="status-dot"></span>
         <span class="status-text" x-text="comfyStatusShort"></span>
       </span>
+      <!-- 实时进度：ComfyUI 自己报的进度，渲染中才有 -->
+      <span class="status-pill progress-pill" id="top-progress"
+            x-show="progressLine" x-text="progressLine" title="渲染进度"></span>
+      <span class="status-pill progress-pill warn" id="top-progress-offline"
+            x-show="!progressLine && progressOffline"
+            x-text="'进度流断开'" title="连不上工作台的进度流，任务状态仍由历史页轮询确认"></span>
       <a class="status-open" :href="comfyStatusUrl || '#'" target="_blank" rel="noopener"
          :class="{ disabled: !comfyStatusUrl }" title="在 ComfyUI 里打开">↗</a>
       <button class="status-refresh" type="button" @click="refreshStatus()" title="刷新状态">🔄</button>

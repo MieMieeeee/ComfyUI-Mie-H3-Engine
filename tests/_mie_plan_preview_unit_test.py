@@ -5,11 +5,13 @@ import os
 import pathlib
 import sys
 import tempfile
+from unittest.mock import patch
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import asset_root  # noqa: E402
 import plan_preview  # noqa: E402
 
 
@@ -29,6 +31,8 @@ def main() -> None:
         expected = (library / "storyboards" / "Demo" / "storyboard.json").resolve()
         found = plan_preview.resolve_script_file(str(library), "Demo")
         assert found.resolve() == expected, found
+        with patch.object(asset_root, "asset_library_dir", return_value=library):
+            assert plan_preview.resolve_script_file("", "Demo").resolve() == expected
         found_rel = plan_preview.resolve_script_file(
             str(library), "storyboards/Demo/storyboard.json")
         assert found_rel.resolve() == expected

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from webapp.services import llm, workflow
+from webapp.services import llm, library, workflow
 
+from conftest import PNG_1x1, WAV_1S
 from test_library import SCRIPT
 
 
@@ -38,6 +39,12 @@ def test_the_plan_node_takes_the_assembled_plan(plugin_root):
 
 
 def test_pictures_count_the_on_screen_roles_only(plugin_root):
+    # Real characters: a voice slot is only wired for an asset that
+    # really carries a sample - a name alone carries nothing.
+    library.save_character("甲", "一个测试角色", "male voice",
+                           image_raw=PNG_1x1, audio_raw=WAV_1S)
+    library.save_character("乙", "一个测试角色", "female voice",
+                           image_raw=PNG_1x1, audio_raw=WAV_1S)
     two = json_copy(SCRIPT)
     two["roles"].append({
         "id": "character_2", "name": "乙", "presence": "off_screen",

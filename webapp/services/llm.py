@@ -18,13 +18,16 @@ absolute path.
 from __future__ import annotations
 
 import json
+import threading
 
 from mie_llm import platforms as _platforms
 
 from webapp import config
+from webapp.services import jsonfile
 
 #: Keys that are not platforms.
 RESERVED_KEYS = ("_comment",)
+_keys_lock = threading.Lock()
 
 
 def _settings() -> dict:
@@ -36,8 +39,7 @@ def _settings() -> dict:
 
 def _save_settings(data: dict) -> None:
     config.ensure_dirs()
-    config.SETTINGS_FILE.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    jsonfile.write_json(config.SETTINGS_FILE, data)
 
 
 def read_keys() -> dict:
@@ -62,9 +64,7 @@ def write_keys(keys: dict) -> None:
         existing = {}
     merged = {k: v for k, v in existing.items() if k in RESERVED_KEYS}
     merged.update({k: v for k, v in keys.items() if k not in RESERVED_KEYS})
-    config.LLM_KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    config.LLM_KEYS_FILE.write_text(
-        json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+    jsonfile.write_json(config.LLM_KEYS_FILE, merged)
 
 
 def mask(token: str) -> str:
@@ -142,38 +142,42 @@ def list_platforms() -> list[dict]:
 
 def set_key(config_key: str, token: str) -> dict:
     """Store one platform's token in the plugin's keys file."""
-    keys = read_keys()
-    keys[config_key] = (token or "").strip()
-    write_keys(keys)
+    with _keys_lock:
+        keys = read_keys()
+        keys[config_key] = (token or "").strip()
+        write_keys(keys)
     return {"key": config_key, "has_key": bool(keys[config_key]),
             "key_masked": mask(keys[config_key])}
 
 
 def set_model(config_key: str, model: str) -> dict:
     """Store the chosen model for one platform."""
-    saved = _settings()
-    chosen = dict(saved.get("models") or {})
-    chosen[config_key] = (model or "").strip()
-    saved["models"] = chosen
-    _save_settings(saved)
+    with jsonfile.settings_lock:
+        saved = _settings()
+        chosen = dict(saved.get("models") or {})
+        chosen[config_key] = (model or "").strip()
+        saved["models"] = chosen
+        _save_settings(saved)
     return {"key": config_key, "model": chosen[config_key]}
 
 
 def set_current(config_key: str) -> dict:
     """Choose the platform the app treats as current."""
-    saved = _settings()
-    saved["current_platform"] = config_key
-    _save_settings(saved)
+    with jsonfile.settings_lock:
+        saved = _settings()
+        saved["current_platform"] = config_key
+        _save_settings(saved)
     return {"current_platform": config_key}
 
 
 def set_host(config_key: str, host: str) -> dict:
     """Store a local server's address (Ollama)."""
-    saved = _settings()
-    local = dict(saved.get("hosts") or {})
-    local[config_key] = (host or "").strip()
-    saved["hosts"] = local
-    _save_settings(saved)
+    with jsonfile.settings_lock:
+        saved = _settings()
+        local = dict(saved.get("hosts") or {})
+        local[config_key] = (host or "").strip()
+        saved["hosts"] = local
+        _save_settings(saved)
     return {"key": config_key, "host": local[config_key]}
 
 

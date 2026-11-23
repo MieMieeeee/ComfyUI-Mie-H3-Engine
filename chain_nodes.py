@@ -108,6 +108,7 @@ from .checkpoint_identity import (
 )
 from .fork_identity import add_suffix, type_alias_set, type_aliases
 from .motion_context_upstream import apply_motion_context
+from .plan_contract import shot_list_errors as _plan_shot_list_errors
 
 # Node type names this pack accepts in saved documents. A prompt, manifest
 # or workflow written before the rename carries the upstream name, and a
@@ -7440,19 +7441,15 @@ def _normalize_plan(
     if not isinstance(raw, dict):
         raise ValueError("H3 Chain Plan must be a JSON object or a list of shots.")
 
-    try:
-        from mie_craft.h3_loop_prompts import shot_list_errors
-    except ImportError:
-        shot_list_errors = None
-    if shot_list_errors is not None:
-        problems = shot_list_errors(raw)
-        if problems:
-            raise ValueError("H3 Chain Plan: %s" % "; ".join(problems))
+    # The shot-list rule is SHARED with the authoring package (the plan
+    # contract is one document, not two half-implementations that drift
+    # apart). The helper lives in ``plan_contract`` because the section
+    # rules do NOT apply here: a chain plan may carry a plain prompt
+    # string per shot, and the whole document may be a bare list.
+    problems = _plan_shot_list_errors(raw)
+    if problems:
+        raise ValueError("H3 Chain Plan: %s" % "; ".join(problems))
     raw_shots = raw.get("shots")
-    if not isinstance(raw_shots, list) or not raw_shots:
-        raise ValueError("H3 Chain Plan requires a non-empty 'shots' list.")
-    if len(raw_shots) > MAX_SHOTS:
-        raise ValueError("H3 Chain Plan supports at most %d shots." % MAX_SHOTS)
 
     generation_fingerprint, reference_fingerprint_lineage = (
         _generation_fingerprint_value(generation_fingerprint))

@@ -1,0 +1,131 @@
+          <!-- script 路径的草稿：确认稿被改动时明说（§7） -->
+          <p class="muted small" style="margin: 0 0 6px"
+             x-show="intakeConfirmed && !confirmedEventsDrifted"
+             x-text="'这份草稿按 ' + (intakeConfirmed ? intakeConfirmed.count : 0) + ' 条已确认事件逐字生成；改事件前先想清楚。'"></p>
+          <p class="err small" style="margin: 0 0 6px"
+             x-show="confirmedEventsDrifted">
+            ⚠ 事件被改过：这份稿子已经偏离当初确认的
+            <span x-text="intakeConfirmed ? intakeConfirmed.count : 0"></span>
+            条事件。保存时存的是现在这份（改过的），确认稿不再作数。
+          </p>
+          <div class="card-head">
+            <h3 x-text="model.name || '（未命名）'"></h3>
+            <div class="panel-head-actions">
+              <span class="badge" :class="isDirty ? 'warn' : 'ok'"
+                    x-text="savedLabel"></span>
+              <span class="badge ok" x-show="selected && versionInfo.current"
+                    :title="'这一份剧本现在到第 ' + versionInfo.current + ' 版'"
+                    x-text="'版本 ' + versionInfo.current"></span>
+              <button class="btn" type="button" @click="versionOpen = !versionOpen"
+                      x-show="selected" title="这一份剧本的版本历史">🕘 版本</button>
+              <a class="btn" x-show="selected && !isDirty" :href="'/video?script=' + encodeURIComponent(selected)"
+                 title="带着这份剧本去制作页">🎬 用此剧本制作</a>
+              <!-- U04：有未保存修改时，主动作变成“保存并制作”——
+                   保存的明确版本才是制作输入，失败留在当前稿。 -->
+              <button class="btn" type="button" x-show="selected && isDirty"
+                      @click="saveAndMake()"
+                      title="先保存这份修改（产生新版本），再带着它去制作页">💾 保存并制作</button>
+              <button class="btn" type="button" @click="startDraft('revise')"
+                      x-show="selected" title="以当前剧本为底稿，按修改意见生成下一版">✨ 修订</button>
+              <button class="btn" type="button" @click="validateNow(true)">✔️ 校验</button>
+              <button class="btn primary" type="button" @click="save()">💾 保存</button>
+              <button class="btn danger" type="button" @click="remove()">🗑️ 删除</button>
+            </div>
+          </div>
+
+          <!-- 版本历史：保存永远产生新的一版，旧的一版一直留着。 -->
+          <div class="draft-box" x-show="versionOpen && selected">
+            <strong>版本历史（<span x-text="versionInfo.items.length"></span> 版）</strong>
+            <p class="muted small">
+              当前版是引擎渲染用的那份。每次保存都会把上一版留在这里，
+              旧版可以打开来看，也可以恢复成当前版（恢复会存成新的一版，历史只增不减）。
+            </p>
+            <ul class="version-list">
+              <template x-for="v in versionInfo.items" :key="v.number">
+                <li class="version-row">
+                  <span class="cell-strong" x-text="'版本 ' + v.number"></span>
+                  <span class="muted small" x-text="v.time"></span>
+                  <span class="muted small" x-text="v.note"></span>
+                  <span class="badge ok" x-show="v.current">当前</span>
+                  <span class="auto-actions">
+                    <button class="btn subtle" type="button" @click="openVersion(v.number)"
+                            x-show="!v.current" title="把这一版读进编辑器看看（不落库）">打开</button>
+                    <button class="btn subtle" type="button" @click="restoreVersion(v.number)"
+                            x-show="!v.current" title="用这一版的内容存成新的一版">恢复</button>
+                    <button class="btn subtle" type="button" @click="deleteVersion(v.number)"
+                            x-show="!v.current" title="删掉这一版，救不回来">删掉</button>
+                  </span>
+                </li>
+              </template>
+            </ul>
+          </div>
+
+          <!-- 上次没保存就关掉的改动，还在本地。 -->
+          <div class="draft-box" x-show="recoveredDraft">
+            <strong>发现未保存的草稿</strong>
+            <p class="muted small">
+              上一次在这里改过东西但没保存。恢复它，还是丢掉、从库里那份重新开始？
+            </p>
+            <div class="auto-actions">
+              <button class="btn primary" type="button" @click="restoreDraft()">↩ 恢复草稿</button>
+              <button class="btn" type="button" @click="discardDraft()">丢弃草稿</button>
+            </div>
+          </div>
+
+          <!-- 起草备注：LLM 评审意见，与契约渲染风险分开。 -->
+          <div class="draft-box" x-show="draftNotes.length">
+            <strong>起草备注（LLM 评审）</strong>
+            <ul><template x-for="(n, i) in draftNotes" :key="i"><li x-text="n"></li></template></ul>
+          </div>
+
+          <!-- 校验回执：三个标签共用，切换标签不会弄丢。 -->
+          <div class="validation-box" x-show="errors.length">
+            <strong class="err">契约不通过</strong>
+            <ul><template x-for="e in errors" :key="e"><li x-text="e"></li></template></ul>
+          </div>
+          <div class="validation-box risk" x-show="warnings.length">
+            <div class="risk-summary">
+              <strong class="warn">渲染风险</strong>
+              <template x-for="chip in warningChips" :key="chip.label">
+                <button class="warn-chip" type="button" :class="chip.level"
+                        :title="parsedWarnings.filter((w) => w.label === chip.label).map((w) => w.text).join('\n')"
+                        @click="warnOpen = !warnOpen"
+                        x-text="chip.label + ' ×' + chip.count"></button>
+              </template>
+              <button class="btn primary" type="button" @click="fixAllWarnings()"
+                      :disabled="fixing || drafting || !parsedWarnings.length"
+                      :title="fixing ? '正在改：要判断的那几条要等模型写完' : '按每一条风险的建议，把这一版一次性改好'"
+                      x-text="fixing ? '正在改…' : '✨ 全部按建议改'"></button>
+              <button class="btn subtle" type="button" @click="warnOpen = !warnOpen"
+                      x-text="warnOpen ? '收起' : '说明'"></button>
+            </div>
+            <ul x-show="warnOpen">
+              <template x-for="(w, i) in parsedWarnings" :key="i">
+                <li class="risk-row">
+                  <span class="warn-chip mini" :class="w.level" x-text="w.label"></span>
+                  <span class="muted small" x-show="w.shot" x-text="w.shot"></span>
+                  <span class="risk-text" x-text="w.text"></span>
+                  <button class="btn subtle" type="button" @click="fixWarning(w)"
+                          :disabled="fixing || drafting"
+                          :title="(w.kind === 'duration'
+                            ? '按这条建议改：时长算得出来，直接改好，不用模型'
+                            : '按这条建议改：交给模型重写一版草稿') + '&#10;' + w.fix">✨ 按这条改</button>
+                </li>
+              </template>
+            </ul>
+            <p class="muted small" x-show="warnOpen">
+              每条风险后面都有「按这条改」，上面还有「全部按建议改」：能算出来的
+              直接改时长（不用模型），要判断的合成一次交给模型重写一版草稿
+              （要等它写完）。改动都停在编辑器里，你看过再存。
+            </p>
+          </div>
+          <div class="validation-box ok" x-show="okMessage" x-text="okMessage"></div>
+
+          <div class="workbench-tabs">
+            <button class="pill" type="button" :class="{ active: tab === 'preview' }"
+                    @click="setTab('preview')">👁 预览</button>
+            <button class="pill" type="button" :class="{ active: tab === 'edit' }"
+                    @click="setTab('edit')">✏️ 编辑</button>
+            <button class="pill" type="button" :class="{ active: tab === 'json' }"
+                    @click="setTab('json')">🧾 JSON 源码</button>
+          </div>

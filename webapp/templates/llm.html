@@ -15,7 +15,7 @@
   </div>
 
   <p class="muted">
-    API Key 写进 ComfyUI 插件的 <code>mia_llm_keys.json</code>，插件的节点立刻就能用；
+    API Key 写进 ComfyUI 插件的 <code>mie_llm_keys.json</code>，插件的节点立刻就能用；
     模型与「当前平台」存在本工作台自己的设置里。密钥只显示头尾，不回显全文。
   </p>
   <p class="muted small">
@@ -65,17 +65,19 @@
             </td>
             <td>
               <template x-if="p.host">
-                <input class="input" :value="p.host || 'http://127.0.0.1:11434'"
+                <input class="input" :data-host="p.key"
+                       :value="p.endpoint || 'http://127.0.0.1:11434'"
                        :aria-label="p.name + ' 的本地服务地址'"
-                       @change="saveHost(p)" placeholder="http://host:port">
+                       @change="saveHost(p, $event.target.value)" placeholder="http://host:port">
               </template>
               <template x-if="!p.host">
                 <div>
                   <div class="small" :class="p.has_key ? 'ok' : 'warn'"
                        x-text="p.has_key ? p.key_masked : '未设置'"></div>
-                  <input class="input" type="password" :value="p.has_key ? p.key_masked : ''"
+                  <input class="input" type="password" :data-key="p.key"
                          :aria-label="p.name + ' 的 API Key'"
-                         @change="saveKey(p)" placeholder="粘贴 API Key">
+                         @change="saveKey(p, $event.target.value); $event.target.value = ''"
+                         :placeholder="p.has_key ? '已设置（粘贴新 Key 覆盖）' : '粘贴 API Key'">
                 </div>
               </template>
             </td>

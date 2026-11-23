@@ -7,6 +7,15 @@
     <h2>🗂️ 制作历史</h2>
     <div class="panel-head-actions">
       <span class="muted" x-text="statusText"></span>
+      <!-- 实时进度：ComfyUI 自己报的进度（镜头、采样步、当前节点） -->
+      <span class="badge warn" id="render-progress" x-show="progressLine"
+            x-text="progressLine" title="ComfyUI 的实时进度"></span>
+      <span class="badge" id="render-progress-offline"
+            x-show="!progressLine && progressOffline"
+            x-text="'进度流断开（任务状态仍由下面的轮询确认）'"></span>
+      <button class="btn danger" type="button" x-show="hasActiveJob"
+              :disabled="interrupting" @click="interruptRender()"
+              title="停掉正在跑的那一个；跑着好几个时会让你先选">⏹ 停止当前渲染</button>
       <button class="btn" type="button" @click="load()">🔄 刷新</button>
       <a class="btn" href="/video">🎞️ 去制作</a>
     </div>
@@ -67,7 +76,7 @@
           <div class="muted small">
             <span x-text="w.script"></span>
             <span x-text="' · ' + w.attempt_count + ' 次尝试'"></span>
-            <span class="muted" x-text="'（' + w.statuses.map(statusLabel).join('／') + '）'"></span>
+            <span class="muted" x-text="'（' + (w.statuses || []).map(statusLabel).join('／') + '）'"></span>
             <span class="muted small" style="display: block; overflow-wrap: anywhere"
                   x-text="'目录：' + w.run_name"></span>
           </div>
@@ -76,6 +85,8 @@
         </div>
         <span class="badge" :class="statusClass(w.latest_status)"
               x-text="'最新：' + statusLabel(w.latest_status)"></span>
+        <!-- 等决定的事不能藏在折叠里：作品卡上先亮出来。 -->
+        <span class="badge warn" x-show="workHasReview(w)">待审</span>
 
         <!-- 正式成片挂在作品上；播放器点开才挂。 -->
         <template x-if="w.film">
@@ -122,14 +133,67 @@
               <div class="attempt-row">
                 <div class="muted small">
                   <span x-show="j.attempt" x-text="'第 ' + j.attempt + ' 版'"></span>
-                  <span x-show="j.continued" x-text=" · 续跑"></span>
-                  <span x-show="j.from_disk" x-text=" · 磁盘记录"></span>
+                  <span x-show="j.continued" x-text="' · 续跑'"></span>
+                  <span x-show="j.from_disk" x-text="' · 磁盘记录'"></span>
                   <span x-show="j.submitted_at" x-text="' · ' + timeText(j.submitted_at)"></span>
                 </div>
                 <span class="badge" :class="statusClass(j.status)"
                       x-text="statusLabel(j.status)"></span>
+                <div class="muted small" x-show="j.progress && j.progress.message"
+                     x-text="progressText(j.progress)"></div>
                 <div class="warn small" x-show="(j.inputs_changed || []).length"
-                     x-text="'输入已变更：' + j.inputs_changed.join('、') + '（结果可能与提交时不同）'"></div>
+                     x-text="'输入已变更：' + (j.inputs_changed || []).join('、')
+                               + '（结果可能与提交时不同）'"></div>
+
+                <!-- 待审的分镜：引擎的 Review Gate 停在这里等一个决定。
+                     候选的预览是引擎自己的那一份，不是重新生成的。 -->
+                <template x-if="j.review && j.review.shot">
+                  <div class="review-panel">
+                    <div class="card-head">
+                      <h4 x-text="'待审分镜 · 第 ' + (j.review.shot.index || 0)
+                                + ' / ' + (j.review.shot.count || 0) + ' 镜'"></h4>
+                      <span class="badge" :class="j.review.actionable ? 'warn' : ''"
+                            x-text="j.review.actionable ? '等人决定' : '只剩存档'"></span>
+                    </div>
+                    <p class="muted small"
+                       x-text="'分镜 ' + (j.review.shot.id || '') + ' · 种子 '
+                                 + (j.review.shot.seed || '') + ' · '
+                                 + ((j.review.shot.frames || 0) / 24).toFixed(1) + ' 秒'"></p>
+                    <p class="muted small" x-show="j.review.shot.prompt"
+                       x-text="'提示词：' + (j.review.shot.prompt || '').slice(0, 200)"></p>
+                    <p class="err small" x-show="j.review.warning"
+                       x-text="j.review.warning"></p>
+                    <p class="warn small" x-show="j.review.durable"
+                       x-text="j.review.recovery_instructions
+                                 || '这次审片只剩存档，只能人工从检查点恢复。'"></p>
+
+                    <div class="job-artifacts">
+                      <template x-for="c in (j.review.candidates || [])" :key="c.revision">
+                        <div class="review-candidate">
+                          <template x-if="c.url">
+                            <video class="delivery-player" controls preload="metadata"
+                                   :src="c.url"></video>
+                          </template>
+                          <span class="muted small"
+                                x-text="'候选 ' + c.number + ' · 种子 ' + c.seed + ' · '
+                                          + ((c.frames || 0) / 24).toFixed(1) + ' 秒'"></span>
+                          <button class="btn primary" type="button"
+                                  x-show="j.review.actionable"
+                                  :disabled="reviewBusy"
+                                  @click="decideReview(j, c, 'approve')">✅ 采纳这一镜</button>
+                        </div>
+                      </template>
+                    </div>
+
+                    <div class="job-actions" x-show="j.review.actionable">
+                      <button class="btn" type="button" :disabled="reviewBusy"
+                              @click="decideReview(j, null, 'reroll')">🎲 重掷这一镜</button>
+                      <span class="muted small"
+                            x-text="reviewMessage"></span>
+                    </div>
+                  </div>
+                </template>
+                <p class="warn small" x-show="j.review_error" x-text="j.review_error"></p>
 
                 <details class="preview-block" x-show="(j.segments || []).length">
                   <summary x-text="'分镜片段（' + (j.segments || []).length + '）'"></summary>
@@ -156,10 +220,21 @@
                 </details>
 
                 <div class="job-actions">
+                  <button class="btn danger" type="button"
+                          x-show="j.status === 'running' || j.status === 'queued'"
+                          :disabled="interrupting" @click="interruptRender(j)"
+                          :title="'停掉这一次：' + (j.title || j.run_name)"
+                          x-text="j.status === 'queued'
+                            ? '⏹ 从队列里撤掉这次'
+                            : '⏹ 停掉这次渲染'"></button>
                   <button class="btn subtle" type="button"
                           x-show="canContinue(j)" @click="continueJob(j)"
                           :disabled="submitting"
                           title="用同样的角色绑定和参数，接着这次尝试继续生成">▶ 从这次继续</button>
+                  <button class="btn subtle" type="button"
+                          x-show="canAssemble(j)" @click="assembleJob(j)"
+                          :disabled="submitting"
+                          title="用这次已经保存下来的分镜拼出成片，不重新生成任何一帧">🎞️ 用已保存的分镜拼片</button>
                   <button class="btn subtle" type="button"
                           x-show="j.script" @click="remakeJob(j)"
                           title="带着这次的角色绑定和参数去制作页，生成一个新的运行">🔁 用本次配置再做一版</button>

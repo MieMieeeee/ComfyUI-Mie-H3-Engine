@@ -20,6 +20,11 @@ from mie_craft.assets import script_asset
 from mie_craft.h3_loop_prompts import plan_to_json_string
 from mie_craft.script.builder import assemble_plan
 
+try:
+    from . import asset_root
+except ImportError:
+    import asset_root
+
 
 class ScriptRefError(ValueError):
     """The caller asked for a script the route must not open."""
@@ -29,6 +34,10 @@ class ScriptRefError(ValueError):
         self.status = status
 
 
+def _library_dir(explicit: str) -> str:
+    return str(explicit or "").strip() or str(asset_root.asset_library_dir())
+
+
 def resolve_script_file(library_dir: str, script_ref: str) -> Path:
     """Return the storyboard file for ``script_ref``, still inside the library.
 
@@ -36,7 +45,7 @@ def resolve_script_file(library_dir: str, script_ref: str) -> Path:
     must name that same file. Absolute paths, ``..``, and any symlink
     along the way are rejected.
     """
-    root = Path(asset_library.validate_library_dir(library_dir))
+    root = Path(asset_library.validate_library_dir(_library_dir(library_dir)))
     ref = str(script_ref or "").strip().replace("\\", "/")
     if not ref:
         raise ScriptRefError("script_ref is required")

@@ -18,13 +18,16 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import queue
 import subprocess
 
-from flask import Flask, abort, jsonify, render_template, request, send_from_directory
+from flask import (Flask, Response, abort, jsonify, render_template, request,
+                   send_from_directory)
 
 from webapp import config
 from webapp.services import (autodraft, comfy, history, intake, library, llm,
-                             riskfix, runname, runner, theme, versions)
+                             models, progress, review, riskfix, runname,
+                             runner, theme, versions)
 
 
 def _app_version() -> str:
@@ -529,10 +532,14 @@ def create_app() -> Flask:
     def api_script_plan(name):
         data = request.get_json(silent=True) or {}
         role_assets = {str(k): str(v) for k, v in (data.get("role_assets") or {}).items()}
+        settings = data.get("settings")
+        if not isinstance(settings, dict):
+            settings = {}
         try:
             return jsonify(runner.plan_preview(
                 name, role_assets,
-                scene_asset=str(data.get("scene_asset") or "")))
+                scene_asset=str(data.get("scene_asset") or ""),
+                render_settings=settings))
         except (FileNotFoundError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
 
@@ -695,6 +702,23 @@ def create_app() -> Flask:
     def api_render_submit():
         data = request.get_json(silent=True) or {}
         role_assets = {str(k): str(v) for k, v in (data.get("role_assets") or {}).items()}
+        # The author's model choices: the page sends the state it is
+        # showing right now, and an empty set means "keep the workflow's
+        # own defaults".
+        settings = data.get("settings")
+        if not isinstance(settings, dict):
+            settings = {}
+        # The review opt-in is a saved setting, but the page sends the
+        # state it is showing right now: a toggle that has not been
+        # saved yet must still reach the graph that is submitted.
+        asked = data.get("review")
+        if isinstance(asked, dict) and "enabled" in asked:
+            review_opt_in = {
+                "enabled": bool(asked.get("enabled")),
+                "candidate_count": asked.get("candidate_count", 1),
+            }
+        else:
+            review_opt_in = review.review_settings()
         try:
             record = runner.submit(
                 str(data.get("script") or ""), role_assets,
@@ -705,12 +729,191 @@ def create_app() -> Flask:
                 duration=int(data.get("duration") or 18),
                 continue_run=bool(data.get("continue_run")),
                 continue_from=str(data.get("continue_from") or ""),
-                scene_asset=str(data.get("scene_asset") or ""))
+                scene_asset=str(data.get("scene_asset") or ""),
+                render_settings=settings,
+                review=review_opt_in)
         except (FileNotFoundError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
         except comfy.ComfyUnavailable as exc:
             return jsonify({"error": str(exc)}), 502
         return jsonify(record)
+
+    @app.route("/api/render/models")
+    def api_render_models():
+        """What ComfyUI can load, and the presets the author saved.
+
+        The list comes from ComfyUI's own node registry, so it is what
+        this machine really has - not a table of file names.
+        """
+        return jsonify(models.overview())
+
+    @app.route("/api/render/presets", methods=["GET", "POST"])
+    def api_render_presets():
+        if request.method == "GET":
+            return jsonify({"presets": models.presets()})
+        data = request.get_json(silent=True) or {}
+        settings = data.get("settings")
+        if not isinstance(settings, dict):
+            settings = {}
+        try:
+            return jsonify(models.save_preset(str(data.get("name") or ""),
+                                              settings))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/render/presets/<name>", methods=["DELETE"])
+    def api_delete_render_preset(name):
+        try:
+            return jsonify(models.delete_preset(name))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 404
+
+    # ------------------------------------------------------------------ #
+    # the shot review gate
+    # ------------------------------------------------------------------ #
+
+    @app.route("/api/render/review/settings")
+    def api_review_settings():
+        """The review opt-in: off by default, remembered when it is on."""
+        return jsonify(review.review_settings())
+
+    @app.route("/api/render/review/settings", methods=["POST"])
+    def api_save_review_settings():
+        data = request.get_json(silent=True) or {}
+        return jsonify(review.save_review_settings(
+            bool(data.get("enabled")),
+            data.get("candidate_count", 1)))
+
+    @app.route("/api/render/review/<job_id>")
+    def api_render_review(job_id):
+        """The pending review of one attempt of this workbench."""
+        record = runner.find_record(job_id)
+        if not record:
+            return jsonify({"error": "这条任务不在历史里。"}), 404
+        try:
+            pending = review.pending_for(record)
+        except review.ReviewUnavailable as exc:
+            return jsonify({"error": str(exc)}), 502
+        return jsonify({"review": review.summarize(pending, record)})
+
+    @app.route("/api/render/review/decision", methods=["POST"])
+    def api_render_review_decision():
+        """Hand one decision to the engine's own review route.
+
+        The decision is not applied here: it is posted to the engine,
+        which owns the review, and the engine's answer is what comes
+        back. A refusal (this review is not ours, it is stale, or it
+        has already been decided) never reaches the engine.
+        """
+        data = request.get_json(silent=True) or {}
+        record = runner.find_record(str(data.get("job_id") or ""))
+        if not record:
+            return jsonify({"error": "这条任务不在历史里。"}), 404
+        try:
+            result = review.decide(
+                record,
+                str(data.get("token") or ""),
+                str(data.get("action") or ""),
+                str(data.get("candidate_revision") or ""))
+        except review.ReviewError as exc:
+            status = 409 if exc.code in ("decided", "stale") else 400
+            return jsonify({"error": str(exc), "code": exc.code}), status
+        return jsonify(result)
+
+    @app.route("/api/render/assemble", methods=["POST"])
+    def api_render_assemble():
+        """Join the takes a run already saved - no new frames.
+
+        The engine's own Checkpoint Manager and Assemble do the work;
+        the mode is checked before anything is submitted, so a
+        "reassemble" can never turn into a re-render.
+        """
+        data = request.get_json(silent=True) or {}
+        try:
+            record = runner.assemble(
+                str(data.get("job_id") or ""),
+                str(data.get("mode") or runner.ASSEMBLY_MODE))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except review.ReviewUnavailable as exc:
+            return jsonify({"error": str(exc)}), 502
+        except comfy.ComfyUnavailable as exc:
+            return jsonify({"error": str(exc)}), 502
+        return jsonify(record)
+
+    @app.route("/api/render/interrupt", methods=["POST"])
+    def api_render_interrupt():
+        """Stop ONE render - the one the caller named, or the one that
+        is running.
+
+        The prompt id is the workbench's own job id: the workbench
+        never touches a prompt somebody else queued on the same
+        ComfyUI, and it never sends a global stop.
+        """
+        data = request.get_json(silent=True) or {}
+        result = runner.stop(str(data.get("job_id") or ""))
+        status = 200
+        if not result.get("ok"):
+            status = {"unreachable": 502, "unknown": 404}.get(
+                str(result.get("state") or ""), 409)
+        return jsonify(result), status
+
+    @app.route("/api/render/active")
+    def api_render_active():
+        """How many renders are running right now.
+
+        A cheap question, so a page can decide whether it needs the
+        live progress stream: an idle browser must not keep an open
+        connection open for nothing.
+
+        The answer carries the last finished run as well. A page that
+        opens after the render ended gets no stream - there is nothing
+        live to watch - so without this the page would say nothing at
+        all about a render that really happened.
+        """
+        return jsonify({"active": runner.active_count(),
+                        "last": progress.terminal_snapshot()})
+
+    @app.route("/api/render/progress")
+    def api_render_progress():
+        """The live render progress, as Server-Sent Events.
+
+        ComfyUI's event stream is read ONCE, by the progress hub, and
+        this route only hands out what the hub knows. So a second
+        browser tab costs one HTTP stream, not a second websocket to
+        ComfyUI.
+        """
+        def events():
+            # Subscribe FIRST, then send the snapshot. A run that ends
+            # between the two would otherwise publish its last word into
+            # a channel nobody is listening to yet, and the page would
+            # never hear how it ended.
+            channel = progress.subscribe()
+            try:
+                snapshot = progress.payload()
+                yield progress.sse_event(snapshot)
+                # An update the snapshot already carries must not send
+                # the page backwards in time.
+                seen_at = float(snapshot.get("server_time") or 0)
+                while True:
+                    try:
+                        payload = channel.get(timeout=progress.KEEPALIVE_SECONDS)
+                    except queue.Empty:
+                        # A comment line keeps the connection alive
+                        # without pretending that something happened.
+                        yield ": keep-alive\n\n"
+                        continue
+                    stamp = float(payload.get("server_time") or 0)
+                    if stamp <= seen_at:
+                        continue
+                    seen_at = stamp
+                    yield progress.sse_event(payload)
+            finally:
+                progress.unsubscribe(channel)
+
+        return Response(events(), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache",
+                                 "X-Accel-Buffering": "no"})
 
     @app.route("/api/render/jobs")
     def api_render_jobs():
@@ -732,9 +935,14 @@ def create_app() -> Flask:
         status = str(request.args.get("status") or "")
         grouped = request.args.get("grouped") in ("1", "true", "yes")
         query = str(request.args.get("q") or "")
-        return jsonify(runner.jobs(page=page, per_page=per_page,
-                                   favorites_only=favorites, status=status,
-                                   query=query, grouped=grouped))
+        answer = runner.jobs(page=page, per_page=per_page,
+                             favorites_only=favorites, status=status,
+                             query=query, grouped=grouped)
+        # The last finished run comes along: the page shows it in the
+        # progress badge, and a page that opens after the end has
+        # nothing else to go on.
+        answer["last"] = progress.terminal_snapshot()
+        return jsonify(answer)
 
     @app.route("/api/render/jobs/<job_id>/delete", methods=["POST"])
     def api_render_delete(job_id):

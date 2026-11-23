@@ -25,7 +25,13 @@ torchaudio
 #     prompt assets the pages read.
 #
 # Pillow is not listed: ComfyUI ships it.
+#
+#   aiohttp - the live render progress reads ComfyUI's own websocket
+#     event stream. ComfyUI ships aiohttp itself (see the note above),
+#     so this line is satisfied by the very same interpreter the
+#     workbench runs on; it is declared rather than assumed.
 flask>=3.0
 soundfile>=0.12
+aiohttp>=3.9
 comfyui-mie-llm>=0.2.0
 comfyui-mie-prompt>=0.2.0

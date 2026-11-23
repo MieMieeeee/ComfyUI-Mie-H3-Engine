@@ -7,6 +7,9 @@
     <h2>🎞️ 视频制作</h2>
     <div class="panel-head-actions">
       <span class="muted" x-text="statusText"></span>
+      <!-- 实时进度：提交之后，这一页也看得见渲染走到哪一步 -->
+      <span class="badge warn" x-show="progressLine" x-text="progressLine"
+            title="ComfyUI 的实时进度"></span>
       <a class="btn" href="/history">🗂️ 制作历史</a>
     </div>
   </div>
@@ -21,7 +24,7 @@
     <div class="split-list">
       <label class="field">
         <span>剧本</span>
-        <select class="input" x-model="script" @change="loadScript()">
+        <select class="input" data-select="script" x-model="script" @change="loadScript()">
           <option value="">— 选择剧本 —</option>
           <template x-for="n in scripts" :key="n"><option :value="n" x-text="n"></option></template>
         </select>
@@ -126,6 +129,122 @@
         <label class="field"><span>目标秒</span><input class="input" type="number" x-model.number="duration" @change="saveSession()"></label>
       </div>
 
+      <!-- 渲染设置：模型清单是从 ComfyUI 自己问出来的（object_info），
+           所以这里列的都是这台机器真的有的东西。离线时只留工作流
+           自带的默认值，不猜。 -->
+      <details class="preview-block" x-show="modelSlotsLoaded">
+        <summary>
+          渲染设置（模型 / 预设 / 种子）
+          <span class="badge" x-show="presetName" x-text="presetName"></span>
+        </summary>
+        <p class="err small" x-show="modelsError" x-text="modelsError"></p>
+
+        <label class="field">
+          <span>质量预设</span>
+          <select class="input" x-model="presetChoice" @change="applyPreset(presetChoice)">
+            <option value="">— 不套用预设 —</option>
+            <template x-for="p in presets" :key="p.id">
+              <option :value="p.id" x-text="p.name + (p.builtin ? '' : '（我存的）')"
+                      :title="p.desc"></option>
+            </template>
+          </select>
+          <span class="muted small" x-show="presetDesc" x-text="presetDesc"></span>
+        </label>
+
+        <label class="field" x-show="((modelSlots.unet || {}).options || []).length">
+          <span>扩散模型（UNET）</span>
+          <select class="input" x-model="modelValues.unet" @change="onModelChange()">
+            <template x-for="opt in ((modelSlots.unet || {}).options || [])" :key="opt">
+              <option :value="opt" x-text="opt"></option>
+            </template>
+          </select>
+        </label>
+
+        <label class="field" x-show="((modelSlots.clip || {}).options || []).length">
+          <span>文本编码器（CLIP）</span>
+          <select class="input" x-model="modelValues.clip" @change="onModelChange()">
+            <template x-for="opt in ((modelSlots.clip || {}).options || [])" :key="opt">
+              <option :value="opt" x-text="opt"></option>
+            </template>
+          </select>
+        </label>
+
+        <label class="field" x-show="((modelSlots.video_vae || {}).options || []).length">
+          <span>视频 VAE</span>
+          <select class="input" x-model="modelValues.video_vae" @change="onModelChange()">
+            <template x-for="opt in ((modelSlots.video_vae || {}).options || [])" :key="opt">
+              <option :value="opt" x-text="opt"></option>
+            </template>
+          </select>
+        </label>
+
+        <label class="field" x-show="((modelSlots.audio_vae || {}).options || []).length">
+          <span>音频 VAE</span>
+          <select class="input" x-model="modelValues.audio_vae" @change="onModelChange()">
+            <template x-for="opt in ((modelSlots.audio_vae || {}).options || [])" :key="opt">
+              <option :value="opt" x-text="opt"></option>
+            </template>
+          </select>
+        </label>
+
+        <label class="field" x-show="((modelSlots.attention || {}).options || []).length">
+          <span>注意力后端</span>
+          <select class="input" x-model="modelValues.attention" @change="onModelChange()">
+            <template x-for="opt in ((modelSlots.attention || {}).options || [])" :key="opt">
+              <option :value="opt" x-text="opt"></option>
+            </template>
+          </select>
+        </label>
+
+        <!-- 种子用文本框：引擎允许到 2^64-1，浏览器的一个数字装不下，
+             写成字符串才不会被悄悄改掉。 -->
+        <label class="field">
+          <span>基础种子</span>
+          <input class="input" type="text" inputmode="numeric" x-model="baseSeed"
+                 @change="onModelChange()"
+                 :placeholder="'0 … ' + (seedBounds.max || '')">
+          <span class="muted small"
+                x-text="'0 到 ' + (seedBounds.max || '') + ' 之间；0 也是合法的种子（每个分镜会派生出不同的种子）'"></span>
+        </label>
+
+        <div class="field-grid">
+          <label class="field">
+            <span>把这个设置存成预设</span>
+            <input class="input" x-model="presetName" placeholder="预设名字">
+          </label>
+          <label class="field">
+            <span>&nbsp;</span>
+            <span>
+              <button class="btn subtle" type="button" @click="savePreset()">💾 保存预设</button>
+              <button class="btn subtle" type="button" x-show="presetName && !presetIsBuiltin"
+                      @click="deletePreset(presetName)">🗑️ 删除这个预设</button>
+            </span>
+          </label>
+        </div>
+        <p class="muted small" x-show="presetMessage" x-text="presetMessage"></p>
+      </details>
+
+      <!-- 逐镜审片（opt-in）：引擎自己的 Review Gate 在链路里每存好一镜
+           就停下等人决定。默认关闭 —— 无人值守的渲染照旧跑完。 -->
+      <label class="field">
+        <span>逐镜审片</span>
+        <span class="muted small" style="display: flex; gap: 6px; align-items: center;">
+          <input type="checkbox" x-model="reviewEnabled" @change="saveReviewSetting()">
+          每存好一镜就停下，在制作历史页里决定要不要这一镜
+        </span>
+        <span class="muted small" x-show="reviewEnabled">
+          每次生成
+          <select class="input" x-model.number="reviewCandidateCount"
+                  @change="saveReviewSetting()">
+            <option :value="1">1 个候选</option>
+            <option :value="2">2 个候选</option>
+            <option :value="3">3 个候选</option>
+            <option :value="4">4 个候选</option>
+          </select>
+          个候选（引擎先生成一批，再挑一个）
+        </span>
+      </label>
+
       <!-- 英文镜像过期：生成实际读的是英文，源文本改了而镜像没改，
            就是拿旧描述去生成。不能闷头开始。 -->
       <div class="validation-box" x-show="executionStale">
@@ -194,6 +313,21 @@
         <pre class="preview-text" x-text="planPreview"></pre>
         <p class="err small" x-show="planError" x-text="planError"></p>
       </details>
+      <details class="preview-block" x-show="compiledPlan">
+        <summary>
+          编译后的分镜提示词
+          <span class="badge" x-show="planSha256" x-text="planSha256"></span>
+        </summary>
+        <pre class="preview-text"
+             x-text="(compiledPlan?.prompt_prefix || []).join('\n')"></pre>
+        <template x-for="shot in (compiledPlan?.shots || [])" :key="shot.id">
+          <div class="shot-brief">
+            <div class="muted small" x-text="shot.id + ' · ' + shot.length + ' 帧'"></div>
+            <pre class="preview-text" x-text="shot.prompt.join('\n')"></pre>
+          </div>
+        </template>
+      </details>
+      <p class="err small" x-show="compileError" x-text="compileError"></p>
     </div>
   </div>
 </section>

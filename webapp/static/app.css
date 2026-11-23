@@ -78,6 +78,12 @@ code {
 .status-pill.err .status-dot { background: var(--color-error); }
 .status-open { color: var(--text-muted); }
 .status-open.disabled { opacity: .35; pointer-events: none; }
+/* 顶栏的实时进度：一枚安静的药丸，别抢 ComfyUI 状态灯的位置 */
+.progress-pill {
+  max-width: 340px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; display: inline-block;
+}
+.progress-pill.warn { color: var(--color-warning, var(--text-secondary)); }
 .status-refresh {
   background: none; border: none; color: var(--text-muted);
   cursor: pointer; font-size: 14px; padding: 2px 4px;
@@ -402,6 +408,18 @@ textarea.input.code {
   .delivery-player { max-width: 100%; }
 }
 
+/* 待审分镜：候选的预览和决定按钮放在一起，一眼看出在等什么。 */
+.review-panel {
+  flex: 1 1 100%; display: flex; flex-direction: column; gap: 8px;
+  margin: 6px 0 2px; padding: 10px 12px;
+  border: 1px solid var(--border-subtle); border-radius: 10px;
+}
+.review-panel .card-head { margin-bottom: 0; }
+.review-candidate {
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+  min-width: 0; flex: 1 1 260px;
+}
+
 /* ---------------------------------------------------------------- */
 /* 剧本工作台（预览 / 编辑 / JSON 三标签）                            */
 /* ---------------------------------------------------------------- */
@@ -656,7 +674,7 @@ textarea.input.code {
 .narrow-picker { display: none; }
 @media (max-width: 640px) {
   .narrow-picker { display: block; }
-  .split-list { display: none; }
+  .narrow-picker + .split-list { display: none; }
   .split { display: block; }
   .split-detail { min-width: 0; }
   /* 恢复提示一行紧凑：留继续/清空两个动作即可。 */

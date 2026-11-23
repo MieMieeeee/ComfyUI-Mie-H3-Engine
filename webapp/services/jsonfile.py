@@ -15,6 +15,10 @@ import json
 import os
 import pathlib
 import tempfile
+import threading
+
+
+settings_lock = threading.Lock()
 
 
 def write_json(path, value) -> None:

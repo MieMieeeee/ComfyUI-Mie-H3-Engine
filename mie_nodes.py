@@ -185,9 +185,8 @@ class MieH3LoadAsset:
         loaded = loader(_library_dir(library_dir), name)
         images = loaded["png_bytes_list"]
         clips = loaded.get("audio_bytes_list") or []
-        if len(images) != 1 or len(clips) > 1:
-            raise ValueError(
-                f"{kind} {name!r} must have one reference image and at most one audio clip")
+        if not images:
+            raise ValueError(f"{kind} {name!r} must have at least one reference image")
         with Image.open(io.BytesIO(images[0])) as source:
             pixels = np.asarray(source.convert("RGB"), dtype=np.float32) / 255.0
         image = torch.from_numpy(pixels).unsqueeze(0)

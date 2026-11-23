@@ -68,7 +68,7 @@
         <div class="sample-list" x-show="kind === 'character'">
           <span class="small"><strong>声音样本</strong>
             <span class="muted" x-show="(detail.audios || []).length"
-                  x-text="'（' + detail.audios.length + ' 段；引擎按序号顺序使用）'"></span>
+                  x-text="'（' + (detail.audios || []).length + ' 段；引擎按序号顺序使用）'"></span>
           </span>
           <template x-for="clip in detail.audios || []" :key="clip.url">
             <div class="sample-row">

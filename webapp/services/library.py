@@ -189,9 +189,16 @@ def get_scene(name: str) -> dict:
     }
 
 
-def get_asset_meta(name: str, kind: str) -> dict:
-    """The cheap metadata read - no image bytes."""
-    return _library.read_asset_meta(library_dir(), name, kind, **_library_kwargs())
+def get_asset_meta(name: str, kind: str, asset_dir: str = "") -> dict:
+    """The cheap metadata read - no image bytes.
+
+    ``asset_dir`` names the library to read from; the workbench's own
+    library is used when it is empty. The counts it returns (images,
+    audio clips) are enough to answer "does this character have a voice
+    sample" without encoding a single picture.
+    """
+    root = str(asset_dir or "").strip() or library_dir()
+    return _library.read_asset_meta(root, name, kind, **_library_kwargs())
 
 
 # --------------------------------------------------------------------------- #
@@ -564,11 +571,21 @@ def validate_storyboard(payload: dict) -> dict:
     Returns the errors and the render-risk warnings separately: an error
     means the contract rejects it, a warning means it will render but
     something is tight.
+
+    The warnings come with their classification (how serious, what to
+    call it, what to do about it): the page shows what the server says
+    instead of working the labels out again in the browser.
     """
     from mie_craft.script import contract
+    from webapp.services import warnings as warning_service
     try:
         cleaned = contract.validate_v2(payload)
     except ValueError as exc:
-        return {"ok": False, "errors": [str(exc)], "warnings": []}
+        result = {"ok": False, "errors": [str(exc)], "warnings": []}
+        result.update(warning_service.summary([]))
+        return result
     warnings = contract.storyboard_warnings(cleaned)
-    return {"ok": True, "errors": [], "warnings": warnings, "json": cleaned}
+    result = {"ok": True, "errors": [], "warnings": warnings,
+              "json": cleaned}
+    result.update(warning_service.summary(warnings))
+    return result

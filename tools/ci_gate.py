@@ -42,6 +42,9 @@ BASELINE_DIR = ROOT / "tools" / "known_failures"
 MUST_PASS = (
     "_mie_png_verification_strict_unit_test.py",
     "_mie_mtime_selection_unit_test.py",
+    "_mie_checkpoint_identity_unit_test.py",
+    "_mie_plan_preview_unit_test.py",
+    "_mie_plan_contract_unit_test.py",
 )
 
 FAIL_LINE = re.compile(r"^FAIL (\S+)", re.MULTILINE)

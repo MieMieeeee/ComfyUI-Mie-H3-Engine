@@ -38,6 +38,18 @@ WEBAPP_MAIN = PLUGIN_ROOT / "webapp" / "__main__.py"
 # be talking to a server with a throwaway library.
 PORT = 8299
 BASE = "http://127.0.0.1:%d" % PORT
+#: A SECOND workbench, for the tests that need a job in flight. It has
+#: its own port, its own library and its own fake ComfyUI - the first
+#: instance's history must not change under the other tests.
+QUEUED_PORT = 8300
+QUEUED_BASE = "http://127.0.0.1:%d" % QUEUED_PORT
+
+#: The ComfyUI these tests talk to. NOT the one on 8188: that is the
+#: person's own engine, and a test that submits there renders for real -
+#: it burns the GPU, it fills the person's queue, and it leaves output
+#: folders in their output tree. Nothing listens on this port, so every
+#: submission fails at once and the test keeps its "offline" story.
+DEAD_COMFYUI = "http://127.0.0.1:8187"
 
 
 def png_bytes(width: int = 4, height: int = 4) -> bytes:
@@ -59,15 +71,13 @@ def _wait_for(url: str, timeout: float = 30.0) -> bool:
     return False
 
 
-@pytest.fixture(scope="module")
-def web(tmp_path_factory):
-    """A web app on a throwaway plugin root.
+def _plugin_root(root, jobs=None):
+    """A throwaway plugin root: a library, a finished run and a job log.
 
     The ComfyUI output directory is thrown away too: the task list
     reads the finished renders off the disk, and a test has no business
     reading - let alone writing - the user's real output folder.
     """
-    root = tmp_path_factory.mktemp("plugin")
     (root / "asset_library" / "characters").mkdir(parents=True)
     (root / "asset_library" / "scenes").mkdir(parents=True)
     (root / "asset_library" / "storyboards").mkdir(parents=True)
@@ -82,32 +92,60 @@ def web(tmp_path_factory):
     (run / "checkpoints" / "model.safetensors").write_bytes(b"0")
     (run / "manifest.json").write_text(json.dumps(
         {"duration_seconds": 12.5, "clip_count": 1}), encoding="utf-8")
-    # 任务记录：app 启动时读它。
-    (root / "jobs.json").write_text(json.dumps({"jobs": [{
-        "job_id": "p-demo", "number": 1, "script": "测试剧本",
-        "run_name": "sb_demo", "title": "测试剧本 · 第 1 版", "attempt": 1,
-        "submitted_at": 1.0, "status": "success", "error": "", "nodes": 33,
-        "role_assets": {"character_1": "甲"},
-        "params": {"width": 960, "height": 544, "steps": 20, "duration": 12},
-    }]}), encoding="utf-8")
+    if jobs is not None:
+        # 任务记录：app 启动时读它。
+        (root / "jobs.json").write_text(json.dumps({"jobs": jobs}),
+                                        encoding="utf-8")
+    return root
+
+
+def _start_web(root, port, extra_env=None):
+    """Start the workbench on a throwaway root; return (process, base)."""
     env = dict(os.environ)
     env["MIE_PLUGIN_ROOT"] = str(root)
     env["MIE_WEB_SETTINGS"] = str(root / "settings.json")
+    env["MIE_LLM_KEYS_FILE"] = str(root / "mie_llm_keys.json")
     env["MIE_COMFYUI_ROOT"] = str(root / "comfyui")
-    env["MIE_WEB_PORT"] = str(PORT)
+    env["MIE_COMFYUI_URL"] = DEAD_COMFYUI
+    env["MIE_WEB_PORT"] = str(port)
     env["MIE_WEB_HOST"] = "127.0.0.1"
+    env.update(extra_env or {})
     process = subprocess.Popen(
         [sys.executable, str(WEBAPP_MAIN)], env=env,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if not _wait_for(BASE + "/api/health"):
+    base = "http://127.0.0.1:%d" % port
+    if not _wait_for(base + "/api/health"):
         process.kill()
         pytest.skip("the web app did not come up")
-    yield root
+    return process, base
+
+
+def _stop_web(process):
     process.terminate()
     try:
         process.wait(timeout=10)
     except subprocess.TimeoutExpired:
         process.kill()
+
+
+@pytest.fixture(scope="module")
+def web(tmp_path_factory):
+    """A web app on a throwaway plugin root."""
+    root = _plugin_root(tmp_path_factory.mktemp("plugin"))
+    snapshot_dir = root / "snapshots" / "sb_demo"
+    snapshot_dir.mkdir(parents=True)
+    # 任务记录：app 启动时读它。
+    (root / "jobs.json").write_text(json.dumps({"jobs": [{
+        "job_id": "p-demo", "number": 1, "script": "测试剧本",
+        "snapshot_dir": str(snapshot_dir),
+        "run_name": "sb_demo", "title": "测试剧本 · 第 1 版", "attempt": 1,
+        "submitted_at": 1.0, "status": "success", "error": "", "nodes": 33,
+        "role_assets": {"character_1": "甲"},
+        "params": {"width": 960, "height": 544, "steps": 20, "duration": 12},
+    }]}), encoding="utf-8")
+    process, _base = _start_web(root, PORT)
+    yield root
+    _stop_web(process)
 
 
 @pytest.fixture()
@@ -136,6 +174,70 @@ def page(web):
                 dialog.dismiss()
             else:
                 dialog.accept()
+
+        screen.on("dialog", on_dialog)
+        yield screen
+        browser.close()
+
+
+# --------------------------------------------------------------------------- #
+# a SECOND workbench, with a job in flight
+#
+# The stop button needs a render that is really in ComfyUI's queue, and
+# the queue is per instance: the first workbench's history must not
+# change under the other tests. So this one gets its own port, its own
+# library and its own fake ComfyUI.
+# --------------------------------------------------------------------------- #
+
+@pytest.fixture(scope="module")
+def fake_comfy():
+    """A ComfyUI the workbench can reach.
+
+    Never the user's ComfyUI: the tests must not interrupt or enqueue
+    anything on a real server.
+    """
+    from test_render_stop import FakeComfy
+
+    fake = FakeComfy().start()
+    yield fake
+    fake.stop()
+
+
+@pytest.fixture(scope="module")
+def queued_web(tmp_path_factory, fake_comfy):
+    """A workbench whose job table holds queued renders."""
+    jobs = []
+    for index in range(1, 4):
+        jobs.append({
+            "job_id": "p-queued-%d" % index, "number": 6 + index,
+            "script": "排队测试",
+            "run_name": "sb_queued_%d" % index,
+            "title": "排队测试%s" % "一二三"[index - 1],
+            "attempt": 1, "submitted_at": float(index), "status": "queued",
+            "error": "", "nodes": 33, "role_assets": {"character_1": "甲"},
+            "params": {"width": 960, "height": 544, "steps": 20, "duration": 12},
+        })
+    root = _plugin_root(tmp_path_factory.mktemp("queued"), jobs=jobs)
+    process, _base = _start_web(root, QUEUED_PORT,
+                                extra_env={"MIE_COMFYUI_URL": fake_comfy.url})
+    fake_comfy.pending[:] = [job["job_id"] for job in jobs]
+    yield QUEUED_BASE
+    _stop_web(process)
+
+
+@pytest.fixture()
+def queued_page(queued_web):
+    """A page against the instance that has a queued render."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            args=["--autoplay-policy=no-user-gesture-required"])
+        screen = browser.new_page(viewport={"width": 1500, "height": 1000})
+        screen.questions = []
+        screen.answer = "yes"
+
+        def on_dialog(dialog):
+            screen.questions.append(dialog.message)
+            dialog.accept()
 
         screen.on("dialog", on_dialog)
         yield screen
@@ -598,7 +700,7 @@ def test_the_making_page_shows_the_script_it_will_render(page, web):
 
     page.goto(BASE + "/video", wait_until="networkidle")
     page.wait_for_timeout(1200)
-    page.locator("select").first.select_option("预览测试")
+    page.locator('[data-select="script"]').select_option("预览测试")
     page.wait_for_timeout(1800)
 
     card = page.locator(".split-detail .card").first
@@ -1768,7 +1870,7 @@ def test_reference_audio_readiness_blocks_the_button(page):
     _api_put_character("有声主角", with_audio=True)
 
     page.goto(BASE + "/video", wait_until="networkidle")
-    page.select_option("select.input >> nth=0", "参考配音剧")
+    page.select_option('[data-select="script"]', "参考配音剧")
     page.wait_for_timeout(1200)
     # 选无声资产：角色卡标出缺参考音，按钮说清是谁，且不可用。
     page.locator(".roles-block select.input").first.select_option("无声主角")
@@ -1909,7 +2011,7 @@ def test_a_saved_scene_can_be_chosen_for_the_plan(page):
     # 角色资产要先建好：页面的角色列表是加载时读的。
     char_name = _api_put_character("场景闭环角")["name"]
     page.goto(BASE + "/video", wait_until="networkidle")
-    page.select_option("select.input >> nth=0", "场景闭环剧")
+    page.select_option('[data-select="script"]', "场景闭环剧")
     page.wait_for_timeout(1200)
     page.locator(".roles-block select.input").first.select_option(char_name)
     page.wait_for_timeout(900)
@@ -1942,7 +2044,7 @@ def test_save_and_make_takes_the_saved_version_to_video(page):
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(1500)
     assert page.evaluate(
-        "() => document.querySelector('select.input').value") == "衔接测试"
+        "() => document.querySelector('[data-select=\"script\"]').value") == "衔接测试"
     # 改过的内容真的是制作输入（剧本预览里读得到）。
     assert "改过的句子" in page.locator(".split-detail").inner_text()
 
@@ -1965,7 +2067,7 @@ def test_the_video_session_comes_back_after_a_side_trip(page):
     char_name = _api_put_character("跨页角色")["name"]
     _write_a_script(page, "跨页剧本", ["角色1：你好"])
     page.goto(BASE + "/video", wait_until="networkidle")
-    page.select_option("select.input >> nth=0", "跨页剧本")
+    page.select_option('[data-select="script"]', "跨页剧本")
     page.wait_for_timeout(1200)
     page.locator(".roles-block select.input").first.select_option(char_name)
     page.wait_for_timeout(900)
@@ -1979,7 +2081,7 @@ def test_the_video_session_comes_back_after_a_side_trip(page):
     page.wait_for_timeout(1500)
     # select_option() 对动态渲染的选项读不到选中态：直接读 DOM 值。
     assert page.evaluate(
-        "() => document.querySelector('select.input').value") == "跨页剧本"
+        "() => document.querySelector('[data-select=\"script\"]').value") == "跨页剧本"
     assert "已恢复上次的制作配置" in page.locator(".split-list").inner_text()
     assert page.locator(".roles-block select.input").first.input_value() == char_name
     assert page.locator(".field-grid input").first.input_value() == "1280"
@@ -2009,7 +2111,7 @@ def test_remake_with_the_same_config_restores_the_setup(page):
     page.wait_for_timeout(2000)
     assert "/video" in page.url
     assert page.evaluate(
-        "() => document.querySelector('select.input').value") == "再版剧本"
+        "() => document.querySelector('[data-select=\"script\"]').value") == "再版剧本"
     assert page.locator(".roles-block select.input").first.input_value() == char_name
     assert page.locator(".field-grid input").first.input_value() == "1024"
 
@@ -2164,3 +2266,140 @@ def test_narrow_screens_stay_within_the_viewport(page):
             return [doc.scrollWidth - doc.clientWidth, wide];
         }""")
         assert overflow <= 1, (path, overflow, " | ".join(culprits))
+
+
+# --------------------------------------------------------------------------- #
+# Batch F: the settings pages, the phone, and the targeted stop
+# --------------------------------------------------------------------------- #
+
+def test_an_api_key_is_saved_and_survives_a_reload(page, web):
+    """The key goes into the plugin's keys file - the nodes read it
+    straight away - and the page shows it masked, never in full."""
+    page.goto(BASE + "/llm", wait_until="networkidle")
+    page.wait_for_timeout(900)
+    field = page.locator('input[data-key="minimax"]')
+    assert field.count() == 1, "the key field is missing"
+    field.fill("sk-test-1234567890")
+    field.dispatch_event("change")
+    page.wait_for_timeout(1200)
+    assert "已保存" in message(page), message(page)
+
+    # 磁盘上就是那把 key。
+    raw = json.loads((web / "mie_llm_keys.json").read_text(encoding="utf-8"))
+    assert raw["minimax"] == "sk-test-1234567890"
+
+    # 刷新之后还在，但只有头尾：整把 key 不会回到页面上。
+    page.reload(wait_until="networkidle")
+    page.wait_for_timeout(900)
+    field = page.locator('input[data-key="minimax"]')
+    assert field.input_value() == "", "the key must not be shown in the field"
+    row = field.locator("xpath=ancestor::tr").inner_text()
+    assert "sk-tes" in row, row
+    assert "sk-test-1234567890" not in row, row
+
+
+def test_the_local_host_is_saved_and_survives_a_reload(page, web):
+    """Ollama runs on the author's own machine: its address is a setting
+    of its own, and it has to come back after a reload."""
+    page.goto(BASE + "/llm", wait_until="networkidle")
+    page.wait_for_timeout(900)
+    field = page.locator('input[data-host="ollama"]')
+    assert field.count() == 1, "the local host field is missing"
+    assert "11434" in field.input_value(), field.input_value()
+    field.fill("http://127.0.0.1:21500")
+    field.dispatch_event("change")
+    page.wait_for_timeout(1200)
+    assert "已保存" in message(page), message(page)
+
+    page.reload(wait_until="networkidle")
+    page.wait_for_timeout(900)
+    field = page.locator('input[data-host="ollama"]')
+    assert field.input_value() == "http://127.0.0.1:21500", \
+        field.input_value()
+
+
+def test_the_assets_page_is_usable_on_a_phone(page):
+    """窄屏曾经把整个列表藏起来：手机上什么都看不见。"""
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(BASE + "/assets", wait_until="networkidle")
+    page.wait_for_timeout(900)
+    assert page.locator(".split-list").filter(visible=True).count() >= 1, \
+        "the asset list is hidden on a phone"
+    # 新建角色这条路在窄屏上也是通的。
+    button(page, "＋ 新建").click()
+    page.wait_for_timeout(500)
+    fields = page.locator(".card .field .input")
+    assert fields.count() >= 1, "the new-asset form is not there"
+    overflow = page.evaluate(
+        "document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    assert overflow <= 1, "the page scrolls sideways on a 390px viewport"
+
+
+def test_the_video_page_is_usable_on_a_phone(page, web):
+    """制作表单也在那个 .split-list 里：窄屏上它必须还在。"""
+    import urllib.request
+    from test_library import SCRIPT as _SCRIPT
+
+    seed = json.loads(json.dumps(_SCRIPT))
+    seed["name"] = "窄屏剧本"
+    request = urllib.request.Request(
+        BASE + "/api/scripts",
+        data=json.dumps({"json": json.dumps(seed)}).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    urllib.request.urlopen(request, timeout=30).read()
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(BASE + "/video", wait_until="networkidle")
+    page.wait_for_timeout(1200)
+    picker = page.locator('[data-select="script"]')
+    assert picker.filter(visible=True).count() == 1, \
+        "the script picker is hidden on a phone"
+    picker.select_option("窄屏剧本")
+    page.wait_for_timeout(1500)
+    assert page.locator(".split-detail .card").filter(visible=True).count() >= 1, \
+        "the chosen script is not shown on a phone"
+    assert page.locator("button.btn.primary.wide").filter(
+        visible=True).count() == 1, "there is no way to start the render"
+    overflow = page.evaluate(
+        "document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    assert overflow <= 1, "the page scrolls sideways on a 390px viewport"
+
+
+def test_a_card_stops_the_attempt_it_belongs_to(queued_page, fake_comfy):
+    """每条尝试都带着自己的 job_id：停的是这一条，不是「当前那个」。
+
+    排队中的那次不能靠 interrupt 停——那只会停掉下一个跑的。
+    工作台得把它从队列里撤掉，而且说的也是「撤掉」，不是「停下了」。"""
+    fake_comfy.requests.clear()
+    queued_page.goto(QUEUED_BASE + "/history", wait_until="load")
+    queued_page.wait_for_timeout(1500)
+    card = queued_page.locator(".work-row", has_text="排队测试一")
+    assert card.count() == 1, "the queued render is not on the page"
+    stop = card.locator("button", has_text="从队列里撤掉这次")
+    assert stop.count() == 1, "the queued render has no way to be stopped"
+    stop.click()
+    queued_page.wait_for_timeout(1500)
+
+    # ComfyUI 收到的是这个 prompt 的 id，而且只有它。
+    assert fake_comfy.posts("/queue") == [{"delete": ["p-queued-1"]}]
+    assert fake_comfy.posts("/interrupt") == []
+    assert fake_comfy.global_interrupts == 0
+    # 页面说的是「撤掉了」：它本来就没在跑。
+    assert "撤掉" in message(queued_page), message(queued_page)
+
+
+def test_the_top_stop_button_asks_when_it_cannot_choose(queued_page, fake_comfy):
+    """跑着好几个的时候，工作台不替作者挑一个停。"""
+    fake_comfy.requests.clear()
+    queued_page.goto(QUEUED_BASE + "/history", wait_until="load")
+    queued_page.wait_for_timeout(1500)
+    top = queued_page.locator(".panel-head-actions button", has_text="停止当前渲染")
+    assert top.filter(visible=True).count() == 1, \
+        "the top button is not there while a render is in flight"
+    top.click()
+    queued_page.wait_for_timeout(1500)
+    # 没有停掉任何东西：连一个 interrupt 都没发出去。
+    assert fake_comfy.posts("/interrupt") == []
+    assert fake_comfy.posts("/queue") == []
+    assert fake_comfy.global_interrupts == 0
+    assert "个任务在跑" in message(queued_page), message(queued_page)

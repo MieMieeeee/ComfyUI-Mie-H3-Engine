@@ -108,6 +108,10 @@ def web(tmp_path_factory):
     env["MIE_PLUGIN_ROOT"] = str(root)
     env["MIE_WEB_SETTINGS"] = str(root / "settings.json")
     env["MIE_COMFYUI_ROOT"] = str(root / "comfyui")
+    # NOT the engine on 8188: that is the person's own, and a test that
+    # submits there renders for real - it burns the GPU and leaves output
+    # folders in their tree. Nothing listens on this port.
+    env["MIE_COMFYUI_URL"] = "http://127.0.0.1:8187"
     env["MIE_WEB_PORT"] = str(PORT)
     env["MIE_WEB_HOST"] = "127.0.0.1"
     process = subprocess.Popen(

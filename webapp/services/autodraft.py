@@ -36,11 +36,11 @@ def _connector():
     key = llm.current_platform()
     if not key:
         raise ValueError("没有选择当前大模型平台：先到大模型页选一个平台并配置 Key")
-    if not llm.read_keys().get(key):
-        raise ValueError("平台 %s 还没有配置 API Key：先到大模型页设置" % key)
     row = next((r for r in llm.list_platforms() if r["key"] == key), None)
     if row is None:
         raise ValueError("当前平台 %s 不在平台列表里" % key)
+    if not row.get("host") and not llm.read_keys().get(key):
+        raise ValueError("平台 %s 还没有配置 API Key：先到大模型页设置" % key)
     return llm.build_connector(row)
 
 

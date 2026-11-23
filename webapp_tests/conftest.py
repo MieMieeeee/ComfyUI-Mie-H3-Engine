@@ -38,6 +38,13 @@ if str(REPO_ROOT) not in sys.path:
 from webapp import config  # noqa: E402
 
 
+#: The ComfyUI the tests talk to. NOT the one on 8188: that is the
+#: person's own engine, and a test that submits there renders for real -
+#: it burns the GPU, it fills the person's queue, and it leaves output
+#: folders in their output tree. Nothing listens on this port.
+DEAD_COMFYUI = "http://127.0.0.1:8187"
+
+
 
 
 
@@ -63,7 +70,15 @@ def plugin_root(tmp_path, monkeypatch):
 
     monkeypatch.setattr(config, "JOBS_FILE", tmp_path / "jobs.json")
 
+    # NOT the engine on 8188: that is the person's own, and a test that
+    # submits there renders for real - it burns the GPU, it fills their
+    # queue, and it leaves output folders in their output tree. Nothing
+    # listens on this port, so a submission fails at once.
+    monkeypatch.setattr(config, "COMFYUI_URL", DEAD_COMFYUI)
+
     monkeypatch.setenv("MIE_PLUGIN_ROOT", str(root))
+
+    monkeypatch.setenv("MIE_COMFYUI_URL", DEAD_COMFYUI)
 
     return root
 

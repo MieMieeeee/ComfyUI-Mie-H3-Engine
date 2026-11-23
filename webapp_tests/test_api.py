@@ -36,13 +36,22 @@ def test_the_health_check_names_the_running_version(client):
 def test_static_files_carry_the_process_version(client):
     """The page stamps its static URLs with the SAME version the health
     check reports: files swapped under a live process stop matching the
-    stamp, and the mismatch is visible from the page source alone."""
+    stamp, and the mismatch is visible from the page source alone.
+
+    The front end is split into one file per page/infrastructure, so
+    every one of them has to carry the stamp - not just the first."""
     body = client.get("/").data.decode("utf-8")
     import re
-    stamped = re.findall(r"/static/app\.js\?v=([^\"']+)", body)
-    assert stamped, "static references must carry a version stamp"
-    assert "v%s" % stamped[0] in body  # the footer shows the same one
-    assert client.get("/static/app.js").status_code == 200
+    names = ("api", "shell", "llm", "assets", "scripts-intake",
+             "scripts-editor", "video", "history")
+    versions = set()
+    for name in names:
+        stamped = re.findall(r"/static/js/%s\.js\?v=([^\"']+)" % name, body)
+        assert stamped, "%s must be stamped with the process version" % name
+        versions.update(stamped)
+        assert client.get("/static/js/%s.js" % name).status_code == 200
+    assert len(versions) == 1, versions
+    assert "v%s" % versions.pop() in body  # the footer shows the same one
 
 
 def test_the_theme_is_in_the_page(client):
@@ -1121,14 +1130,12 @@ def test_a_film_lands_on_its_work(plugin_root, monkeypatch):
     }]
     monkeypatch.setattr(runner, "all_records", lambda: records)
 
-    def fake_attach(record, index=None):
-        record["artifacts"] = [
-            {"kind": "video", "name": "film.mp4",
-             "relpath": "live_storyboards/film_run/film.mp4", "role": "final"},
-        ]
-
-    monkeypatch.setattr(runner, "_attach_artifacts", fake_attach)
-    monkeypatch.setattr(runner.comfy, "scan_output", lambda: {})
+    monkeypatch.setattr(runner.comfy, "scan_output", lambda: [
+        {"kind": "video", "name": "film.mp4", "size": 1,
+         "parts": ("film_run", "film.mp4"),
+         "relpath": "live_storyboards/film_run/film.mp4", "role": "final"},
+    ])
+    monkeypatch.setattr(runner.comfy, "run_manifest", lambda _: {})
     data = runner.jobs(grouped=True)
     work = data["groups"][0]
     assert work["film"] == "live_storyboards/film_run/film.mp4"

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 
 from webapp import config
+from webapp.services import jsonfile
 
 DEFAULT_THEME_ID = "forest-island"
 
@@ -104,11 +105,11 @@ def save_theme(theme_id: str) -> str:
     if theme_id not in known:
         theme_id = DEFAULT_THEME_ID
     config.ensure_dirs()
-    try:
-        saved = json.loads(config.SETTINGS_FILE.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
-        saved = {}
-    saved["theme"] = theme_id
-    config.SETTINGS_FILE.write_text(
-        json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
+    with jsonfile.settings_lock:
+        try:
+            saved = json.loads(config.SETTINGS_FILE.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            saved = {}
+        saved["theme"] = theme_id
+        jsonfile.write_json(config.SETTINGS_FILE, saved)
     return theme_id
