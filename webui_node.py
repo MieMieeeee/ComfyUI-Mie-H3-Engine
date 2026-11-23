@@ -244,8 +244,8 @@ class MieH3StartWebUI:
             time.sleep(0.5)
 
         message = ("等了 %d 秒它还没应答。看看插件目录下的 webui.log，"
-                   "多半是 flask 没装上（插件的 requirements.txt 里声明了）。"
-                   % START_TIMEOUT_SECONDS)
+                   "多半是 flask 或 psutil 没装上（插件的 requirements.txt 里"
+                   "声明了，ComfyUI 自带 psutil）。" % START_TIMEOUT_SECONDS)
         print(message)
         return (url, message, False)
 

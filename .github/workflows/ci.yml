@@ -64,6 +64,11 @@ jobs:
           # here too. Its tests never touch the real asset library: each
           # one gets a temporary plugin root.
           python -m pip install flask soundfile pytest
+          # psutil: the start/stop nodes manage the web app as a process,
+          # and a user's ComfyUI ships psutil (see requirements.txt). The
+          # runner stands in for that environment, so it needs it too -
+          # without it the node cannot confirm the app it started.
+          python -m pip install psutil
           python -m pip install "comfyui-mie-llm>=0.2.0" "comfyui-mie-prompt>=0.2.0" "comfyui-mie-craft>=0.2.0"
           # The browser tests drive the pages: they are the only ones
           # that can see what a person sees. Two bugs got past the API
